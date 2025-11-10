@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C5D9EE612EC1D36700B626D8 /* MovieStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D9EE602EC1D36700B626D8 /* MovieStore.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C5D017412E989F7900164472 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,7 @@
 		C5D017332E989F7800164472 /* TastyMangoes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TastyMangoes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5D017402E989F7900164472 /* TastyMangoesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TastyMangoesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5D0174A2E989F7900164472 /* TastyMangoesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TastyMangoesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C5D9EE602EC1D36700B626D8 /* MovieStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,6 +80,7 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C5D9EE602EC1D36700B626D8 /* MovieStore.swift */,
 				C5D017352E989F7800164472 /* TastyMangoes */,
 				C5D017432E989F7900164472 /* TastyMangoesTests */,
 				C5D0174D2E989F7900164472 /* TastyMangoesUITests */,
@@ -236,6 +242,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C5D9EE612EC1D36700B626D8 /* MovieStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

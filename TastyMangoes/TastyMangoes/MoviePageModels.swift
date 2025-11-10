@@ -312,15 +312,4 @@ let sampleMovies: [Movie] = [
     )
 ]
 
-final class MovieStore: ObservableObject {
-    @Published var movies: [Movie] = []
-
-    init() {
-        loadSample()
-    }
-
-    func loadSample() {
-        movies = sampleMovies
-    }
-}
 

@@ -26,6 +26,7 @@ extension Color {
 
 // MARK: - Main Movie Page View
 struct MoviePageView: View {
+    let movie: Movie
     @State private var selectedTab = 0
 
     var body: some View {
@@ -869,6 +870,6 @@ struct PhotosSection: View {
 // MARK: - Preview
 struct MoviePageView_Previews: PreviewProvider {
     static var previews: some View {
-        MoviePageView()
+        MoviePageView(movie: sampleMovies[0])
     }
 }
