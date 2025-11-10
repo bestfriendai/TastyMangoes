@@ -1,0 +1,37 @@
+[
+  {
+    "id": "blade_runner_2049",
+    "title": "Blade Runner 2049",
+    "year": 2017,
+    "trailerURL": "https://example.com/trailer/br2049",
+    "trailerDuration": "2:32",
+    "posterImageURL": null,
+    "tastyScore": 92.0,
+    "aiScore": 8.8,
+    "genres": ["Sci-Fi", "Mystery"],
+    "rating": "R",
+    "director": "Denis Villeneuve",
+    "runtime": "2h 44m",
+    "releaseDate": "October 6, 2017",
+    "language": "English",
+    "overview": "K, a young blade runner, uncovers a long-buried secret that leads him to former blade runner Rick Deckard."
+  },
+  {
+    "id": "barbie",
+    "title": "Barbie",
+    "year": 2023,
+    "trailerURL": "https://example.com/trailer/barbie",
+    "trailerDuration": "2:30",
+    "posterImageURL": null,
+    "tastyScore": 88.0,
+    "aiScore": 7.4,
+    "genres": ["Comedy", "Fantasy"],
+    "rating": "PG-13",
+    "director": "Greta Gerwig",
+    "runtime": "1h 54m",
+    "releaseDate": "July 21, 2023",
+    "language": "English",
+    "overview": "Barbie suffers a crisis that leads her to question her world and her existence."
+  }
+]
+
