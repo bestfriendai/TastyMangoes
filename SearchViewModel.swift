@@ -19,25 +19,34 @@ class SearchViewModel: ObservableObject {
     @Published var isSearching = false
     @Published var error: TMDBError?
     @Published var hasSearched = false
+    @Published var searchSuggestions: [String] = []
+    @Published var showSuggestions = false
     
     // MARK: - Properties
     
     private let tmdbService = TMDBService.shared
     private var searchTask: Task<Void, Never>?
+    private let historyManager = SearchHistoryManager.shared
     
     // MARK: - Search Methods
     
-    /// Perform search with debouncing
+    /// Perform search with debouncing - shows real-time results as user types
     func search() {
         // Cancel previous search
         searchTask?.cancel()
         
-        // Don't search if query is too short
+        // Clear results and reset state if query is too short
         guard searchQuery.count >= 2 else {
             searchResults = []
             hasSearched = false
+            showSuggestions = false
+            isSearching = false
             return
         }
+        
+        // Show loading state immediately
+        isSearching = true
+        showSuggestions = false
         
         // Debounce - wait 0.5 seconds before searching
         searchTask = Task {
@@ -49,11 +58,27 @@ class SearchViewModel: ObservableObject {
         }
     }
     
+    /// Update search suggestions
+    private func updateSuggestions() {
+        if searchQuery.isEmpty {
+            searchSuggestions = []
+            showSuggestions = false
+        } else {
+            searchSuggestions = historyManager.getSuggestions(for: searchQuery)
+            showSuggestions = !searchSuggestions.isEmpty
+        }
+    }
+    
     /// Execute the actual search
     private func performSearch() async {
-        isSearching = true
         error = nil
         hasSearched = true
+        showSuggestions = false
+        
+        // Add to search history
+        if !searchQuery.isEmpty {
+            historyManager.addToHistory(searchQuery)
+        }
         
         do {
             let response = try await tmdbService.searchMovies(query: searchQuery)
@@ -76,12 +101,24 @@ class SearchViewModel: ObservableObject {
         isSearching = false
     }
     
-    /// Clear search
+    /// Select a suggestion
+    func selectSuggestion(_ suggestion: String) {
+        searchQuery = suggestion
+        showSuggestions = false
+        Task {
+            await performSearch()
+        }
+    }
+    
+    /// Clear search - returns to categories view
     func clearSearch() {
         searchQuery = ""
         searchResults = []
         hasSearched = false
         error = nil
+        searchSuggestions = []
+        showSuggestions = false
+        isSearching = false
         searchTask?.cancel()
     }
     

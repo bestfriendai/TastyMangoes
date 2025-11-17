@@ -36,7 +36,7 @@ class MovieDetailService {
     
     // MARK: - Properties
     
-    static let shared = MovieDetailService()
+    nonisolated static let shared = MovieDetailService()
     
     // Thread-safe cache using NSCache
     private let movieCache = NSCache<NSNumber, MovieDetailWrapper>()

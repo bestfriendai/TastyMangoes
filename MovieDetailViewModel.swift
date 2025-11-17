@@ -29,16 +29,16 @@ class MovieDetailViewModel: ObservableObject {
     
     // MARK: - Initialization
     
-    init(movieId: Int, service: MovieDetailService = .shared) {
+    nonisolated init(movieId: Int, service: MovieDetailService? = nil) {
         self.movieId = movieId
         self.movieStringId = nil
-        self.service = service
+        self.service = service ?? MovieDetailService.shared
     }
     
-    init(movieStringId: String, service: MovieDetailService = .shared) {
+    nonisolated init(movieStringId: String, service: MovieDetailService? = nil) {
         self.movieId = nil
         self.movieStringId = movieStringId
-        self.service = service
+        self.service = service ?? MovieDetailService.shared
     }
     
     // MARK: - Public Methods

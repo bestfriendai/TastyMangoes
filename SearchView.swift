@@ -1,15 +1,17 @@
-//
 //  SearchView.swift
-//  TastyMangoes
-//
-//  Created by Claude on 11/14/25 at 9:59 AM
-//
+//  Created automatically by Cursor Assistant
+//  Created on: 2025-11-14 at 09:59 (America/Los_Angeles - Pacific Time)
+//  Last modified: 2025-11-17 at 04:45 (America/Los_Angeles - Pacific Time)
+//  Notes: Search view with search bar, suggestions, results, and filter functionality. Updated to show yellow header with "Find Your Movie" title and description when empty (categories view), simpler white header when searching. Removed automatic popular movies loading. Changed to show real-time search results as user types instead of suggestions. Categories view shows by default when search query is empty.
 
 import SwiftUI
 
 struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()
+    @StateObject private var filterState = SearchFilterState.shared
     @State private var showFilters = false
+    @State private var showPlatformsSheet = false
+    @State private var showGenresSheet = false
     
     var body: some View {
         NavigationStack {
@@ -18,47 +20,73 @@ struct SearchView: View {
                 searchHeader
                 
                 // Content
-                if viewModel.isSearching {
+                if viewModel.searchQuery.isEmpty && !viewModel.hasSearched {
+                    // Default: Show categories view when no search query and haven't searched
+                    categoriesView
+                } else if viewModel.isSearching {
                     loadingView
                 } else if let error = viewModel.error {
                     errorView(error: error)
                 } else if viewModel.hasSearched && viewModel.searchResults.isEmpty {
                     emptyStateView
-                } else if !viewModel.searchResults.isEmpty {
+                } else if !viewModel.searchQuery.isEmpty {
+                    // Show real-time search results as user types
                     resultsListView
                 } else {
-                    popularMoviesView
+                    // Fallback to categories
+                    categoriesView
                 }
             }
             .background(Color(hex: "#fdfdfd"))
         }
-        .task {
-            // Load popular movies on launch
-            await viewModel.loadPopularMovies()
+        .sheet(isPresented: $showFilters) {
+            SearchFiltersBottomSheet(isPresented: $showFilters)
+        }
+        .sheet(isPresented: $showPlatformsSheet) {
+            SearchPlatformsBottomSheet(isPresented: $showPlatformsSheet)
+        }
+        .sheet(isPresented: $showGenresSheet) {
+            SearchGenresBottomSheet(isPresented: $showGenresSheet)
         }
     }
     
     // MARK: - Search Header
     
     private var searchHeader: some View {
-        VStack(spacing: 16) {
-            // Title
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Find Your Movie 🎬")
-                        .font(.custom("Nunito-Bold", size: 28))
-                        .foregroundColor(Color(hex: "#1a1a1a"))
+        VStack(spacing: 0) {
+            // Show title section only when search is empty (categories view)
+            if viewModel.searchQuery.isEmpty && !viewModel.hasSearched && viewModel.searchResults.isEmpty {
+                // Top section with title and avatar
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Find Your Movie 🎬")
+                            .font(.custom("Nunito-Bold", size: 28))
+                            .foregroundColor(Color(hex: "#1a1a1a"))
+                        
+                        Text("Type a title or pick a genre")
+                            .font(.custom("Inter-Regular", size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                        
+                        Text("to discover the film you're looking for.")
+                            .font(.custom("Inter-Regular", size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                    }
                     
-                    Text("Type a title or pick a genre")
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
+                    Spacer()
                     
-                    Text("to discover the film you're looking for.")
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
+                    // Avatar
+                    Circle()
+                        .fill(Color(hex: "#E0E0E0"))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(Color(hex: "#666666"))
+                        )
                 }
-                
-                Spacer()
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
             }
             
             // Search Bar
@@ -66,9 +94,11 @@ struct SearchView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(Color(hex: "#666666"))
+                        .frame(width: 20, height: 20)
                     
                     TextField("Searching by name...", text: $viewModel.searchQuery)
                         .font(.custom("Inter-Regular", size: 16))
+                        .foregroundColor(Color(hex: "#666666"))
                         .onChange(of: viewModel.searchQuery) { _, _ in
                             viewModel.search()
                         }
@@ -79,34 +109,73 @@ struct SearchView: View {
                         }) {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(Color(hex: "#999999"))
+                                .frame(width: 20, height: 20)
                         }
                     }
                     
                     Image(systemName: "mic.fill")
                         .foregroundColor(Color(hex: "#666666"))
+                        .frame(width: 20, height: 20)
                 }
-                .padding(12)
-                .background(Color.white)
-                .cornerRadius(12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+                .background(Color(hex: "#f3f3f3"))
+                .cornerRadius(8)
                 
                 Button(action: {
-                    showFilters.toggle()
+                    showFilters = true
                 }) {
-                    Image(systemName: "slider.horizontal.3")
-                        .foregroundColor(Color(hex: "#1a1a1a"))
-                        .padding(12)
-                        .background(Color.white)
-                        .cornerRadius(12)
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color(hex: "#666666"))
+                        .frame(width: 44, height: 44)
+                        .background(Color(hex: "#f3f3f3"))
+                        .cornerRadius(8)
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, viewModel.searchQuery.isEmpty && !viewModel.hasSearched && viewModel.searchResults.isEmpty ? 0 : 16)
+            .padding(.bottom, 12)
+            
+            // Filter Badges (only show when there are active filters or search results)
+            if filterState.hasActiveFilters || !viewModel.searchResults.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        // Platform Badge
+                        FilterBadgeButton(
+                            title: filterState.platformFilterText,
+                            onTap: {
+                                showPlatformsSheet = true
+                            }
+                        )
+                        
+                        // Genre Badge
+                        FilterBadgeButton(
+                            title: filterState.genreFilterText,
+                            onTap: {
+                                showGenresSheet = true
+                            }
+                        )
+                    }
+                    .padding(.horizontal, 20)
+                }
+                .padding(.horizontal, -20)
+                .padding(.bottom, 12)
+            }
         }
-        .padding(20)
         .background(
-            LinearGradient(
-                colors: [Color(hex: "#FFD60A"), Color(hex: "#FFA500")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Yellow gradient background when showing categories, white when searching
+            viewModel.searchQuery.isEmpty && !viewModel.hasSearched && viewModel.searchResults.isEmpty
+                ? LinearGradient(
+                    colors: [Color(hex: "#FFD60A"), Color(hex: "#FFA500")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                : LinearGradient(
+                    colors: [Color.white],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
         )
     }
     
@@ -135,7 +204,7 @@ struct SearchView: View {
                 .font(.custom("Nunito-Bold", size: 24))
                 .foregroundColor(Color(hex: "#1a1a1a"))
             
-            Text(error.localizedDescription ?? "Something went wrong")
+            Text(error.localizedDescription)
                 .font(.custom("Inter-Regular", size: 16))
                 .foregroundColor(Color(hex: "#666666"))
                 .multilineTextAlignment(.center)
@@ -177,6 +246,65 @@ struct SearchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
+    // MARK: - Suggestions View
+    
+    private var suggestionsView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if viewModel.searchQuery.isEmpty {
+                    // Show search history
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            Text("Last Searching Results")
+                                .font(.custom("Inter-SemiBold", size: 14))
+                                .foregroundColor(Color(hex: "#666666"))
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 16)
+                        
+                        let history = SearchHistoryManager.shared.getSearchHistory()
+                        if history.isEmpty {
+                            Text("No recent searches")
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#999999"))
+                                .padding(.horizontal, 20)
+                                .padding(.top, 8)
+                        } else {
+                            ForEach(history, id: \.self) { item in
+                                SearchHistoryItem(
+                                    query: item,
+                                    onTap: {
+                                        viewModel.selectSuggestion(item)
+                                    },
+                                    onRemove: {
+                                        SearchHistoryManager.shared.removeFromHistory(item)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // Show suggestions
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(viewModel.searchSuggestions, id: \.self) { suggestion in
+                            SearchSuggestionItem(
+                                suggestion: suggestion,
+                                query: viewModel.searchQuery,
+                                onTap: {
+                                    viewModel.selectSuggestion(suggestion)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color(hex: "#fdfdfd"))
+    }
+    
     // MARK: - Results List
     
     private var resultsListView: some View {
@@ -205,6 +333,12 @@ struct SearchView: View {
                 .padding(.horizontal, 20)
             }
         }
+    }
+    
+    // MARK: - Categories View
+    
+    private var categoriesView: some View {
+        SearchCategoriesView()
     }
     
     // MARK: - Popular Movies View
@@ -247,14 +381,14 @@ struct SearchView: View {
     }
 }
 
-// MARK: - Search Movie Card
+// MARK: - Search Movie Card (Product Card)
 
 struct SearchMovieCard: View {
     let movie: Movie
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Poster with our custom component
+        HStack(alignment: .top, spacing: 12) {
+            // Poster
             MoviePosterImage(
                 posterURL: movie.posterImageURL,
                 width: 80,
@@ -262,38 +396,106 @@ struct SearchMovieCard: View {
                 cornerRadius: 8
             )
             
-            // Info
+            // Content
             VStack(alignment: .leading, spacing: 8) {
+                // Title
                 Text(movie.title)
                     .font(.custom("Nunito-Bold", size: 16))
                     .foregroundColor(Color(hex: "#1a1a1a"))
                     .lineLimit(2)
                 
-                if movie.year > 0 {
-                    Text(String(movie.year))
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
-                }
-                
-                if let overview = movie.overview, !overview.isEmpty {
-                    Text(overview)
-                        .font(.custom("Inter-Regular", size: 13))
-                        .foregroundColor(Color(hex: "#666666"))
-                        .lineLimit(2)
-                }
-                
-                // Rating
-                if let aiScore = movie.aiScore {
-                    HStack(spacing: 4) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color(hex: "#FFD60A"))
-                        
-                        Text(String(format: "%.1f", aiScore))
-                            .font(.custom("Inter-SemiBold", size: 14))
-                            .foregroundColor(Color(hex: "#1a1a1a"))
+                // Year, Genres, Runtime
+                HStack(spacing: 4) {
+                    if movie.year > 0 {
+                        Text(String(movie.year))
+                        Text("·")
+                    }
+                    
+                    if !movie.genres.isEmpty {
+                        Text(movie.genres.prefix(2).joined(separator: "/"))
+                        if let runtime = movie.runtime, !runtime.isEmpty {
+                            Text("·")
+                            Text(runtime)
+                        }
+                    } else if let runtime = movie.runtime, !runtime.isEmpty {
+                        Text(runtime)
                     }
                 }
+                .font(.custom("Inter-Regular", size: 12))
+                .foregroundColor(Color(hex: "#666666"))
+                
+                // Scores
+                HStack(spacing: 12) {
+                    // Tasty Score
+                    if let tastyScore = movie.tastyScore {
+                        HStack(spacing: 4) {
+                            // Use mango icon if available, otherwise use star
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(hex: "#FEA500"))
+                            
+                            Text("\(Int(tastyScore * 100))%")
+                                .font(.custom("Inter-SemiBold", size: 14))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
+                        }
+                    }
+                    
+                    // AI Score
+                    if let aiScore = movie.aiScore {
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(hex: "#FFD60A"))
+                            
+                            Text(String(format: "%.1f", aiScore))
+                                .font(.custom("Inter-SemiBold", size: 14))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
+                        }
+                    }
+                }
+                
+                // Watch on and Liked by (placeholder avatars)
+                HStack(spacing: 16) {
+                    // Watch on
+                    HStack(spacing: 4) {
+                        Text("Watch on:")
+                            .font(.custom("Inter-Regular", size: 12))
+                            .foregroundColor(Color(hex: "#666666"))
+                        
+                        HStack(spacing: -4) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                Circle()
+                                    .fill(Color(hex: "#E0E0E0"))
+                                    .frame(width: 20, height: 20)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: 1)
+                                    )
+                            }
+                        }
+                    }
+                    
+                    // Liked by
+                    HStack(spacing: 4) {
+                        Text("Liked by:")
+                            .font(.custom("Inter-Regular", size: 12))
+                            .foregroundColor(Color(hex: "#666666"))
+                        
+                        HStack(spacing: -4) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                Circle()
+                                    .fill(Color(hex: "#E0E0E0"))
+                                    .frame(width: 20, height: 20)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: 1)
+                                    )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer()
             }
             
             Spacer()
@@ -302,6 +504,97 @@ struct SearchMovieCard: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+}
+
+// MARK: - Filter Badge Button
+
+struct FilterBadgeButton: View {
+    let title: String
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.custom("Inter-Regular", size: 14))
+                    .foregroundColor(Color(hex: "#333333"))
+                
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(hex: "#333333"))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(hex: "#ffedcc"))
+            .cornerRadius(18)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Search History Item
+
+struct SearchHistoryItem: View {
+    let query: String
+    let onTap: () -> Void
+    let onRemove: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: "clock")
+                    .font(.system(size: 16))
+                    .foregroundColor(Color(hex: "#666666"))
+                    .frame(width: 20)
+                
+                Text(query)
+                    .font(.custom("Inter-Regular", size: 16))
+                    .foregroundColor(Color(hex: "#1a1a1a"))
+                
+                Spacer()
+                
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#999999"))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Search Suggestion Item
+
+struct SearchSuggestionItem: View {
+    let suggestion: String
+    let query: String
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16))
+                    .foregroundColor(Color(hex: "#666666"))
+                    .frame(width: 20)
+                
+                Text(suggestion)
+                    .font(.custom("Inter-Regular", size: 16))
+                    .foregroundColor(Color(hex: "#1a1a1a"))
+                
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

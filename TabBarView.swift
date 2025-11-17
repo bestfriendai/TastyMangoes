@@ -211,17 +211,7 @@ struct TabBarItem: View {
 }
 
 
-// Placeholder views for other tabs
-struct WatchlistView: View {
-    var body: some View {
-        ZStack {
-            Color(red: 253/255, green: 253/255, blue: 253/255)
-                .ignoresSafeArea()
-            Text("Watchlist")
-                .font(.largeTitle)
-        }
-    }
-}
+// WatchlistView is now in its own file
 
 struct MoreView: View {
     var body: some View {

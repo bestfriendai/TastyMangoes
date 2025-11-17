@@ -14,6 +14,7 @@ struct TastyMangoesApp: App {
     var body: some Scene {
         WindowGroup {
             TabBarView()
+                .environmentObject(WatchlistManager.shared)
         }
     }
 }

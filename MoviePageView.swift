@@ -1,7 +1,8 @@
 //  MoviePageView.swift
 //  Created automatically by Cursor Assistant
-//  Created on: 2025-01-15 at 14:30 (California time)
-//  Notes: Redesigned movie page with pinned header (back arrow, title, share/menu) and scrollable content sections with horizontal scrolling for Cast, Reviews, and Similar movies
+//  Created on: 2025-11-16 at 23:37 (America/Los_Angeles - Pacific Time)
+//  Last modified: 2025-11-17 at 03:13 (America/Los_Angeles - Pacific Time)
+//  Notes: Fixed horizontal tab bar pinning - tab bar now properly pins below header when scrolling up, and scrolls to sections when tabs are clicked. Updated MenuBottomSheet to match Figma design with correct review icon. Changed AddToListView presentation from fullScreenCover to sheet to match bottom sheet design. Added navigation to list functionality from toast notifications. Replaced deprecated NavigationLink with fullScreenCover for navigating to IndividualListView.
 
 import SwiftUI
 
@@ -12,6 +13,9 @@ private enum MovieSection: String, CaseIterable, Identifiable {
     case castCrew = "Cast & Crew"
     case reviews = "Reviews"
     case similar = "More to Watch"
+    case getSmarter = "Get Smarter"
+    case clips = "Movie Clips"
+    case photos = "Photos"
     
     var id: String { rawValue }
 }
@@ -25,6 +29,22 @@ struct MoviePageView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedSection: MovieSection = .overview
+    @State private var showMenuBottomSheet = false
+    @State private var showAddToList = false
+    @State private var scrollProxy: ScrollViewProxy?
+    @State private var tabBarMinY: CGFloat = 1000 // Start with large value so pinned bar doesn't show initially
+    @State private var showIndividualList = false
+    @State private var navigateToListId: String? = nil
+    @State private var navigateToListName: String? = nil
+    
+    // Computed property to determine if pinned tab bar should show
+    private var shouldShowPinnedTabBar: Bool {
+        // Show pinned tab bar when scrollable one has scrolled up to or past the header
+        // tabBarMinY represents the top edge of the scrollable tab bar in scroll coordinate space
+        // When it's <= ~132 (safe area ~52 + header ~80), it should be pinned
+        // We check > 50 to ensure it's actually scrolled (not initial position)
+        return tabBarMinY > 50 && tabBarMinY <= 132
+    }
     
     // MARK: - Initialization
     
@@ -105,52 +125,244 @@ struct MoviePageView: View {
     // MARK: - Movie Content
     
     private func movieContent(_ movie: MovieDetail) -> some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 0) {
-                // Trailer/Backdrop Section (scrolls)
-                trailerSection(movie)
-                
-                // Poster and Scores Section (overlaps trailer)
-                posterAndScoresSection(movie)
-                    .padding(.horizontal, 16)
-                    .padding(.top, -58)
-                
-                // Mango's Tips + Watch On / Liked By cards
-                tipsAndCardsSection
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                
-                // Horizontal Section Tabs (scrolls with content)
-                sectionTabsBar
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Top padding to account for pinned header
+                    Color.clear
+                        .frame(height: 0)
+                        .id("scrollTop")
+                    
+                    // Trailer/Backdrop Section (scrolls)
+                    trailerSection(movie)
+                    
+                    // Poster and Scores Section (overlaps trailer)
+                    posterAndScoresSection(movie)
+                        .padding(.horizontal, 16)
+                        .padding(.top, -58)
+                    
+                    // Mango's Tips + Watch On / Liked By cards
+                    tipsAndCardsSection
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    
+                    // Horizontal Section Tabs Bar (starts here, pins when it reaches top)
+                    sectionTabsBar(proxy: proxy)
+                        .padding(.top, 12)
+                        .background(
+                            GeometryReader { geometry in
+                                let frame = geometry.frame(in: .named("scroll"))
+                                Color.clear.preference(
+                                    key: TabBarPositionKey.self,
+                                    value: frame.minY
+                                )
+                            }
+                        )
+                        .opacity(shouldShowPinnedTabBar ? 0 : 1) // Hide scrollable tab bar when pinned one should show
+                        .id("scrollableTabBar")
+                    
+                    // Content Sections
+                    VStack(alignment: .leading, spacing: 32) {
+                        // Spacer to account for pinned header + tab bar when scrolling to sections
+                        Color.clear
+                            .frame(height: 0)
+                            .id("sectionsStart")
+                        
+                        overviewSection(movie)
+                            .id(MovieSection.overview.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    let frame = geometry.frame(in: .named("scroll"))
+                                    Color.clear.preference(
+                                        key: SectionVisibilityPreferenceKey.self,
+                                        value: [SectionVisibility(
+                                            section: .overview,
+                                            minY: frame.minY,
+                                            maxY: frame.maxY
+                                        )]
+                                    )
+                                }
+                            )
+                        
+                        castCrewSection(movie)
+                            .id(MovieSection.castCrew.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    let frame = geometry.frame(in: .named("scroll"))
+                                    Color.clear.preference(
+                                        key: SectionVisibilityPreferenceKey.self,
+                                        value: [SectionVisibility(
+                                            section: .castCrew,
+                                            minY: frame.minY,
+                                            maxY: frame.maxY
+                                        )]
+                                    )
+                                }
+                            )
+                        
+                        reviewsSection
+                            .id(MovieSection.reviews.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    let frame = geometry.frame(in: .named("scroll"))
+                                    Color.clear.preference(
+                                        key: SectionVisibilityPreferenceKey.self,
+                                        value: [SectionVisibility(
+                                            section: .reviews,
+                                            minY: frame.minY,
+                                            maxY: frame.maxY
+                                        )]
+                                    )
+                                }
+                            )
+                        
+                        similarSection
+                            .id(MovieSection.similar.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    let frame = geometry.frame(in: .named("scroll"))
+                                    Color.clear.preference(
+                                        key: SectionVisibilityPreferenceKey.self,
+                                        value: [SectionVisibility(
+                                            section: .similar,
+                                            minY: frame.minY,
+                                            maxY: frame.maxY
+                                        )]
+                                    )
+                                }
+                            )
+                        
+                        // Help Us Get Smarter section
+                        helpUsGetSmarterSection
+                            .id(MovieSection.getSmarter.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    let frame = geometry.frame(in: .named("scroll"))
+                                    Color.clear.preference(
+                                        key: SectionVisibilityPreferenceKey.self,
+                                        value: [SectionVisibility(
+                                            section: .getSmarter,
+                                            minY: frame.minY,
+                                            maxY: frame.maxY
+                                        )]
+                                    )
+                                }
+                            )
+                        
+                        // Movie Clips section
+                        movieClipsSection
+                            .id(MovieSection.clips.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    let frame = geometry.frame(in: .named("scroll"))
+                                    Color.clear.preference(
+                                        key: SectionVisibilityPreferenceKey.self,
+                                        value: [SectionVisibility(
+                                            section: .clips,
+                                            minY: frame.minY,
+                                            maxY: frame.maxY
+                                        )]
+                                    )
+                                }
+                            )
+                        
+                        // Photos section
+                        photosSection
+                            .id(MovieSection.photos.id)
+                            .background(
+                                GeometryReader { geometry in
+                                    let frame = geometry.frame(in: .named("scroll"))
+                                    Color.clear.preference(
+                                        key: SectionVisibilityPreferenceKey.self,
+                                        value: [SectionVisibility(
+                                            section: .photos,
+                                            minY: frame.minY,
+                                            maxY: frame.maxY
+                                        )]
+                                    )
+                                }
+                            )
+                    }
                     .padding(.top, 24)
-                
-                // Content Sections
-                VStack(alignment: .leading, spacing: 32) {
-                    overviewSection(movie)
-                        .id(MovieSection.overview.id)
+                    .padding(.horizontal, 16)
                     
-                    castCrewSection(movie)
-                        .id(MovieSection.castCrew.id)
-                    
-                    reviewsSection
-                        .id(MovieSection.reviews.id)
-                    
-                    similarSection
-                        .id(MovieSection.similar.id)
+                    // Bottom Action Buttons
+                    bottomActionButtons
+                        .padding(.top, 32)
+                        .padding(.bottom, 100) // Extra padding to ensure buttons are visible above tab bar
                 }
-                .padding(.top, 24)
-                .padding(.horizontal, 16)
-                
-                // Bottom Action Buttons
-                bottomActionButtons
-                    .padding(.top, 32)
-                    .padding(.bottom, 32)
             }
-        }
-        .background(Color(hex: "#fdfdfd"))
-        .safeAreaInset(edge: .top) {
-            // Pinned Header: Back arrow, Title, Details, Share, Menu
-            pinnedHeader(movie)
+            .coordinateSpace(name: "scroll")
+            .background(Color(hex: "#fdfdfd"))
+            .navigationBarBackButtonHidden(true)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    // Pinned Header: Back arrow, Title, Details, Share, Menu
+                    pinnedHeader(movie)
+                    
+                    // Pinned Section Tabs Bar - shows when scrollable tab bar reaches the top
+                    if shouldShowPinnedTabBar {
+                        sectionTabsBar(proxy: proxy)
+                            .background(Color.white)
+                            .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
+                    } else {
+                        // Spacer to maintain consistent header height when tab bar isn't pinned
+                        Color.clear
+                            .frame(height: 52)
+                    }
+                }
+            }
+            .onPreferenceChange(TabBarPositionKey.self) { value in
+                tabBarMinY = value
+            }
+            .onPreferenceChange(SectionVisibilityPreferenceKey.self) { values in
+                // Update selected section based on scroll position
+                // Tab bar offset accounts for safe area (~52), header (~80), and tab bar height (~52) = ~184
+                let tabBarOffset: CGFloat = 184
+                
+                let visibleSections = values.filter { visibility in
+                    // Section is visible if it's in the top portion of the visible area (below pinned tab bar)
+                    return visibility.minY <= tabBarOffset && visibility.maxY > tabBarOffset
+                }
+                
+                if let firstVisible = visibleSections.min(by: { $0.minY < $1.minY }) {
+                    if selectedSection != firstVisible.section {
+                        selectedSection = firstVisible.section
+                    }
+                }
+            }
+            .sheet(isPresented: $showMenuBottomSheet) {
+                MenuBottomSheet()
+            }
+            .sheet(isPresented: $showAddToList) {
+                if let movie = viewModel.movie {
+                    AddToListView(
+                        movieId: movieId,
+                        movieTitle: movie.title,
+                        onNavigateToList: { listId, listName in
+                            navigateToListId = listId
+                            navigateToListName = listName
+                            showAddToList = false
+                            // Trigger navigation after sheet dismisses
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                showIndividualList = true
+                            }
+                        }
+                    )
+                    .environmentObject(WatchlistManager.shared)
+                }
+            }
+            .fullScreenCover(isPresented: $showIndividualList) {
+                if let listId = navigateToListId, let listName = navigateToListName {
+                    NavigationStack {
+                        IndividualListView(listId: listId, listName: listName)
+                            .environmentObject(WatchlistManager.shared)
+                    }
+                }
+            }
+            .onAppear {
+                scrollProxy = proxy
+            }
         }
     }
     
@@ -211,8 +423,7 @@ struct MoviePageView: View {
                     }
                     
                     Button(action: {
-                        // Menu action
-                        print("Menu tapped")
+                        showMenuBottomSheet = true
                     }) {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 18, weight: .medium))
@@ -403,14 +614,15 @@ struct MoviePageView: View {
                 )
                 .cornerRadius(9999)
                 
-                (Text("You've been into courtroom dramas lately, and your friends loved this one — Juror #2 might be your next binge. It's smart, tense, and full... ")
-                    .font(.custom("Inter-Regular", size: 14))
-                    .foregroundColor(Color(hex: "#333333"))
-                 +
-                 Text("Read More")
-                    .font(.custom("Inter-SemiBold", size: 14))
-                    .foregroundColor(Color(hex: "#b56900"))
-                    .underline())
+                HStack(spacing: 0) {
+                    Text("You've been into courtroom dramas lately, and your friends loved this one — Juror #2 might be your next binge. It's smart, tense, and full... ")
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#333333"))
+                    Text("Read More")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#b56900"))
+                        .underline()
+                }
                 .lineLimit(2)
             }
             
@@ -479,9 +691,9 @@ struct MoviePageView: View {
         }
     }
     
-    // MARK: - Section Tabs Bar (scrolls with content)
+    // MARK: - Section Tabs Bar
     
-    private var sectionTabsBar: some View {
+    private func sectionTabsBar(proxy: ScrollViewProxy) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
                 ForEach(MovieSection.allCases) { section in
@@ -490,7 +702,13 @@ struct MoviePageView: View {
                         isSelected: selectedSection == section
                     ) {
                         selectedSection = section
-                        // Scroll to section
+                        // Scroll to section - need to account for pinned header and tab bar
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            // Scroll to the section
+                            // The anchor .top will position the section at the top of the visible area
+                            // We need to account for the pinned header (~80) + tab bar (~52) = ~132 offset
+                            proxy.scrollTo(section.id, anchor: .top)
+                        }
                     }
                 }
             }
@@ -498,6 +716,7 @@ struct MoviePageView: View {
         }
         .frame(height: 52)
         .background(Color.white)
+        .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
     }
     
     // MARK: - Overview Section
@@ -790,44 +1009,254 @@ struct MoviePageView: View {
         }
     }
     
+    // MARK: - Help Us Get Smarter Section
+    
+    private var helpUsGetSmarterSection: some View {
+        VStack(spacing: 16) {
+            // Popcorn bucket illustration (placeholder - should be custom image)
+            ZStack {
+                // Popcorn bucket - using a combination of shapes to approximate
+                VStack(spacing: 0) {
+                    // Bucket top (red and white stripes)
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color(hex: "#FF0000"))
+                            .frame(width: 20, height: 4)
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 20, height: 4)
+                        Rectangle()
+                            .fill(Color(hex: "#FF0000"))
+                            .frame(width: 20, height: 4)
+                        Rectangle()
+                            .fill(Color.white)
+                            .frame(width: 20, height: 4)
+                    }
+                    
+                    // Bucket body
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#FF0000"))
+                        .frame(width: 80, height: 60)
+                        .overlay(
+                            // White stripes on bucket
+                            VStack(spacing: 4) {
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.3))
+                                    .frame(height: 2)
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.3))
+                                    .frame(height: 2)
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.3))
+                                    .frame(height: 2)
+                            }
+                            .padding(.horizontal, 8)
+                        )
+                    
+                    // Popcorn pieces (white circles)
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 8, height: 8)
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 6, height: 6)
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 10, height: 10)
+                    }
+                    .offset(y: -5)
+                }
+                
+                // Mango icon overlay on popcorn
+                MangoLogoIcon(size: 28)
+                    .offset(x: -15, y: -10)
+                
+                // Sparkle icons (small stars)
+                Image(systemName: "sparkle")
+                    .font(.system(size: 8))
+                    .foregroundColor(Color(hex: "#FFC966"))
+                    .offset(x: 20, y: -15)
+                
+                Image(systemName: "sparkle")
+                    .font(.system(size: 6))
+                    .foregroundColor(Color(hex: "#FFC966"))
+                    .offset(x: -25, y: 5)
+                
+                Image(systemName: "sparkle")
+                    .font(.system(size: 7))
+                    .foregroundColor(Color(hex: "#FFC966"))
+                    .offset(x: 25, y: 10)
+            }
+            .frame(height: 100)
+            
+            // Title
+            Text("Help Us Get Smarter")
+                .font(.custom("Nunito-Bold", size: 20))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+            
+            // Taste Level
+            HStack(spacing: 4) {
+                Text("Taste Level:")
+                    .font(.custom("Inter-Regular", size: 14))
+                    .foregroundColor(Color(hex: "#666666"))
+                
+                Text("65%")
+                    .font(.custom("Inter-Bold", size: 14))
+                    .foregroundColor(Color(hex: "#FFA500"))
+            }
+            
+            // Description text
+            Text("The more we know about what you like, the better we can pick movies just for you. Rate a few titles to train your recommendations.")
+                .font(.custom("Inter-Regular", size: 14))
+                .foregroundColor(Color(hex: "#333333"))
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+            
+            // Start Rating button
+            Button(action: {
+                print("Start Rating tapped")
+            }) {
+                Text("Start Rating")
+                    .font(.custom("Nunito-Bold", size: 16))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color(hex: "#FFC966"), // Bright yellow
+                                Color(hex: "#FFA500")  // Orange
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(8)
+            }
+        }
+        .padding(20)
+        .background(Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(hex: "#E0E0E0"), lineWidth: 1)
+        )
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+    }
+    
+    // MARK: - Movie Clips Section
+    
+    private var movieClipsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(hex: "#FEA500"))
+                        .frame(width: 6, height: 6)
+                    
+                    Text("Movie Clips (3)")
+                        .font(.custom("Nunito-Bold", size: 20))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                
+                Spacer()
+                
+                Text("See All")
+                    .font(.custom("Inter-SemiBold", size: 14))
+                    .foregroundColor(Color(hex: "#FEA500"))
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "#FEA500"))
+            }
+            
+            // Horizontal scrolling movie clips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(0..<3) { index in
+                        MovieClipCard(index: index)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.horizontal, -16)
+        }
+    }
+    
+    // MARK: - Photos Section
+    
+    private var photosSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(hex: "#FEA500"))
+                        .frame(width: 6, height: 6)
+                    
+                    Text("Photos (12)")
+                        .font(.custom("Nunito-Bold", size: 20))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                
+                Spacer()
+                
+                Text("See All")
+                    .font(.custom("Inter-SemiBold", size: 14))
+                    .foregroundColor(Color(hex: "#FEA500"))
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "#FEA500"))
+            }
+            
+            // Horizontal scrolling photos
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(0..<6) { index in
+                        PhotoCard(index: index)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.horizontal, -16)
+        }
+    }
+    
     // MARK: - Bottom Action Buttons
     
     private var bottomActionButtons: some View {
         HStack(spacing: 12) {
             Button(action: {
-                print("Mark as Watched tapped")
+                WatchlistManager.shared.toggleWatched(movieId: movieId)
             }) {
-                HStack {
+                HStack(spacing: 8) {
                     Image(systemName: "popcorn.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 16, weight: .medium))
                     Text("Mark as Watched")
                         .font(.custom("Inter-SemiBold", size: 14))
                 }
-                .foregroundColor(.white)
+                .foregroundColor(Color(hex: "#333333"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color(hex: "#333333"))
+                .background(Color(hex: "#F5F5F5"))
                 .cornerRadius(8)
             }
             
             Button(action: {
-                print("Add to Watchlist tapped")
+                showAddToList = true
             }) {
-                HStack {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16))
+                HStack(spacing: 8) {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.system(size: 16, weight: .medium))
                     Text("Add to Watchlist")
                         .font(.custom("Inter-SemiBold", size: 14))
                 }
-                .foregroundColor(Color(hex: "#1a1a1a"))
+                .foregroundColor(Color(hex: "#333333"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color.white)
+                .background(Color(hex: "#F5F5F5"))
                 .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(hex: "#ececec"), lineWidth: 1)
-                )
             }
         }
         .padding(.horizontal, 16)
@@ -840,6 +1269,103 @@ struct MoviePageView: View {
         let minutes = duration / 60
         let seconds = duration % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Menu Bottom Sheet
+
+struct MenuBottomSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Drag handle
+            VStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(hex: "#b3b3b3"))
+                    .frame(width: 32, height: 4)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+            }
+            
+            // Menu items
+            VStack(spacing: 4) {
+                MenuItem(
+                    icon: "pencil",
+                    title: "Make a Note",
+                    description: "Make a personal note for this movie.",
+                    action: {
+                        print("Make a Note tapped")
+                        dismiss()
+                    }
+                )
+                
+                MenuItem(
+                    icon: "text.bubble",
+                    title: "Leave a Review",
+                    description: "Rate this movie and leave a review.",
+                    action: {
+                        print("Leave a Review tapped")
+                        dismiss()
+                    }
+                )
+                
+                MenuItem(
+                    icon: "hand.thumbsdown",
+                    title: "NOT for Me",
+                    description: "Mango will no longer recommend this movie or similar ones.",
+                    action: {
+                        print("NOT for Me tapped")
+                        dismiss()
+                    }
+                )
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 24)
+            
+            Spacer()
+        }
+        .background(Color.white)
+        .cornerRadius(24, corners: [.topLeft, .topRight])
+        .presentationDetents([.height(274)])
+        .presentationDragIndicator(.hidden)
+    }
+}
+
+// MARK: - Menu Item
+
+private struct MenuItem: View {
+    let icon: String
+    let title: String
+    let description: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                // Icon
+                Image(systemName: icon)
+                    .font(.system(size: 24))
+                    .foregroundColor(Color(hex: "#333333"))
+                    .frame(width: 24, height: 24)
+                
+                // Text content
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.custom("Nunito-Bold", size: 16))
+                        .foregroundColor(Color(hex: "#333333"))
+                    
+                    Text(description)
+                        .font(.custom("Inter-Regular", size: 12))
+                        .foregroundColor(Color(hex: "#666666"))
+                }
+                
+                Spacer()
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -865,6 +1391,78 @@ private struct SectionTabButton: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Movie Clip Card
+
+private struct MovieClipCard: View {
+    let index: Int
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                // Video thumbnail placeholder
+                Rectangle()
+                    .fill(Color(hex: "#1a1a1a"))
+                    .frame(width: 248, height: 140)
+                    .overlay(
+                        // Play button overlay
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.9))
+                                .frame(width: 48, height: 48)
+                            
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
+                        }
+                    )
+                
+                // Duration badge
+                VStack {
+                    HStack {
+                        Spacer()
+                        Text("0:30")
+                            .font(.custom("Inter-Regular", size: 12))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.6))
+                            .cornerRadius(4)
+                    }
+                    Spacer()
+                }
+                .padding(8)
+            }
+            
+            // Clip title
+            Text("Clip Title \(index + 1)")
+                .font(.custom("Inter-SemiBold", size: 14))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .padding(.top, 8)
+                .lineLimit(1)
+        }
+        .frame(width: 248)
+    }
+}
+
+// MARK: - Photo Card
+
+private struct PhotoCard: View {
+    let index: Int
+    
+    var body: some View {
+        Rectangle()
+            .fill(Color(hex: "#f0f0f0"))
+            .frame(width: 140, height: 210)
+            .overlay(
+                // Placeholder image icon
+                Image(systemName: "photo.fill")
+                    .font(.system(size: 32))
+                    .foregroundColor(Color(hex: "#999999"))
+            )
+            .cornerRadius(8)
     }
 }
 
@@ -990,6 +1588,30 @@ struct InfoRow: View {
             Divider()
                 .background(Color(hex: "#ececec"))
         }
+    }
+}
+
+// MARK: - Scroll Position Tracking
+
+fileprivate struct SectionVisibility: Equatable {
+    let section: MovieSection
+    let minY: CGFloat
+    let maxY: CGFloat
+}
+
+fileprivate struct SectionVisibilityPreferenceKey: PreferenceKey {
+    static var defaultValue: [SectionVisibility] = []
+    
+    static func reduce(value: inout [SectionVisibility], nextValue: () -> [SectionVisibility]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+fileprivate struct TabBarPositionKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
