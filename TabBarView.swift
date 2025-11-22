@@ -12,34 +12,31 @@ struct TabBarView: View {
     @State private var selectedTab = 0   // Default to Home
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            
-            // MARK: - Tab Content (NO TabView – manual switcher)
-            Group {
-                switch selectedTab {
-                case 0:
-                    HomeView()
-                case 1:
-                    SearchView()
-                case 2:
-                    // Placeholder for AI chat / Talk to Mango
-                    Color(.systemBackground)
-                        .overlay(
-                            Text("Talk to Mango (Coming Soon)")
-                                .font(.title3)
-                                .foregroundColor(.gray)
-                        )
-                case 3:
-                    WatchlistView()
-                case 4:
-                    MoreView()
-                default:
-                    SearchView()
-                }
+        // MARK: - Tab Content (NO TabView – manual switcher)
+        Group {
+            switch selectedTab {
+            case 0:
+                HomeView()
+            case 1:
+                SearchView()
+            case 2:
+                // Placeholder for AI chat / Talk to Mango
+                Color(.systemBackground)
+                    .overlay(
+                        Text("Talk to Mango (Coming Soon)")
+                            .font(.title3)
+                            .foregroundColor(.gray)
+                    )
+            case 3:
+                WatchlistView()
+            case 4:
+                MoreView()
+            default:
+                SearchView()
             }
-            .ignoresSafeArea(.container, edges: .bottom)
-            
-            // MARK: - Custom Tab Bar
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // MARK: - Custom Tab Bar - anchored to bottom safe area
             CustomTabBar(selectedTab: $selectedTab)
         }
         .ignoresSafeArea(.keyboard)
@@ -170,6 +167,7 @@ struct CustomTabBar: View {
             }
         }
         .frame(height: 60)
+        .background(Color.white)
     }
 }
 
