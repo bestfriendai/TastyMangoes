@@ -14,35 +14,31 @@ struct MangoLogoIcon: View {
     
     var body: some View {
         ZStack {
-            // Stem/Leaf part (green or specified color)
+            // Mango body (yellow/orange gradient area or solid color) - drawn first so stem appears on top
             Path { path in
-                path.move(to: CGPoint(x: size * 0.4167, y: size * 0.0417))
+                // Create a rounded mango shape
+                path.move(to: CGPoint(x: size * 0.5, y: size * 0.2))
                 path.addCurve(
-                    to: CGPoint(x: size * 0.6667, y: size * 0.4167),
-                    control1: CGPoint(x: size * 0.5417, y: size * 0.0417),
-                    control2: CGPoint(x: size * 0.6667, y: size * 0.2083)
+                    to: CGPoint(x: size * 0.8, y: size * 0.5),
+                    control1: CGPoint(x: size * 0.7, y: size * 0.25),
+                    control2: CGPoint(x: size * 0.85, y: size * 0.35)
                 )
                 path.addCurve(
-                    to: CGPoint(x: size * 0.4167, y: size * 0.0417),
-                    control1: CGPoint(x: size * 0.6667, y: size * 0.2917),
-                    control2: CGPoint(x: size * 0.5417, y: size * 0.1667)
-                )
-            }
-            .fill(color ?? Color(hex: "#648d00"))
-            
-            // Mango body (yellow/orange gradient area or solid color)
-            Path { path in
-                path.move(to: CGPoint(x: size * 0.2917, y: size * 0.2917))
-                path.addCurve(
-                    to: CGPoint(x: size * 0.8333, y: size * 0.7083),
-                    control1: CGPoint(x: size * 0.2917, y: size * 0.5417),
-                    control2: CGPoint(x: size * 0.5417, y: size * 0.7083)
+                    to: CGPoint(x: size * 0.5, y: size * 0.8),
+                    control1: CGPoint(x: size * 0.75, y: size * 0.65),
+                    control2: CGPoint(x: size * 0.65, y: size * 0.75)
                 )
                 path.addCurve(
-                    to: CGPoint(x: size * 0.2917, y: size * 0.2917),
-                    control1: CGPoint(x: size * 0.75, y: size * 0.625),
-                    control2: CGPoint(x: size * 0.4167, y: size * 0.4167)
+                    to: CGPoint(x: size * 0.2, y: size * 0.5),
+                    control1: CGPoint(x: size * 0.35, y: size * 0.75),
+                    control2: CGPoint(x: size * 0.15, y: size * 0.65)
                 )
+                path.addCurve(
+                    to: CGPoint(x: size * 0.5, y: size * 0.2),
+                    control1: CGPoint(x: size * 0.25, y: size * 0.35),
+                    control2: CGPoint(x: size * 0.3, y: size * 0.25)
+                )
+                path.closeSubpath()
             }
             .fill(
                 color != nil
@@ -58,8 +54,27 @@ struct MangoLogoIcon: View {
                         )
                     )
             )
+            
+            // Stem/Leaf part (green or specified color) - drawn on top
+            Path { path in
+                // Leaf shape at the top
+                path.move(to: CGPoint(x: size * 0.4, y: size * 0.05))
+                path.addCurve(
+                    to: CGPoint(x: size * 0.65, y: size * 0.35),
+                    control1: CGPoint(x: size * 0.5, y: size * 0.05),
+                    control2: CGPoint(x: size * 0.65, y: size * 0.2)
+                )
+                path.addCurve(
+                    to: CGPoint(x: size * 0.4, y: size * 0.05),
+                    control1: CGPoint(x: size * 0.65, y: size * 0.25),
+                    control2: CGPoint(x: size * 0.5, y: size * 0.15)
+                )
+                path.closeSubpath()
+            }
+            .fill(color ?? Color(hex: "#648d00"))
         }
         .frame(width: size, height: size)
+        .clipped()
     }
 }
 

@@ -179,26 +179,49 @@ struct TabBarItem: View {
     let isSelected: Bool
     let action: () -> Void
     
-    // Computed property for icon name based on selection state
-    private var iconName: String {
-        if isSelected {
-            if icon == "magnifyingglass" { return "magnifyingglass.fill" }
-            if icon == "house.fill" { return "house.fill" }
-            if icon == "list.bullet" { return "list.bullet" }
-            return icon
+    // Gray color for tab bar icons
+    private let grayColor = Color(red: 153/255, green: 153/255, blue: 153/255)
+    
+    // Render the appropriate TMIcon based on tab type and selection state
+    @ViewBuilder
+    private var iconView: some View {
+        if icon == "house.fill" {
+            // Home tab
+            if isSelected {
+                TMHomeFilledIcon(size: 24, color: grayColor)
+            } else {
+                TMHomeIcon(size: 24, color: grayColor)
+            }
+        } else if icon == "magnifyingglass" {
+            // Search tab
+            if isSelected {
+                TMSearchFilledIcon(size: 24, color: grayColor)
+            } else {
+                TMSearchIcon(size: 24, color: grayColor)
+            }
+        } else if icon == "list.bullet" {
+            // Watchlist tab
+            if isSelected {
+                TMListFilledIcon(size: 24, color: grayColor)
+            } else {
+                TMListIcon(size: 24, color: grayColor)
+            }
+        } else if icon == "ellipsis" {
+            // More tab (no filled version, use same icon for both states)
+            TMMenuDotsIcon(size: 24, color: grayColor)
+        } else {
+            // Fallback to SF Symbol if icon type not recognized
+            Image(systemName: icon)
+                .font(.system(size: 17))
+                .foregroundColor(grayColor)
         }
-        // For outline versions when not selected
-        if icon == "house.fill" { return "house" }
-        return icon
     }
     
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
-                // Use filled icon when selected, outline when not
-                Image(systemName: iconName)
-                    .font(.system(size: 17))
-                    .foregroundColor(isSelected ? Color(red: 65/255, green: 65/255, blue: 65/255) : Color(red: 153/255, green: 153/255, blue: 153/255))
+                // Use TMIcon components - filled when selected, outline when not
+                iconView
                 
                 Text(label)
                     .font(.system(size: 10, weight: .bold))
