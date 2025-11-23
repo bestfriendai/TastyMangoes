@@ -84,7 +84,7 @@ struct MovieDetailView: View {
                     
                     // Pinned Section Tabs - shows when scrollable section tabs reach top
                     if shouldShowPinnedSectionTabs {
-                        sectionTabsBar
+                        sectionTabsBar(proxy: scrollProxy)
                             .background(Color.white)
                             .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
                             .zIndex(99)
@@ -110,7 +110,7 @@ struct MovieDetailView: View {
                                     .padding(.top, 16)
                                 
                                 // Section Tabs Bar (scrollable, will be hidden when pinned)
-                                sectionTabsBar
+                                sectionTabsBar(proxy: proxy)
                                     .padding(.top, 16)
                                     .background(
                                         GeometryReader { geometry in
@@ -657,16 +657,21 @@ struct MovieDetailView: View {
     
     // MARK: - Section Tabs Bar
     
-    private var sectionTabsBar: some View {
+    private func sectionTabsBar(proxy: ScrollViewProxy?) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
                 ForEach(MovieDetailTab.allCases) { tab in
                     Button(action: {
                         selectedTab = tab
                         // Scroll to section when tab is tapped
-                        if let proxy = scrollProxy {
+                        // Try proxy parameter first, then fall back to scrollProxy state
+                        let scrollProxyToUse = proxy ?? scrollProxy
+                        if let scrollProxyToUse = scrollProxyToUse {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(tab.id, anchor: .top)
+                                // Scroll to section - .top anchor will position it at top of ScrollView
+                                // Since header and section tabs are outside ScrollView, this will place
+                                // the section right below the pinned section tabs
+                                scrollProxyToUse.scrollTo(tab.id, anchor: .top)
                             }
                         }
                     }) {
@@ -683,6 +688,7 @@ struct MovieDetailView: View {
                                 .frame(height: 2)
                         }
                     }
+                    .buttonStyle(PlainButtonStyle()) // Ensure button is tappable
                 }
             }
         }
