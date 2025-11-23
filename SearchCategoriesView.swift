@@ -76,6 +76,35 @@ struct SearchCategoriesView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+                    // Results Count and Clear All Section (only show when selections > 0)
+                    if totalSelections > 0 {
+                        HStack {
+                            // "1000+ results found" text on left
+                            Text("1000+ results found")
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#808080"))
+                            
+                            Spacer()
+                            
+                            // "Clear All" button on right
+                            Button(action: {
+                                // Clear all selections
+                                filterState.selectedPlatforms.removeAll()
+                                filterState.selectedGenres.removeAll()
+                                // Also uncheck "My subscriptions" if it was checked
+                                if showMySubscriptions {
+                                    showMySubscriptions = false
+                                }
+                            }) {
+                                Text("Clear All")
+                                    .font(.custom("Nunito-SemiBold", size: 14))
+                                    .foregroundColor(Color(hex: "#FEA500"))
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                    }
+                    
                     // My Subscriptions Section
                     VStack(alignment: .leading, spacing: 16) {
                         // Checkbox and Label
