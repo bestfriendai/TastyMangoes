@@ -21,6 +21,7 @@ struct WatchlistView: View {
     @State private var watchedFilter: String = "Any"
     @State private var showFilterSheet = false
     @State private var showManageList = false
+    @State private var showCreateWatchlistSheet = false
     
     @EnvironmentObject private var watchlistManager: WatchlistManager
     
@@ -157,6 +158,13 @@ struct WatchlistView: View {
         .sheet(isPresented: $showManageList) {
             ManageListBottomSheet(isPresented: $showManageList, listId: "masterlist", listName: "Masterlist")
         }
+        .sheet(isPresented: $showCreateWatchlistSheet) {
+            CreateWatchlistBottomSheet(isPresented: $showCreateWatchlistSheet) { newWatchlist in
+                // Reload lists to include the new one
+                loadLists()
+            }
+            .environmentObject(watchlistManager)
+        }
         .onAppear {
             loadLists()
         }
@@ -267,7 +275,7 @@ struct WatchlistView: View {
                 HStack(spacing: 4) {
                     // Create New Watchlist Card
                     Button(action: {
-                        // Create new list
+                        showCreateWatchlistSheet = true
                     }) {
                         CreateNewListCard()
                     }

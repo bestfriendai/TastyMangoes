@@ -21,16 +21,8 @@ struct WatchlistBottomSheet: View {
     @State private var selectedWatchlists: Set<String> = []
     @State private var watchlists: [Watchlist] = []
     @State private var dragOffset: CGFloat = 0
-    
-    // Sample data - replace with your actual data source
-    private let sampleWatchlists = [
-        Watchlist(id: "1", name: "Masterlist", filmCount: 8, imageURL: nil, isSelected: true),
-        Watchlist(id: "2", name: "Must-Watch Movies", filmCount: 12, imageURL: nil, isSelected: false),
-        Watchlist(id: "3", name: "Sci-Fi Masterpieces", filmCount: 10, imageURL: nil, isSelected: false),
-        Watchlist(id: "4", name: "Action Blockbusters", filmCount: 20, imageURL: nil, isSelected: false),
-        Watchlist(id: "5", name: "My Favorite Films", filmCount: 15, imageURL: nil, isSelected: false),
-        Watchlist(id: "6", name: "Animated Adventures", filmCount: 15, imageURL: nil, isSelected: false)
-    ]
+    @State private var showCreateWatchlistSheet = false
+    @EnvironmentObject private var watchlistManager: WatchlistManager
     
     var body: some View {
         VStack(spacing: 0) {
@@ -72,11 +64,39 @@ struct WatchlistBottomSheet: View {
         .cornerRadius(24, corners: [.topLeft, .topRight])
         .frame(maxHeight: 600)
         .offset(y: max(0, dragOffset))
-        .onAppear {
-            watchlists = sampleWatchlists
-            // Pre-select watchlists that are already selected
-            selectedWatchlists = Set(watchlists.filter { $0.isSelected }.map { $0.id })
+        .sheet(isPresented: $showCreateWatchlistSheet) {
+            CreateWatchlistBottomSheet(isPresented: $showCreateWatchlistSheet) { newWatchlist in
+                // Reload watchlists after creation
+                loadWatchlists()
+            }
+            .environmentObject(watchlistManager)
         }
+        .onAppear {
+            loadWatchlists()
+        }
+    }
+    
+    private func loadWatchlists() {
+        // Load watchlists from WatchlistManager
+        let allLists = watchlistManager.getAllWatchlists()
+        watchlists = allLists.map { list in
+            Watchlist(
+                id: list.id,
+                name: list.name,
+                filmCount: list.filmCount,
+                imageURL: list.thumbnailURL,
+                isSelected: selectedWatchlists.contains(list.id)
+            )
+        }
+        // Add masterlist if not already in selected
+        if !watchlists.contains(where: { $0.id == "1" || $0.id == "masterlist" }) {
+            watchlists.insert(
+                Watchlist(id: "masterlist", name: "Masterlist", filmCount: watchlistManager.getListCount(listId: "masterlist"), imageURL: nil, isSelected: true),
+                at: 0
+            )
+        }
+        // Preserve selected state
+        selectedWatchlists = Set(watchlists.filter { $0.isSelected }.map { $0.id })
     }
     
     // MARK: - Drag Handle
@@ -148,7 +168,7 @@ struct WatchlistBottomSheet: View {
             VStack(spacing: 12) {
                 // Create New Watchlist Card
                 Button(action: {
-                    // Handle create new watchlist
+                    showCreateWatchlistSheet = true
                 }) {
                     CreateWatchlistCard()
                 }
