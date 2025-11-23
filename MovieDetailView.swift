@@ -247,17 +247,36 @@ struct MovieDetailView: View {
     
     private var videoAndRateSection: some View {
         VStack(spacing: 0) {
-            // Video Player Area
+            // Video Player Area - use backdrop image if available
             ZStack {
-                // Placeholder for video/poster
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(hex: "#e0e0e0"))
-                    .frame(height: 192.9375)
-                    .overlay(
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(.white.opacity(0.8))
-                    )
+                if let backdropURL = movie.backdropURL {
+                    AsyncImage(url: backdropURL) { phase in
+                        switch phase {
+                        case .empty:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(hex: "#e0e0e0"))
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        case .failure:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(hex: "#e0e0e0"))
+                        @unknown default:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(hex: "#e0e0e0"))
+                        }
+                    }
+                } else {
+                    // Placeholder for video/poster
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#e0e0e0"))
+                        .overlay(
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 48))
+                                .foregroundColor(.white.opacity(0.8))
+                        )
+                }
                 
                 // Play button overlay
                 Button(action: {
@@ -269,17 +288,53 @@ struct MovieDetailView: View {
                 }
             }
             .frame(height: 192.9375)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
             
             // Poster + Score Container
             HStack(alignment: .bottom, spacing: 16) {
-                // Poster Image
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(hex: "#d0d0d0"))
+                // Poster Image - use real poster if available
+                if let posterURL = movie.posterURL {
+                    AsyncImage(url: posterURL) { phase in
+                        switch phase {
+                        case .empty:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(hex: "#d0d0d0"))
+                                .overlay(
+                                    ProgressView()
+                                        .tint(.white)
+                                )
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        case .failure:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(hex: "#d0d0d0"))
+                                .overlay(
+                                    Image(systemName: "photo")
+                                        .foregroundColor(.white.opacity(0.5))
+                                )
+                        @unknown default:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(hex: "#d0d0d0"))
+                                .overlay(
+                                    Image(systemName: "photo")
+                                        .foregroundColor(.white.opacity(0.5))
+                                )
+                        }
+                    }
                     .frame(width: 84, height: 124)
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(.white.opacity(0.5))
-                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    // Placeholder if no poster
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#d0d0d0"))
+                        .frame(width: 84, height: 124)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.white.opacity(0.5))
+                        )
+                }
                 
                 // Score Cards
                 HStack(spacing: 16) {
@@ -1060,7 +1115,9 @@ struct MovieDetailData {
             MovieDetailView.SimpleCastMember(name: "Chris Messina", character: "Judge")
         ],
         tastyScore: 64,
-        aiScore: 5.9
+        aiScore: 5.9,
+        posterURL: nil,
+        backdropURL: nil
     )
 }
 
@@ -1076,6 +1133,8 @@ struct MovieDetailInfo {
     let cast: [MovieDetailView.SimpleCastMember]
     let tastyScore: Int
     let aiScore: Double
+    let posterURL: URL?
+    let backdropURL: URL?
 }
 
 // MARK: - MovieDetail Extension for Conversion
@@ -1133,7 +1192,9 @@ extension MovieDetail {
             writer: writerNames,
             cast: castMembers,
             tastyScore: tastyScorePercent,
-            aiScore: aiScoreValue
+            aiScore: aiScoreValue,
+            posterURL: posterURL,
+            backdropURL: backdropURL
         )
     }
 }
