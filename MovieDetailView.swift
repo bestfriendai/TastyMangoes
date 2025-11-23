@@ -62,17 +62,19 @@ struct MovieDetailView: View {
             } else if viewModel.hasError {
                 errorView
             } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // Top Navigation Header
-                        topNavigationHeader
-                            .padding(.top, 60) // Status bar height
-                            .padding(.bottom, 16)
-                        
-                        // Video + Rate Section
-                        videoAndRateSection
-                            .padding(.horizontal, 16)
-                            .padding(.top, 16)
+                VStack(spacing: 0) {
+                    // Top Navigation Header - Fixed above trailer (matches Figma: 116px total height)
+                    topNavigationHeader
+                        .padding(.top, 60) // Status bar height (matches Figma pt-[60px])
+                        .padding(.bottom, 16) // Bottom padding (matches Figma pb-[16px])
+                    
+                    // Scrollable content starts with trailer
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            // Video + Rate Section
+                            videoAndRateSection
+                                .padding(.horizontal, 16)
+                                .padding(.top, 0)
                         
                         // Rate Bloc (Mango's Tips)
                         rateBlocSection
@@ -92,10 +94,11 @@ struct MovieDetailView: View {
                         tabContentSection
                             .padding(.horizontal, 16)
                             .padding(.top, 16)
+                        }
                     }
-                }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    bottomActionButtons
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        bottomActionButtons
+                    }
                 }
             }
         }
@@ -232,8 +235,8 @@ struct MovieDetailView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 16) // Matches Figma px-[16px]
+        .frame(height: 40) // Content height (matches Figma General Info height)
         .background(Color.white)
         .overlay(
             Rectangle()
@@ -248,7 +251,7 @@ struct MovieDetailView: View {
     private var videoAndRateSection: some View {
         VStack(spacing: 0) {
             // Video Player Area - use backdrop image if available
-            ZStack {
+            ZStack(alignment: .topLeading) {
                 if let backdropURL = movie.backdropURL {
                     AsyncImage(url: backdropURL) { phase in
                         switch phase {
@@ -278,21 +281,35 @@ struct MovieDetailView: View {
                         )
                 }
                 
-                // Play button overlay
-                Button(action: {
-                    // TODO: Play trailer
-                }) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundColor(.white.opacity(0.9))
+                // Play Trailer overlay (top-left)
+                HStack(spacing: 6) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(Color(hex: "#f3f3f3"))
+                    
+                    HStack(spacing: 4) {
+                        Text("Play Trailer")
+                            .font(.custom("Nunito-Bold", size: 12))
+                            .foregroundColor(Color(hex: "#f3f3f3"))
+                        
+                        if let duration = movie.trailerDuration {
+                            Text(formatDuration(duration))
+                                .font(.custom("Inter-Regular", size: 12))
+                                .foregroundColor(Color(hex: "#ececec"))
+                        }
+                    }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .padding(.top, 12)
+                .padding(.leading, 12)
             }
             .frame(height: 192.9375)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             
-            // Poster + Score Container
+            // Poster + Score Container - overlaps video by ~58px (1/3)
             HStack(alignment: .bottom, spacing: 16) {
-                // Poster Image - use real poster if available
+                // Poster Image - overlaps video by positioning it with negative margin
                 if let posterURL = movie.posterURL {
                     AsyncImage(url: posterURL) { phase in
                         switch phase {
@@ -382,8 +399,10 @@ struct MovieDetailView: View {
                     .frame(width: 88, height: 50)
                 }
             }
-            .padding(.top, 16)
+            .padding(.leading, 12) // Match Figma: poster has 12px left padding
+            .padding(.top, -58) // Overlap video by 58px (1/3 of 192.9375)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     // MARK: - Rate Bloc Section (Mango's Tips)
@@ -736,6 +755,14 @@ struct MovieDetailView: View {
                 .foregroundColor(Color(hex: "#f3f3f3")),
             alignment: .top
         )
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func formatDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        return String(format: "%d:%02d", minutes, remainingSeconds)
     }
 }
 
@@ -1117,7 +1144,8 @@ struct MovieDetailData {
         tastyScore: 64,
         aiScore: 5.9,
         posterURL: nil,
-        backdropURL: nil
+        backdropURL: nil,
+        trailerDuration: 260 // 4:20 in seconds
     )
 }
 
@@ -1135,6 +1163,7 @@ struct MovieDetailInfo {
     let aiScore: Double
     let posterURL: URL?
     let backdropURL: URL?
+    let trailerDuration: Int? // Duration in seconds
 }
 
 // MARK: - MovieDetail Extension for Conversion
@@ -1194,7 +1223,8 @@ extension MovieDetail {
             tastyScore: tastyScorePercent,
             aiScore: aiScoreValue,
             posterURL: posterURL,
-            backdropURL: backdropURL
+            backdropURL: backdropURL,
+            trailerDuration: trailerDuration
         )
     }
 }
