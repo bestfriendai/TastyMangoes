@@ -16,6 +16,7 @@ class SearchFilterState: ObservableObject {
     
     @Published var selectedPlatforms: Set<String> = []
     @Published var selectedGenres: Set<String> = []
+    @Published var searchQuery: String = "" // Track search query for tab bar visibility
     @Published var sortBy: String = "List order"
     @Published var tastyScoreRange: ClosedRange<Double> = 0...100
     @Published var aiScoreRange: ClosedRange<Double> = 0...10

@@ -17,9 +17,9 @@ struct TabBarView: View {
         filterState.selectedPlatforms.count + filterState.selectedGenres.count
     }
     
-    // Show tab bar only when no selections are made
+    // Show tab bar only when no selections are made AND no search query
     private var shouldShowTabBar: Bool {
-        totalSelections == 0
+        totalSelections == 0 && filterState.searchQuery.isEmpty
     }
     
     var body: some View {

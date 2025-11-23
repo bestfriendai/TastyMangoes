@@ -325,6 +325,8 @@ class SearchViewModel: ObservableObject {
         showSuggestions = false
         isSearching = false
         searchTask?.cancel()
+        // Also clear searchQuery in SearchFilterState for tab bar visibility
+        SearchFilterState.shared.searchQuery = ""
     }
     
     /// Load popular movies (for when search is empty)

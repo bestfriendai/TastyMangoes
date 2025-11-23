@@ -44,13 +44,17 @@ struct SearchView: View {
             }
             .background(Color(hex: "#fdfdfd"))
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Start Searching Button - only show when selections > 0
-                if totalSelections > 0 {
+                // Start Searching Button - show when selections > 0 OR search query is not empty
+                if totalSelections > 0 || !viewModel.searchQuery.isEmpty {
                     VStack(spacing: 0) {
                         Button(action: {
                             startSearching()
                         }) {
-                            Text("Start Searching (\(totalSelections))")
+                            // Show count if there are selections, otherwise just "Start Searching"
+                            let buttonText = totalSelections > 0 
+                                ? "Start Searching (\(totalSelections))"
+                                : "Start Searching"
+                            Text(buttonText)
                                 .font(.custom("Nunito-Bold", size: 16))
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -136,7 +140,8 @@ struct SearchView: View {
                     TextField("Searching by name...", text: $viewModel.searchQuery)
                         .font(.custom("Inter-Regular", size: 16))
                         .foregroundColor(Color(hex: "#666666"))
-                        .onChange(of: viewModel.searchQuery) { _, _ in
+                        .onChange(of: viewModel.searchQuery) { oldValue, newValue in
+                            filterState.searchQuery = newValue // Sync to filterState for tab bar
                             viewModel.search()
                         }
                     
@@ -267,20 +272,41 @@ struct SearchView: View {
     // MARK: - Empty State
     
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "film")
-                .font(.system(size: 64))
-                .foregroundColor(Color(hex: "#CCCCCC"))
+        VStack(spacing: 0) {
+            // Back button - show when search query is not empty
+            if !viewModel.searchQuery.isEmpty {
+                HStack {
+                    Button(action: {
+                        // Clear search and return to genre/platform selection
+                        viewModel.clearSearch()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(hex: "#333333"))
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+            }
             
-            Text("No movies found")
-                .font(.custom("Nunito-Bold", size: 24))
-                .foregroundColor(Color(hex: "#1a1a1a"))
-            
-            Text("Try a different search term")
-                .font(.custom("Inter-Regular", size: 16))
-                .foregroundColor(Color(hex: "#666666"))
+            VStack(spacing: 16) {
+                Image(systemName: "film")
+                    .font(.system(size: 64))
+                    .foregroundColor(Color(hex: "#CCCCCC"))
+                
+                Text("No movies found")
+                    .font(.custom("Nunito-Bold", size: 24))
+                    .foregroundColor(Color(hex: "#1a1a1a"))
+                
+                Text("Try a different search term")
+                    .font(.custom("Inter-Regular", size: 16))
+                    .foregroundColor(Color(hex: "#666666"))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Suggestions View
@@ -345,29 +371,50 @@ struct SearchView: View {
     // MARK: - Results List
     
     private var resultsListView: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                // Results count
+        return VStack(spacing: 0) {
+            // Back button - only show when search query is not empty
+            if !viewModel.searchQuery.isEmpty {
                 HStack {
-                    Text("\(viewModel.searchResults.count) results found")
-                        .font(.custom("Inter-SemiBold", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
+                    Button(action: {
+                        // Clear search and return to genre/platform selection
+                        viewModel.clearSearch()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(hex: "#333333"))
+                            .frame(width: 44, height: 44)
+                    }
                     
                     Spacer()
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
-                
-                // Movie cards
-                LazyVStack(spacing: 12) {
-                    ForEach(viewModel.searchResults) { movie in
-                        NavigationLink(destination: MoviePageView(movieId: movie.id)) {
-                            SearchMovieCard(movie: movie)
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                .padding(.top, 8)
+            }
+            
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Results count
+                    HStack {
+                        Text("\(viewModel.searchResults.count) results found")
+                            .font(.custom("Inter-SemiBold", size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                        
+                        Spacer()
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                
+                    // Movie cards
+                    LazyVStack(spacing: 12) {
+                        ForEach(viewModel.searchResults) { movie in
+                            NavigationLink(destination: MoviePageView(movieId: movie.id)) {
+                                SearchMovieCard(movie: movie)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding(.horizontal, 20)
                 }
-                .padding(.horizontal, 20)
             }
         }
     }
@@ -375,13 +422,13 @@ struct SearchView: View {
     // MARK: - Categories View
     
     private var categoriesView: some View {
-        SearchCategoriesView(searchQuery: viewModel.searchQuery)
+        return SearchCategoriesView(searchQuery: viewModel.searchQuery)
     }
     
     // MARK: - Popular Movies View
     
     private var popularMoviesView: some View {
-        ScrollView {
+        return ScrollView {
             VStack(spacing: 16) {
                 HStack {
                     Text("Popular Movies")
