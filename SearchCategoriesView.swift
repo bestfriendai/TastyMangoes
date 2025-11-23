@@ -75,30 +75,6 @@ struct SearchCategoriesView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // TEST BUTTON - Temporary, visible at top for testing
-            if totalSelections > 0 {
-                VStack(spacing: 0) {
-                    Button(action: {
-                        startSearching()
-                    }) {
-                        Text("TEST: Start Searching (\(totalSelections))")
-                            .font(.custom("Nunito-Bold", size: 14))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color(hex: "#FEA500"))
-                            .cornerRadius(8)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
-                    
-                    Divider()
-                        .background(Color(hex: "#f3f3f3"))
-                }
-                .background(Color.white)
-            }
-            
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     // My Subscriptions Section
@@ -161,35 +137,26 @@ struct SearchCategoriesView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-            // Start Searching Button (only show when selections are made)
-            if totalSelections > 0 {
+                // Start Searching Button - always visible at bottom
                 VStack(spacing: 0) {
-                    Divider()
-                        .background(Color(hex: "#f3f3f3"))
-                    
                     Button(action: {
                         startSearching()
                     }) {
                         Text("Start Searching (\(totalSelections))")
-                            .font(.custom("Nunito-Bold", size: 14))
+                            .font(.custom("Nunito-Bold", size: 16))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
                             .background(Color(hex: "#333333"))
-                            .cornerRadius(8)
+                            .cornerRadius(12)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
                     .padding(.bottom, 16)
+                    .background(Color.white)
                 }
-                .background(
-                    Color.white
-                        .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: -2)
-                )
-            } else {
-                Color.clear.frame(height: 0)
             }
-        }
         }
     }
     

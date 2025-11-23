@@ -13,6 +13,11 @@ struct SearchView: View {
     @State private var showPlatformsSheet = false
     @State private var showGenresSheet = false
     
+    // Computed property for selection count
+    private var totalSelections: Int {
+        filterState.selectedPlatforms.count + filterState.selectedGenres.count
+    }
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -38,6 +43,27 @@ struct SearchView: View {
                 }
             }
             .background(Color(hex: "#fdfdfd"))
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Start Searching Button - always visible at bottom
+                VStack(spacing: 0) {
+                    Button(action: {
+                        startSearching()
+                    }) {
+                        Text("Start Searching (\(totalSelections))")
+                            .font(.custom("Nunito-Bold", size: 16))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .background(Color(hex: "#333333"))
+                            .cornerRadius(12)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 16)
+                    .background(Color.white)
+                }
+            }
         }
         .sheet(isPresented: $showFilters) {
             SearchFiltersBottomSheet(isPresented: $showFilters)
@@ -48,6 +74,13 @@ struct SearchView: View {
         .sheet(isPresented: $showGenresSheet) {
             SearchGenresBottomSheet(isPresented: $showGenresSheet)
         }
+    }
+    
+    // MARK: - Actions
+    
+    private func startSearching() {
+        // TODO: Navigate to search results with selected filters
+        print("Starting search with \(filterState.selectedPlatforms.count) platforms and \(filterState.selectedGenres.count) genres")
     }
     
     // MARK: - Search Header
