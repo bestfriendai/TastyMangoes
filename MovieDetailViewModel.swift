@@ -20,6 +20,9 @@ class MovieDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: MovieDetailError?
     @Published var selectedTab: MovieTab = .overview
+    @Published var similarMovies: [Movie] = []
+    @Published var movieImages: [TMDBImage] = []
+    @Published var movieVideos: [TMDBVideo] = []
     
     // MARK: - Properties
     
@@ -52,8 +55,25 @@ class MovieDetailViewModel: ObservableObject {
             
             if let movieId = movieId {
                 movieDetail = try await service.fetchMovieDetail(id: movieId)
+                
+                // Load additional data in parallel
+                async let similarMoviesTask = loadSimilarMovies(movieId: movieId)
+                async let imagesTask = loadMovieImages(movieId: movieId)
+                async let videosTask = loadMovieVideos(movieId: movieId)
+                
+                // Wait for all to complete
+                _ = try? await (similarMoviesTask, imagesTask, videosTask)
             } else if let movieStringId = movieStringId {
                 movieDetail = try await service.fetchMovieDetail(stringId: movieStringId)
+                
+                // If we can convert string ID to Int, load additional data
+                if let movieId = Int(movieStringId) {
+                    async let similarMoviesTask = loadSimilarMovies(movieId: movieId)
+                    async let imagesTask = loadMovieImages(movieId: movieId)
+                    async let videosTask = loadMovieVideos(movieId: movieId)
+                    
+                    _ = try? await (similarMoviesTask, imagesTask, videosTask)
+                }
             } else {
                 throw MovieDetailError.invalidData
             }
@@ -68,6 +88,39 @@ class MovieDetailViewModel: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    // MARK: - Private Methods
+    
+    private func loadSimilarMovies(movieId: Int) async {
+        do {
+            let response = try await TMDBService.shared.getSimilarMovies(movieId: movieId)
+            self.similarMovies = response.results.prefix(6).map { $0.toMovie() }
+        } catch {
+            print("⚠️ Failed to load similar movies: \(error)")
+        }
+    }
+    
+    private func loadMovieImages(movieId: Int) async {
+        do {
+            let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
+            // Combine backdrops and posters, prefer backdrops for photos section
+            self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
+        } catch {
+            print("⚠️ Failed to load movie images: \(error)")
+        }
+    }
+    
+    private func loadMovieVideos(movieId: Int) async {
+        do {
+            let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
+            // Filter for clips and teasers (exclude trailers as we show those separately)
+            self.movieVideos = response.results.filter { 
+                $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 
+            }.prefix(5).map { $0 }
+        } catch {
+            print("⚠️ Failed to load movie videos: \(error)")
+        }
     }
     
     func retry() {

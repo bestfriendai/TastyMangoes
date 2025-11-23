@@ -128,6 +128,57 @@ class TMDBService {
         return try await performRequest(url: url)
     }
     
+    // MARK: - Get Similar Movies
+    
+    /// Get similar movies for a specific movie
+    func getSimilarMovies(movieId: Int, page: Int = 1) async throws -> TMDBSearchResponse {
+        var components = URLComponents(string: "\(TMDBConfig.baseURL)/movie/\(movieId)/similar")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: TMDBConfig.apiKey),
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "language", value: "en-US")
+        ]
+        
+        guard let url = components?.url else {
+            throw TMDBError.invalidURL
+        }
+        
+        return try await performRequest(url: url)
+    }
+    
+    // MARK: - Get Movie Images
+    
+    /// Get images (posters, backdrops) for a specific movie
+    func getMovieImages(movieId: Int) async throws -> TMDBImagesResponse {
+        var components = URLComponents(string: "\(TMDBConfig.baseURL)/movie/\(movieId)/images")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: TMDBConfig.apiKey)
+        ]
+        
+        guard let url = components?.url else {
+            throw TMDBError.invalidURL
+        }
+        
+        return try await performRequest(url: url)
+    }
+    
+    // MARK: - Get Movie Videos
+    
+    /// Get videos (trailers, clips) for a specific movie
+    func getMovieVideos(movieId: Int) async throws -> TMDBVideosResponse {
+        var components = URLComponents(string: "\(TMDBConfig.baseURL)/movie/\(movieId)/videos")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: TMDBConfig.apiKey),
+            URLQueryItem(name: "language", value: "en-US")
+        ]
+        
+        guard let url = components?.url else {
+            throw TMDBError.invalidURL
+        }
+        
+        return try await performRequest(url: url)
+    }
+    
     // MARK: - Private Helper
     
     private func performRequest<T: Decodable>(url: URL) async throws -> T {

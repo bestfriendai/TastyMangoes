@@ -120,6 +120,80 @@ struct TMDBCrew: Codable {
     }
 }
 
+// MARK: - Images and Videos Models
+
+/// Images response from TMDB
+struct TMDBImagesResponse: Codable {
+    let id: Int
+    let backdrops: [TMDBImage]
+    let posters: [TMDBImage]
+}
+
+/// Image from TMDB
+struct TMDBImage: Codable, Identifiable {
+    let filePath: String
+    let width: Int?
+    let height: Int?
+    let aspectRatio: Double?
+    let voteAverage: Double?
+    let voteCount: Int?
+    
+    var imageURL: URL? {
+        URL(string: "https://image.tmdb.org/t/p/w500\(filePath)")
+    }
+    
+    var originalImageURL: URL? {
+        URL(string: "https://image.tmdb.org/t/p/original\(filePath)")
+    }
+    
+    // Identifiable conformance - use filePath as ID
+    var id: String {
+        filePath
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case filePath = "file_path"
+        case width = "width"
+        case height = "height"
+        case aspectRatio = "aspect_ratio"
+        case voteAverage = "vote_average"
+        case voteCount = "vote_count"
+    }
+}
+
+/// Videos response from TMDB
+struct TMDBVideosResponse: Codable {
+    let id: Int
+    let results: [TMDBVideo]
+}
+
+/// Video from TMDB
+struct TMDBVideo: Codable, Identifiable {
+    let id: String
+    let key: String
+    let name: String
+    let site: String // "YouTube", "Vimeo", etc.
+    let size: Int // 360, 480, 720, 1080
+    let type: String // "Trailer", "Teaser", "Clip", etc.
+    let official: Bool
+    let publishedAt: String
+    
+    var youtubeURL: URL? {
+        guard site == "YouTube" else { return nil }
+        return URL(string: "https://www.youtube.com/watch?v=\(key)")
+    }
+    
+    var thumbnailURL: URL? {
+        guard site == "YouTube" else { return nil }
+        return URL(string: "https://img.youtube.com/vi/\(key)/maxresdefault.jpg")
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id, key, name, site, size, type, official
+        case publishedAt = "published_at"
+    }
+}
+
 // MARK: - Conversion to App Models
 
 extension TMDBMovie {

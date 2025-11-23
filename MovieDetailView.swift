@@ -574,8 +574,21 @@ struct MovieDetailView: View {
             // Cast Horizontal Scroll
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(movie.cast.prefix(7), id: \.name) { actor in
-                        CastCard(actor: actor)
+                    if let castMembers = viewModel.movie?.cast {
+                        ForEach(Array(castMembers.prefix(7).enumerated()), id: \.element.id) { index, castMember in
+                            CastCard(
+                                actor: MovieDetailView.SimpleCastMember(
+                                    name: castMember.name,
+                                    character: castMember.character
+                                ),
+                                profileURL: castMember.profileURL
+                            )
+                        }
+                    } else {
+                        // Fallback to movie.cast if viewModel doesn't have cast
+                        ForEach(movie.cast.prefix(7), id: \.name) { actor in
+                            CastCard(actor: actor)
+                        }
                     }
                 }
             }
@@ -652,8 +665,15 @@ struct MovieDetailView: View {
             // Movie Recommendations Horizontal Scroll
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<6) { _ in
-                        MovieRecommendationCard()
+                    if !viewModel.similarMovies.isEmpty {
+                        ForEach(viewModel.similarMovies) { similarMovie in
+                            MovieRecommendationCard(movie: similarMovie)
+                        }
+                    } else {
+                        // Fallback placeholder
+                        ForEach(0..<6) { _ in
+                            MovieRecommendationCard()
+                        }
                     }
                 }
             }
@@ -680,8 +700,15 @@ struct MovieDetailView: View {
             // Clips Horizontal Scroll
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<5) { _ in
-                        MovieDetailClipCard()
+                    if !viewModel.movieVideos.isEmpty {
+                        ForEach(viewModel.movieVideos) { video in
+                            MovieDetailClipCard(video: video)
+                        }
+                    } else {
+                        // Fallback placeholder
+                        ForEach(0..<5) { _ in
+                            MovieDetailClipCard()
+                        }
                     }
                 }
             }
@@ -705,8 +732,15 @@ struct MovieDetailView: View {
             // Photos Horizontal Scroll
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<6) { _ in
-                        MovieDetailPhotoCard()
+                    if !viewModel.movieImages.isEmpty {
+                        ForEach(viewModel.movieImages.prefix(6)) { image in
+                            MovieDetailPhotoCard(image: image)
+                        }
+                    } else {
+                        // Fallback placeholder
+                        ForEach(0..<6) { _ in
+                            MovieDetailPhotoCard()
+                        }
                     }
                 }
             }
@@ -812,18 +846,56 @@ struct DetailRow: View {
 
 struct CastCard: View {
     let actor: MovieDetailView.SimpleCastMember
+    let profileURL: URL?
+    
+    init(actor: MovieDetailView.SimpleCastMember, profileURL: URL? = nil) {
+        self.actor = actor
+        self.profileURL = profileURL
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Actor Photo
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(hex: "#e0e0e0"))
-                .frame(width: 124, height: 156)
-                .overlay(
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.white.opacity(0.5))
-                )
+            if let profileURL = profileURL {
+                AsyncImage(url: profileURL) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(hex: "#e0e0e0"))
+                            .frame(width: 124, height: 156)
+                            .overlay(
+                                ProgressView()
+                            )
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 124, height: 156)
+                            .clipped()
+                            .cornerRadius(8)
+                    case .failure:
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(hex: "#e0e0e0"))
+                            .frame(width: 124, height: 156)
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.white.opacity(0.5))
+                            )
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#e0e0e0"))
+                    .frame(width: 124, height: 156)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
             
             // Actor Name
             Text(actor.name)
@@ -894,25 +966,37 @@ private struct MovieDetailReviewCard: View {
 }
 
 struct MovieRecommendationCard: View {
+    let movie: Movie?
+    
+    init(movie: Movie? = nil) {
+        self.movie = movie
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Poster
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(hex: "#e0e0e0"))
-                .frame(width: 124, height: 186)
-                .overlay(
-                    Image(systemName: "photo")
-                        .foregroundColor(.white.opacity(0.5))
-                )
+            if let movie = movie {
+                MoviePosterImage(posterURL: movie.posterImageURL)
+                    .frame(width: 124, height: 186)
+                    .cornerRadius(8)
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#e0e0e0"))
+                    .frame(width: 124, height: 186)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
             
             // Title
-            Text("Similar Movie")
+            Text(movie?.title ?? "Similar Movie")
                 .font(.custom("Inter-SemiBold", size: 14))
                 .foregroundColor(Color(hex: "#1a1a1a"))
                 .lineLimit(2)
             
             // Year
-            Text("2023")
+            Text(movie?.year != nil && movie!.year > 0 ? String(movie!.year) : "2023")
                 .font(.custom("Inter-Regular", size: 12))
                 .foregroundColor(Color(hex: "#666666"))
         }
@@ -976,38 +1060,116 @@ struct MangoRecommendationCard: View {
 }
 
 private struct MovieDetailClipCard: View {
+    let video: TMDBVideo?
+    
+    init(video: TMDBVideo? = nil) {
+        self.video = video
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Clip Thumbnail
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(hex: "#e0e0e0"))
-                .frame(width: 248, height: 140)
-                .overlay(
-                    ZStack {
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(.white.opacity(0.9))
+            if let video = video, let thumbnailURL = video.thumbnailURL {
+                AsyncImage(url: thumbnailURL) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(hex: "#e0e0e0"))
+                            .frame(width: 248, height: 140)
+                            .overlay(ProgressView())
+                    case .success(let image):
+                        ZStack {
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 248, height: 140)
+                                .clipped()
+                                .cornerRadius(8)
+                            
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 48))
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                    case .failure:
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(hex: "#e0e0e0"))
+                            .frame(width: 248, height: 140)
+                            .overlay(
+                                Image(systemName: "play.circle.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.white.opacity(0.9))
+                            )
+                    @unknown default:
+                        EmptyView()
                     }
-                )
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#e0e0e0"))
+                    .frame(width: 248, height: 140)
+                    .overlay(
+                        ZStack {
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 48))
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                    )
+            }
             
             // Clip Title
-            Text("Behind the Scenes")
+            Text(video?.name ?? "Behind the Scenes")
                 .font(.custom("Inter-SemiBold", size: 14))
                 .foregroundColor(Color(hex: "#1a1a1a"))
+                .lineLimit(2)
         }
         .frame(width: 248)
     }
 }
 
 private struct MovieDetailPhotoCard: View {
+    let image: TMDBImage?
+    
+    init(image: TMDBImage? = nil) {
+        self.image = image
+    }
+    
     var body: some View {
-        RoundedRectangle(cornerRadius: 8)
-            .fill(Color(hex: "#e0e0e0"))
-            .frame(width: 248, height: 140)
-            .overlay(
-                Image(systemName: "photo")
-                    .foregroundColor(.white.opacity(0.5))
-            )
+        if let image = image, let imageURL = image.imageURL {
+            AsyncImage(url: imageURL) { phase in
+                switch phase {
+                case .empty:
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#e0e0e0"))
+                        .frame(width: 248, height: 140)
+                        .overlay(ProgressView())
+                case .success(let img):
+                    img
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 248, height: 140)
+                        .clipped()
+                        .cornerRadius(8)
+                case .failure:
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#e0e0e0"))
+                        .frame(width: 248, height: 140)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.white.opacity(0.5))
+                        )
+                @unknown default:
+                    EmptyView()
+                }
+            }
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(hex: "#e0e0e0"))
+                .frame(width: 248, height: 140)
+                .overlay(
+                    Image(systemName: "photo")
+                        .foregroundColor(.white.opacity(0.5))
+                )
+        }
     }
 }
 
@@ -1193,8 +1355,8 @@ extension MovieDetail {
         let writers = crew?.filter { $0.job == "Writer" || $0.job == "Screenplay" } ?? []
         let writerNames = writers.isEmpty ? "N/A" : writers.map { $0.name }.joined(separator: ", ")
         
-        // Convert cast members
-        let castMembers = (cast ?? []).map { castMember in
+        // Convert cast members - use first 7 for display
+        let castMembers = (cast ?? []).prefix(7).map { castMember in
             MovieDetailView.SimpleCastMember(
                 name: castMember.name,
                 character: castMember.character
