@@ -375,7 +375,7 @@ struct SearchView: View {
     // MARK: - Categories View
     
     private var categoriesView: some View {
-        SearchCategoriesView()
+        SearchCategoriesView(searchQuery: viewModel.searchQuery)
     }
     
     // MARK: - Popular Movies View

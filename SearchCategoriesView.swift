@@ -8,6 +8,7 @@ import SwiftUI
 
 struct SearchCategoriesView: View {
     @ObservedObject private var filterState = SearchFilterState.shared
+    var searchQuery: String = "" // Passed from SearchView
     @State private var showMySubscriptions = false
     
     // All platform options (10 platforms total)
@@ -26,6 +27,34 @@ struct SearchCategoriesView: View {
     // Total selected count for button (using SearchFilterState)
     private var totalSelections: Int {
         filterState.selectedPlatforms.count + filterState.selectedGenres.count
+    }
+    
+    // Computed property for filtered movies count (based on search + filters)
+    private var filteredMoviesCount: Int {
+        let allMovies = SearchViewModel.testMovies
+        let query = searchQuery.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        var filtered = allMovies
+        
+        // Filter by search query if present
+        if !query.isEmpty {
+            filtered = filtered.filter { movie in
+                movie.title.lowercased().contains(query)
+            }
+        }
+        
+        // Filter by selected genres if any
+        if !filterState.selectedGenres.isEmpty {
+            filtered = filtered.filter { movie in
+                // Check if movie has any of the selected genres
+                !Set(movie.genres).isDisjoint(with: filterState.selectedGenres)
+            }
+        }
+        
+        // Note: Platform filtering would require movie.platforms property (not implemented yet)
+        // For now, platform selection doesn't filter movies, only counts as a selection
+        
+        return filtered.count
     }
     
     // Category groups with counts (matching Figma design)
@@ -79,8 +108,8 @@ struct SearchCategoriesView: View {
                     // Results Count and Clear All Section (only show when selections > 0)
                     if totalSelections > 0 {
                         HStack {
-                            // "1000+ results found" text on left
-                            Text("1000+ results found")
+                            // Results count text on left - show actual filtered count
+                            Text("\(filteredMoviesCount) results found")
                                 .font(.custom("Inter-Regular", size: 14))
                                 .foregroundColor(Color(hex: "#808080"))
                             
