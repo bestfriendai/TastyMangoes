@@ -13,6 +13,10 @@ struct MovieDetailView: View {
     @State private var selectedTab: MovieDetailTab = .overview
     @State private var showMenuSheet = false
     @State private var showShareSheet = false
+    @State private var sectionTabsMinY: CGFloat = 1000 // Track section tabs position
+    @State private var initialSectionTabsMinY: CGFloat = 1000 // Track initial position
+    @State private var hasReachedPinningPoint: Bool = false // Track if we've scrolled past pinning threshold
+    @State private var scrollProxy: ScrollViewProxy?
     
     // Simple cast member struct for display (to avoid conflict with Codable CastMember)
     struct SimpleCastMember: Identifiable {
@@ -30,6 +34,7 @@ struct MovieDetailView: View {
         
         return movieDetail.toMovieDetailInfo()
     }
+    
     
     // Initializer for Movie model - fetches from TMDB
     init(movie: Movie) {
@@ -52,6 +57,13 @@ struct MovieDetailView: View {
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieId: 0))
     }
     
+    // Computed property to determine if pinned section tabs should show
+    private var shouldShowPinnedSectionTabs: Bool {
+        // Once we've reached the pinning point, keep it pinned
+        // This ensures the section tabs stay pinned even if sectionTabsMinY goes negative
+        return hasReachedPinningPoint
+    }
+    
     var body: some View {
         ZStack(alignment: .top) {
             Color(hex: "#fdfdfd")
@@ -63,41 +75,225 @@ struct MovieDetailView: View {
                 errorView
             } else {
                 VStack(spacing: 0) {
-                    // Top Navigation Header - Fixed above trailer
+                    // Header - FIXED at top, never scrolls
                     topNavigationHeader
                         .padding(.top) // Account for safe area (status bar)
-                        .padding(.bottom, 16) // Bottom padding (matches Figma pb-[16px])
+                        .padding(.bottom, 16)
+                        .background(Color.white)
+                        .zIndex(100)
                     
-                    // Scrollable content starts with trailer
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            // Video + Rate Section
-                            videoAndRateSection
-                                .padding(.horizontal, 16)
-                                .padding(.top, 0)
-                        
-                        // Rate Bloc (Mango's Tips)
-                        rateBlocSection
-                            .padding(.horizontal, 16)
-                            .padding(.top, 16)
-                        
-                        // Watch on Platform Icons
-                        watchOnSection
-                            .padding(.horizontal, 16)
-                            .padding(.top, 16)
-                        
-                        // Tab Bar
-                        tabBarSection
-                            .padding(.top, 16)
-                        
-                        // Tab Content
-                        tabContentSection
-                            .padding(.horizontal, 16)
-                            .padding(.top, 16)
-                        }
+                    // Pinned Section Tabs - shows when scrollable section tabs reach top
+                    if shouldShowPinnedSectionTabs {
+                        sectionTabsBar
+                            .background(Color.white)
+                            .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
+                            .zIndex(99)
                     }
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        bottomActionButtons
+                    
+                    // Scrollable content - starts below header
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                // Video + Rate Section
+                                videoAndRateSection
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 0)
+                                
+                                // Rate Bloc (Mango's Tips)
+                                rateBlocSection
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 16)
+                                
+                                // Watch on Platform Icons
+                                watchOnSection
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 16)
+                                
+                                // Section Tabs Bar (scrollable, will be hidden when pinned)
+                                sectionTabsBar
+                                    .padding(.top, 16)
+                                    .background(
+                                        GeometryReader { geometry in
+                                            let frame = geometry.frame(in: .named("scroll"))
+                                            Color.clear.preference(
+                                                key: TabBarPositionKey.self,
+                                                value: frame.minY
+                                            )
+                                        }
+                                    )
+                                    .opacity(shouldShowPinnedSectionTabs ? 0 : 1)
+                                    .id("scrollableSectionTabs")
+                                
+                                // All Sections Stacked Vertically
+                                VStack(spacing: 0) {
+                                    // Overview Section
+                                    overviewSection
+                                        .id(MovieDetailTab.overview.id)
+                                        .background(
+                                            GeometryReader { geometry in
+                                                let frame = geometry.frame(in: .named("scroll"))
+                                                Color.clear.preference(
+                                                    key: SectionVisibilityPreferenceKey.self,
+                                                    value: [SectionVisibility(
+                                                        section: .overview,
+                                                        minY: frame.minY,
+                                                        maxY: frame.maxY
+                                                    )]
+                                                )
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 16)
+                                    
+                                    // Cast & Crew Section
+                                    castCrewSection
+                                        .id(MovieDetailTab.castCrew.id)
+                                        .background(
+                                            GeometryReader { geometry in
+                                                let frame = geometry.frame(in: .named("scroll"))
+                                                Color.clear.preference(
+                                                    key: SectionVisibilityPreferenceKey.self,
+                                                    value: [SectionVisibility(
+                                                        section: .castCrew,
+                                                        minY: frame.minY,
+                                                        maxY: frame.maxY
+                                                    )]
+                                                )
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 32)
+                                    
+                                    // Reviews Section
+                                    reviewsSection
+                                        .id(MovieDetailTab.reviews.id)
+                                        .background(
+                                            GeometryReader { geometry in
+                                                let frame = geometry.frame(in: .named("scroll"))
+                                                Color.clear.preference(
+                                                    key: SectionVisibilityPreferenceKey.self,
+                                                    value: [SectionVisibility(
+                                                        section: .reviews,
+                                                        minY: frame.minY,
+                                                        maxY: frame.maxY
+                                                    )]
+                                                )
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 32)
+                                    
+                                    // More to Watch Section
+                                    moreToWatchSection
+                                        .id(MovieDetailTab.moreToWatch.id)
+                                        .background(
+                                            GeometryReader { geometry in
+                                                let frame = geometry.frame(in: .named("scroll"))
+                                                Color.clear.preference(
+                                                    key: SectionVisibilityPreferenceKey.self,
+                                                    value: [SectionVisibility(
+                                                        section: .moreToWatch,
+                                                        minY: frame.minY,
+                                                        maxY: frame.maxY
+                                                    )]
+                                                )
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 32)
+                                    
+                                    // Movie Clips Section
+                                    movieClipsSection
+                                        .id(MovieDetailTab.clips.id)
+                                        .background(
+                                            GeometryReader { geometry in
+                                                let frame = geometry.frame(in: .named("scroll"))
+                                                Color.clear.preference(
+                                                    key: SectionVisibilityPreferenceKey.self,
+                                                    value: [SectionVisibility(
+                                                        section: .clips,
+                                                        minY: frame.minY,
+                                                        maxY: frame.maxY
+                                                    )]
+                                                )
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 32)
+                                    
+                                    // Photos Section
+                                    photosSection
+                                        .id(MovieDetailTab.photos.id)
+                                        .background(
+                                            GeometryReader { geometry in
+                                                let frame = geometry.frame(in: .named("scroll"))
+                                                Color.clear.preference(
+                                                    key: SectionVisibilityPreferenceKey.self,
+                                                    value: [SectionVisibility(
+                                                        section: .photos,
+                                                        minY: frame.minY,
+                                                        maxY: frame.maxY
+                                                    )]
+                                                )
+                                            }
+                                        )
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 32)
+                                        .padding(.bottom, 100) // Extra padding for bottom buttons
+                                }
+                            }
+                        }
+                        .coordinateSpace(name: "scroll")
+                        .scrollIndicators(.hidden) // Hide scroll indicators for cleaner look
+                        .onPreferenceChange(TabBarPositionKey.self) { value in
+                            sectionTabsMinY = value
+                            
+                            // Track initial position on first update
+                            if initialSectionTabsMinY == 1000 && value > 0 {
+                                initialSectionTabsMinY = value
+                            }
+                            
+                            // frame.minY is relative to ScrollView content
+                            // As we scroll up, value decreases from initial position
+                            // When section tabs reach top of visible ScrollView area (below header),
+                            // value should be around 0 or negative
+                            // Pin when value is close to 0 (scrolled up to top)
+                            // Only pin if we've scrolled up significantly from initial position
+                            let scrollDistance = initialSectionTabsMinY - value
+                            
+                            if value <= 0 && scrollDistance > 200 {
+                                // Section tabs have scrolled up to the top
+                                hasReachedPinningPoint = true
+                            } else if value > 50 || scrollDistance < 100 {
+                                // Scrolled back down or haven't scrolled enough, unpin
+                                hasReachedPinningPoint = false
+                            }
+                        }
+                        .onPreferenceChange(SectionVisibilityPreferenceKey.self) { values in
+                            // Update selected tab based on scroll position
+                            // Section tabs offset accounts for safe area (~52), header (~80), and section tabs height (~52) = ~184
+                            // But since section tabs are now pinned, we need to account for header + section tabs
+                            let headerHeight: CGFloat = 80 // Approximate header height
+                            let sectionTabsHeight: CGFloat = 52 // Section tabs height
+                            let sectionTabsOffset: CGFloat = headerHeight + sectionTabsHeight
+                            
+                            let visibleSections = values.filter { visibility in
+                                // Section is visible if it's in the top portion of the visible area (below pinned section tabs)
+                                return visibility.minY <= sectionTabsOffset && visibility.maxY > sectionTabsOffset
+                            }
+                            
+                            if let firstVisible = visibleSections.min(by: { $0.minY < $1.minY }) {
+                                if selectedTab != firstVisible.section {
+                                    selectedTab = firstVisible.section
+                                }
+                            }
+                        }
+                        .onAppear {
+                            scrollProxy = proxy
+                        }
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            bottomActionButtons
+                        }
                     }
                 }
             }
@@ -459,14 +655,20 @@ struct MovieDetailView: View {
         .padding(.vertical, 16)
     }
     
-    // MARK: - Tab Bar Section
+    // MARK: - Section Tabs Bar
     
-    private var tabBarSection: some View {
+    private var sectionTabsBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
                 ForEach(MovieDetailTab.allCases) { tab in
                     Button(action: {
                         selectedTab = tab
+                        // Scroll to section when tab is tapped
+                        if let proxy = scrollProxy {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(tab.id, anchor: .top)
+                            }
+                        }
                     }) {
                         VStack(spacing: 0) {
                             Text(tab.rawValue)
@@ -1231,6 +1433,30 @@ struct ShareSheet: View {
                 .padding()
         }
         .presentationDetents([.medium])
+    }
+}
+
+// MARK: - Scroll Position Tracking
+
+fileprivate struct SectionVisibility: Equatable {
+    let section: MovieDetailTab
+    let minY: CGFloat
+    let maxY: CGFloat
+}
+
+fileprivate struct SectionVisibilityPreferenceKey: PreferenceKey {
+    static var defaultValue: [SectionVisibility] = []
+    
+    static func reduce(value: inout [SectionVisibility], nextValue: () -> [SectionVisibility]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+fileprivate struct TabBarPositionKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
