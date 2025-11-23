@@ -63,9 +63,9 @@ struct MovieDetailView: View {
                 errorView
             } else {
                 VStack(spacing: 0) {
-                    // Top Navigation Header - Fixed above trailer (matches Figma: 116px total height)
+                    // Top Navigation Header - Fixed above trailer
                     topNavigationHeader
-                        .padding(.top, 60) // Status bar height (matches Figma pt-[60px])
+                        .padding(.top) // Account for safe area (status bar)
                         .padding(.bottom, 16) // Bottom padding (matches Figma pb-[16px])
                     
                     // Scrollable content starts with trailer
@@ -108,6 +108,9 @@ struct MovieDetailView: View {
         .sheet(isPresented: $showShareSheet) {
             ShareSheet()
         }
+        .navigationBarBackButtonHidden(true) // Hide default NavigationStack back button
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true) // Hide navigation bar completely
         .task {
             // Load movie data from TMDB when view appears
             await viewModel.loadMovie()
