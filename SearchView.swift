@@ -407,7 +407,7 @@ struct SearchView: View {
                     // Movie cards
                     LazyVStack(spacing: 12) {
                         ForEach(viewModel.searchResults) { movie in
-                            NavigationLink(destination: MoviePageView(movieId: movie.id)) {
+                            NavigationLink(destination: MovieDetailView(movie: movie)) {
                                 SearchMovieCard(movie: movie)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -453,7 +453,7 @@ struct SearchView: View {
                 // Movie cards
                 LazyVStack(spacing: 12) {
                     ForEach(viewModel.searchResults) { movie in
-                        NavigationLink(destination: MoviePageView(movieId: movie.id)) {
+                        NavigationLink(destination: MovieDetailView(movie: movie)) {
                             SearchMovieCard(movie: movie)
                         }
                         .buttonStyle(PlainButtonStyle())
