@@ -1,8 +1,8 @@
 //  AddToListView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-17 at 00:20 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 02:55 (America/Los_Angeles - Pacific Time)
-//  Notes: Converted to bottom sheet modal to match Figma design with Masterlist section, YOUR LISTS section, search, and Add to Watchlist button with count. Fixed unused return value warning. Added Create New Watchlist functionality and Navigate to List callback.
+//  Last modified: 2025-01-15 at 14:45 (America/Los_Angeles - Pacific Time)
+//  Notes: Updated to match Figma design with search bar at top, "ALREADY ADDED" section, "ALL LISTS" section, and "Confirm Changes" button. Updated thumbnail sizes to 64x64 and spacing to 16px.
 
 import SwiftUI
 
@@ -17,66 +17,33 @@ struct AddToListView: View {
     @State private var selectedListIds: Set<String> = []
     @State private var watchlists: [WatchlistItem] = []
     @State private var filteredWatchlists: [WatchlistItem] = []
+    @State private var alreadyAddedLists: [WatchlistItem] = []
     @State private var showToast: Bool = false
     @State private var toastMessage: String = ""
     @State private var toastListName: String = ""
     @State private var toastListId: String = ""
     @State private var showCreateWatchlistSheet = false
     
-    var selectedCount: Int {
-        selectedListIds.count
-    }
-    
     var body: some View {
         VStack(spacing: 0) {
-            // Drag Handle
-            VStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(hex: "#b3b3b3"))
-                    .frame(width: 32, height: 4)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-            }
+            // Top Navigation with Search Bar
+            topNavSection
             
             // Content
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Masterlist Section
-                    masterlistSection
+                VStack(alignment: .leading, spacing: 0) {
+                    // Already Added Section
+                    if !alreadyAddedLists.isEmpty {
+                        alreadyAddedSection
+                    }
                     
-                    // Your Lists Section
-                    yourListsSection
+                    // All Lists Section
+                    allListsSection
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
             }
             
             // Bottom Button
-            VStack(spacing: 0) {
-                Divider()
-                    .background(Color(hex: "#f3f3f3"))
-                
-                Button(action: {
-                    submitSelections()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(.system(size: 20))
-                            .foregroundColor(Color(hex: "#333333"))
-                        
-                        Text("Add to Watchlist (\(selectedCount))")
-                            .font(.custom("Nunito-Bold", size: 14))
-                            .foregroundColor(Color(hex: "#333333"))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color(hex: "#f3f3f3"))
-                    .cornerRadius(8)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 8)
-            }
+            bottomButtonSection
         }
         .background(Color.white)
         .cornerRadius(24, corners: [.topLeft, .topRight])
@@ -84,13 +51,10 @@ struct AddToListView: View {
         .presentationDragIndicator(.hidden)
         .onAppear {
             loadWatchlists()
-            filterWatchlists()
-            // Pre-select lists that already contain this movie
-            let existingLists = watchlistManager.getListsForMovie(movieId: movieId)
-            selectedListIds = existingLists
+            updateLists()
         }
         .onChange(of: searchText) { oldValue, newValue in
-            filterWatchlists()
+            updateLists()
         }
         .sheet(isPresented: $showCreateWatchlistSheet) {
             CreateWatchlistBottomSheet(isPresented: $showCreateWatchlistSheet) { newWatchlist in
@@ -98,7 +62,7 @@ struct AddToListView: View {
                 selectedListIds.insert(newWatchlist.id)
                 // Reload watchlists to include the new one
                 loadWatchlists()
-                filterWatchlists()
+                updateLists()
             }
             .environmentObject(watchlistManager)
         }
@@ -125,52 +89,28 @@ struct AddToListView: View {
         }
     }
     
-    // MARK: - Masterlist Section
+    // MARK: - Top Navigation Section
     
-    private var masterlistSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ListItemRow(
-                list: WatchlistItem(id: "masterlist", name: "Masterlist", filmCount: 8, thumbnailURL: nil),
-                movieId: movieId,
-                watchlistManager: watchlistManager,
-                isMasterlist: true
-            ) {
-                // Masterlist is always selected and disabled
-            }
-        }
-    }
-    
-    // MARK: - Your Lists Section
-    
-    private var yourListsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Section Header
-            VStack(alignment: .leading, spacing: 8) {
-                Text("YOUR LISTS")
-                    .font(.custom("Nunito-SemiBold", size: 12))
-                    .foregroundColor(Color(hex: "#999999"))
-                    .textCase(.uppercase)
-                
-                // Search Bar
+    private var topNavSection: some View {
+        VStack(spacing: 0) {
+            // Search Bar
+            HStack(spacing: 4) {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 20))
-                        .foregroundColor(Color(hex: "#666666"))
+                    // Back Arrow Icon
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color(hex: "#333333"))
+                    }
                     
+                    // Search Field
                     TextField("Searching list by name...", text: $searchText)
                         .font(.custom("Inter-Regular", size: 14))
                         .foregroundColor(Color(hex: "#666666"))
                     
-                    if !searchText.isEmpty {
-                        Button(action: {
-                            searchText = ""
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(Color(hex: "#999999"))
-                        }
-                    }
-                    
+                    // Microphone Icon
                     Image(systemName: "mic.fill")
                         .font(.system(size: 20))
                         .foregroundColor(Color(hex: "#666666"))
@@ -180,6 +120,56 @@ struct AddToListView: View {
                 .background(Color(hex: "#f3f3f3"))
                 .cornerRadius(8)
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 60)
+            .padding(.bottom, 16)
+            
+            Divider()
+                .background(Color(hex: "#f3f3f3"))
+        }
+        .background(Color.white)
+    }
+    
+    // MARK: - Already Added Section
+    
+    private var alreadyAddedSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section Header
+            Text("ALREADY ADDED")
+                .font(.custom("Nunito-SemiBold", size: 12))
+                .foregroundColor(Color(hex: "#999999"))
+                .textCase(.uppercase)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+            
+            // Already Added Lists
+            VStack(spacing: 16) {
+                ForEach(alreadyAddedLists) { list in
+                    ListItemRow(
+                        list: list,
+                        movieId: movieId,
+                        watchlistManager: watchlistManager,
+                        isAlreadyAdded: true
+                    ) {
+                        // Already added lists are disabled
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+        }
+    }
+    
+    // MARK: - All Lists Section
+    
+    private var allListsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section Header
+            Text("ALL LISTS")
+                .font(.custom("Nunito-SemiBold", size: 12))
+                .foregroundColor(Color(hex: "#999999"))
+                .textCase(.uppercase)
+                .padding(.horizontal, 16)
+                .padding(.top, alreadyAddedLists.isEmpty ? 16 : 0)
             
             // Create New Watchlist
             Button(action: {
@@ -189,10 +179,10 @@ struct AddToListView: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color(hex: "#f3f3f3"))
-                            .frame(width: 48, height: 48)
+                            .frame(width: 64, height: 64)
                         
                         Image(systemName: "plus")
-                            .font(.system(size: 24))
+                            .font(.system(size: 32))
                             .foregroundColor(Color(hex: "#333333"))
                     }
                     
@@ -212,21 +202,49 @@ struct AddToListView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, 16)
             
             // Watchlists List
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 ForEach(filteredWatchlists) { list in
                     ListItemRow(
                         list: list,
                         movieId: movieId,
                         watchlistManager: watchlistManager,
-                        isMasterlist: false
+                        isAlreadyAdded: false
                     ) {
                         toggleListSelection(list.id)
                     }
+                    .padding(.horizontal, 16)
                 }
             }
+            .padding(.bottom, 16)
         }
+    }
+    
+    // MARK: - Bottom Button Section
+    
+    private var bottomButtonSection: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .background(Color(hex: "#ffedcc"))
+            
+            Button(action: {
+                submitSelections()
+            }) {
+                Text("Confirm Changes")
+                    .font(.custom("Nunito-Bold", size: 14))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color(hex: "#333333"))
+                    .cornerRadius(8)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+        }
+        .background(Color.white)
     }
     
     // MARK: - Helper Methods
@@ -236,11 +254,21 @@ struct AddToListView: View {
         watchlists = watchlistManager.getAllWatchlists()
     }
     
-    private func filterWatchlists() {
+    private func updateLists() {
+        // Get lists that already contain this movie
+        let existingListIds = watchlistManager.getListsForMovie(movieId: movieId)
+        selectedListIds = existingListIds
+        
+        // Separate already added lists from all lists
+        alreadyAddedLists = watchlists.filter { existingListIds.contains($0.id) }
+        
+        // Filter remaining lists based on search
+        let remainingLists = watchlists.filter { !existingListIds.contains($0.id) }
+        
         if searchText.isEmpty {
-            filteredWatchlists = watchlists
+            filteredWatchlists = remainingLists
         } else {
-            filteredWatchlists = watchlists.filter { list in
+            filteredWatchlists = remainingLists.filter { list in
                 list.name.localizedCaseInsensitiveContains(searchText)
             }
         }
@@ -292,12 +320,12 @@ struct ListItemRow: View {
     let list: WatchlistItem
     let movieId: String
     @ObservedObject var watchlistManager: WatchlistManager
-    let isMasterlist: Bool
+    let isAlreadyAdded: Bool
     let onTap: () -> Void
     
     private var isSelected: Bool {
-        if isMasterlist {
-            return true // Masterlist is always selected
+        if isAlreadyAdded {
+            return true // Already added lists are always selected
         }
         return watchlistManager.isMovieInList(movieId: movieId, listId: list.id)
     }
@@ -305,38 +333,38 @@ struct ListItemRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                // List Icon/Thumbnail
+                // List Icon/Thumbnail (64x64)
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color(hex: "#f3f3f3"))
-                        .frame(width: 48, height: 48)
+                        .frame(width: 64, height: 64)
                     
                     if let thumbnailURL = list.thumbnailURL, let url = URL(string: thumbnailURL) {
                         AsyncImage(url: url) { phase in
                             switch phase {
                             case .empty:
                                 Image(systemName: "list.bullet.rectangle")
-                                    .font(.system(size: 20))
+                                    .font(.system(size: 24))
                                     .foregroundColor(Color(hex: "#999999"))
                             case .success(let image):
                                 image
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
-                                    .frame(width: 48, height: 48)
+                                    .frame(width: 64, height: 64)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                             case .failure:
                                 Image(systemName: "list.bullet.rectangle")
-                                    .font(.system(size: 20))
+                                    .font(.system(size: 24))
                                     .foregroundColor(Color(hex: "#999999"))
                             @unknown default:
                                 Image(systemName: "list.bullet.rectangle")
-                                    .font(.system(size: 20))
+                                    .font(.system(size: 24))
                                     .foregroundColor(Color(hex: "#999999"))
                             }
                         }
                     } else {
                         Image(systemName: "list.bullet.rectangle")
-                            .font(.system(size: 20))
+                            .font(.system(size: 24))
                             .foregroundColor(Color(hex: "#999999"))
                     }
                 }
@@ -354,11 +382,11 @@ struct ListItemRow: View {
                 
                 Spacer()
                 
-                // Selection Indicator
+                // Selection Indicator (24x24)
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundColor(isMasterlist ? Color(hex: "#FEA500") : Color(hex: "#FEA500"))
+                        .foregroundColor(Color(hex: "#FEA500"))
                 } else {
                     Circle()
                         .stroke(Color(hex: "#b3b3b3"), lineWidth: 2)
@@ -369,7 +397,7 @@ struct ListItemRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isMasterlist) // Masterlist is disabled
+        .disabled(isAlreadyAdded) // Already added lists are disabled
     }
 }
 
