@@ -10,12 +10,12 @@ struct SearchCategoriesView: View {
     @ObservedObject private var filterState = SearchFilterState.shared
     @State private var showMySubscriptions = false
     
-    // All platform options
-    private let allPlatforms = ["Netflix", "Prime Video", "Disney+", "Max"]
+    // All platform options (10 platforms total)
+    private let allPlatforms = ["Netflix", "Prime Video", "Disney+", "Max", "Hulu", "Criterion", "Paramount+", "Apple TV+", "Peacock", "Tubi"]
     
-    // User's subscriptions (when checkbox is checked) - for now just Prime and Max
+    // User's subscriptions (when checkbox is checked) - Prime Video and Criterion
     private var userSubscriptions: [String] {
-        ["Prime Video", "Max"]
+        ["Prime Video", "Criterion"]
     }
     
     // Platforms to display based on checkbox state
@@ -86,11 +86,11 @@ struct SearchCategoriesView: View {
                                 if showMySubscriptions {
                                     // When checking ON: Add subscription platforms
                                     filterState.selectedPlatforms.insert("Prime Video")
-                                    filterState.selectedPlatforms.insert("Max")
+                                    filterState.selectedPlatforms.insert("Criterion")
                                 } else {
                                     // When checking OFF: Remove subscription platforms
                                     filterState.selectedPlatforms.remove("Prime Video")
-                                    filterState.selectedPlatforms.remove("Max")
+                                    filterState.selectedPlatforms.remove("Criterion")
                                 }
                             }) {
                                 Image(systemName: showMySubscriptions ? "checkmark.square.fill" : "square")
@@ -234,7 +234,7 @@ struct PlatformLogo: View {
         Group {
             switch platform {
             case "Netflix":
-                // Netflix red logo
+                // Netflix red logo - iconic red background
                 ZStack {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color(hex: "#E50914"))
@@ -243,7 +243,7 @@ struct PlatformLogo: View {
                         .foregroundColor(.white)
                 }
             case "Prime Video":
-                // Prime Video logo (blue/black)
+                // Prime Video logo - blue background
                 ZStack {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color(hex: "#00A8E1"))
@@ -252,7 +252,7 @@ struct PlatformLogo: View {
                         .foregroundColor(.white)
                 }
             case "Disney+":
-                // Disney+ blue logo
+                // Disney+ blue logo - royal blue
                 ZStack {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color(hex: "#113CCF"))
@@ -261,7 +261,7 @@ struct PlatformLogo: View {
                         .foregroundColor(.white)
                 }
             case "Max":
-                // Max black logo
+                // Max black logo - sleek black
                 ZStack {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color(hex: "#000000"))
@@ -269,11 +269,80 @@ struct PlatformLogo: View {
                         .font(.custom("Nunito-Bold", size: 32))
                         .foregroundColor(.white)
                 }
+            case "Hulu":
+                // Hulu green logo - vibrant green (#1CE783)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#1CE783"))
+                    Text("H")
+                        .font(.custom("Nunito-Bold", size: 32))
+                        .foregroundColor(.white)
+                }
+            case "Criterion":
+                // Criterion Collection - elegant black/white with "C" in sophisticated style
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#000000"))
+                    Text("C")
+                        .font(.custom("Nunito-Bold", size: 28))
+                        .foregroundColor(.white)
+                }
+            case "Paramount+":
+                // Paramount+ blue logo - bright blue (#0064FF)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#0064FF"))
+                    Text("P+")
+                        .font(.custom("Nunito-Bold", size: 24))
+                        .foregroundColor(.white)
+                }
+            case "Apple TV+":
+                // Apple TV+ - black background with Apple TV+ text
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#000000"))
+                    VStack(spacing: 2) {
+                        Text("tv")
+                            .font(.custom("Nunito-Bold", size: 18))
+                            .foregroundColor(.white)
+                        Text("+")
+                            .font(.custom("Nunito-Bold", size: 14))
+                            .foregroundColor(.white)
+                    }
+                }
+            case "Peacock":
+                // Peacock - colorful purple/blue gradient or solid purple
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: "#6A1B9A"), Color(hex: "#1976D2")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Text("P")
+                        .font(.custom("Nunito-Bold", size: 32))
+                        .foregroundColor(.white)
+                }
+            case "Tubi":
+                // Tubi - orange/red brand color (#FA2B31)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#FA2B31"))
+                    Text("T")
+                        .font(.custom("Nunito-Bold", size: 32))
+                        .foregroundColor(.white)
+                }
             default:
                 // Default placeholder
-                Text(platform.prefix(1))
-                    .font(.custom("Nunito-Bold", size: 24))
-                    .foregroundColor(Color(hex: "#333333"))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#E0E0E0"))
+                    Text(platform.prefix(1))
+                        .font(.custom("Nunito-Bold", size: 24))
+                        .foregroundColor(Color(hex: "#333333"))
+                }
             }
         }
         .frame(width: 60, height: 60)
