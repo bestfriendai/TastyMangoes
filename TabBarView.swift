@@ -10,6 +10,17 @@ import SwiftUI
 
 struct TabBarView: View {
     @State private var selectedTab = 0   // Default to Home
+    @ObservedObject private var filterState = SearchFilterState.shared
+    
+    // Computed property for selection count
+    private var totalSelections: Int {
+        filterState.selectedPlatforms.count + filterState.selectedGenres.count
+    }
+    
+    // Show tab bar only when no selections are made
+    private var shouldShowTabBar: Bool {
+        totalSelections == 0
+    }
     
     var body: some View {
         // MARK: - Tab Content (NO TabView – manual switcher)
@@ -37,7 +48,12 @@ struct TabBarView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // MARK: - Custom Tab Bar - anchored to bottom safe area
-            CustomTabBar(selectedTab: $selectedTab)
+            // Only show when no selections are made
+            if shouldShowTabBar {
+                CustomTabBar(selectedTab: $selectedTab)
+            } else {
+                Color.clear.frame(height: 0)
+            }
         }
         .ignoresSafeArea(.keyboard)
     }

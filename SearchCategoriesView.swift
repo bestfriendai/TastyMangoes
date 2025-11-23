@@ -7,9 +7,8 @@
 import SwiftUI
 
 struct SearchCategoriesView: View {
+    @ObservedObject private var filterState = SearchFilterState.shared
     @State private var showMySubscriptions = false
-    @State private var selectedPlatforms: Set<String> = []
-    @State private var selectedCategories: Set<String> = []
     
     // All platform options
     private let allPlatforms = ["Netflix", "Prime Video", "Disney+", "Max"]
@@ -24,9 +23,9 @@ struct SearchCategoriesView: View {
         showMySubscriptions ? userSubscriptions : allPlatforms
     }
     
-    // Total selected count for button
+    // Total selected count for button (using SearchFilterState)
     private var totalSelections: Int {
-        selectedPlatforms.count + selectedCategories.count
+        filterState.selectedPlatforms.count + filterState.selectedGenres.count
     }
     
     // Category groups with counts (matching Figma design)
@@ -83,9 +82,15 @@ struct SearchCategoriesView: View {
                         HStack(spacing: 8) {
                             Button(action: {
                                 showMySubscriptions.toggle()
-                                // Clear platform selections when toggling
+                                // Add/remove subscription platforms when toggling
                                 if showMySubscriptions {
-                                    selectedPlatforms.removeAll()
+                                    // When checking ON: Add subscription platforms
+                                    filterState.selectedPlatforms.insert("Prime Video")
+                                    filterState.selectedPlatforms.insert("Max")
+                                } else {
+                                    // When checking OFF: Remove subscription platforms
+                                    filterState.selectedPlatforms.remove("Prime Video")
+                                    filterState.selectedPlatforms.remove("Max")
                                 }
                             }) {
                                 Image(systemName: showMySubscriptions ? "checkmark.square.fill" : "square")
@@ -105,12 +110,12 @@ struct SearchCategoriesView: View {
                                 ForEach(platforms, id: \.self) { platform in
                                     PlatformCard(
                                         platform: platform,
-                                        isSelected: selectedPlatforms.contains(platform)
+                                        isSelected: filterState.selectedPlatforms.contains(platform)
                                     ) {
-                                        if selectedPlatforms.contains(platform) {
-                                            selectedPlatforms.remove(platform)
+                                        if filterState.selectedPlatforms.contains(platform) {
+                                            filterState.selectedPlatforms.remove(platform)
                                         } else {
-                                            selectedPlatforms.insert(platform)
+                                            filterState.selectedPlatforms.insert(platform)
                                         }
                                     }
                                 }
@@ -126,35 +131,14 @@ struct SearchCategoriesView: View {
                     CategoryGroupView(
                         groupName: group.name,
                         categories: group.categories,
-                        selectedCategories: $selectedCategories
+                        filterState: filterState
                     )
                     .padding(.horizontal, 16)
                 }
                 
-                // Bottom padding for button
+                // Bottom padding
                 Color.clear
-                    .frame(height: totalSelections > 0 ? 120 : 20)
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Start Searching Button - always visible at bottom
-                VStack(spacing: 0) {
-                    Button(action: {
-                        startSearching()
-                    }) {
-                        Text("Start Searching (\(totalSelections))")
-                            .font(.custom("Nunito-Bold", size: 16))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .background(Color(hex: "#333333"))
-                            .cornerRadius(12)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 16)
-                    .background(Color.white)
+                    .frame(height: 20)
                 }
             }
         }
@@ -162,7 +146,7 @@ struct SearchCategoriesView: View {
     
     private func startSearching() {
         // TODO: Navigate to search results with selected platforms and categories
-        print("Starting search with \(selectedPlatforms.count) platforms and \(selectedCategories.count) categories")
+        print("Starting search with \(filterState.selectedPlatforms.count) platforms and \(filterState.selectedGenres.count) genres")
     }
 }
 
@@ -171,7 +155,7 @@ struct SearchCategoriesView: View {
 struct CategoryGroupView: View {
     let groupName: String
     let categories: [SearchCategoryItem]
-    @Binding var selectedCategories: Set<String>
+    @ObservedObject var filterState: SearchFilterState
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -189,12 +173,12 @@ struct CategoryGroupView: View {
                 ForEach(categories) { category in
                     CategoryCard(
                         category: category,
-                        isSelected: selectedCategories.contains(category.name)
+                        isSelected: filterState.selectedGenres.contains(category.name)
                     ) {
-                        if selectedCategories.contains(category.name) {
-                            selectedCategories.remove(category.name)
+                        if filterState.selectedGenres.contains(category.name) {
+                            filterState.selectedGenres.remove(category.name)
                         } else {
-                            selectedCategories.insert(category.name)
+                            filterState.selectedGenres.insert(category.name)
                         }
                     }
                 }

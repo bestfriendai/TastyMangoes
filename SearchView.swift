@@ -44,24 +44,28 @@ struct SearchView: View {
             }
             .background(Color(hex: "#fdfdfd"))
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Start Searching Button - always visible at bottom
-                VStack(spacing: 0) {
-                    Button(action: {
-                        startSearching()
-                    }) {
-                        Text("Start Searching (\(totalSelections))")
-                            .font(.custom("Nunito-Bold", size: 16))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .background(Color(hex: "#333333"))
-                            .cornerRadius(12)
+                // Start Searching Button - only show when selections > 0
+                if totalSelections > 0 {
+                    VStack(spacing: 0) {
+                        Button(action: {
+                            startSearching()
+                        }) {
+                            Text("Start Searching (\(totalSelections))")
+                                .font(.custom("Nunito-Bold", size: 16))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#333333"))
+                                .cornerRadius(12)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 16)
+                        .background(Color.white)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 16)
-                    .background(Color.white)
+                } else {
+                    Color.clear.frame(height: 0)
                 }
             }
         }
