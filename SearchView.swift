@@ -32,11 +32,12 @@ struct SearchView: View {
                     loadingView
                 } else if let error = viewModel.error {
                     errorView(error: error)
-                } else if viewModel.hasSearched && viewModel.searchResults.isEmpty {
-                    emptyStateView
-                } else if !viewModel.searchQuery.isEmpty {
-                    // Show real-time search results as user types
+                } else if !viewModel.searchQuery.isEmpty && !viewModel.searchResults.isEmpty {
+                    // Show real-time search results as user types (has query and has results)
                     resultsListView
+                } else if !viewModel.searchQuery.isEmpty && viewModel.searchResults.isEmpty && viewModel.hasSearched {
+                    // Show empty state when query exists but no results found
+                    emptyStateView
                 } else {
                     // Fallback to categories
                     categoriesView

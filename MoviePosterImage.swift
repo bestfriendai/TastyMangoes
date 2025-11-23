@@ -28,25 +28,40 @@ struct MoviePosterImage: View {
     
     var body: some View {
         Group {
-            if let posterPath = posterURL,
-               let url = TMDBConfig.imageURL(path: posterPath, size: .poster_medium) {
-                // Load image from TMDB
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        // Loading state
-                        loadingView
-                    case .success(let image):
-                        // Successfully loaded
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        // Failed to load
-                        errorView
-                    @unknown default:
-                        errorView
+            if let posterPath = posterURL, !posterPath.isEmpty {
+                // Check if it's already a full URL or just a path
+                let imageURL: URL? = {
+                    if posterPath.hasPrefix("http://") || posterPath.hasPrefix("https://") {
+                        // Already a full URL
+                        return URL(string: posterPath)
+                    } else {
+                        // Just a path, build full URL using TMDBConfig
+                        return TMDBConfig.imageURL(path: posterPath, size: .poster_medium)
                     }
+                }()
+                
+                if let url = imageURL {
+                    // Load image from TMDB
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            // Loading state
+                            loadingView
+                        case .success(let image):
+                            // Successfully loaded
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        case .failure:
+                            // Failed to load
+                            errorView
+                        @unknown default:
+                            errorView
+                        }
+                    }
+                } else {
+                    // Invalid URL
+                    placeholderView
                 }
             } else {
                 // No URL provided

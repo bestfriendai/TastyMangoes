@@ -125,13 +125,15 @@ struct TMDBCrew: Codable {
 extension TMDBMovie {
     /// Convert TMDB movie to our lightweight Movie model
     func toMovie() -> Movie {
+        // TMDB returns poster paths like "/abc123.jpg" or "abc123.jpg"
+        // MoviePosterImage expects just the path and will build the full URL
         return Movie(
             id: String(id),
             title: title,
             year: extractYear(from: releaseDate),
             trailerURL: nil,
             trailerDuration: nil,
-            posterImageURL: posterPath,
+            posterImageURL: posterPath, // Pass path as-is, MoviePosterImage will build URL
             tastyScore: nil, // We'll calculate this later
             aiScore: voteAverage,
             genres: [], // Genre names come from a separate API call

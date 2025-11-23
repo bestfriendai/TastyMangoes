@@ -9,12 +9,10 @@ import SwiftUI
 
 struct MovieDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel: MovieDetailViewModel
     @State private var selectedTab: MovieDetailTab = .overview
     @State private var showMenuSheet = false
     @State private var showShareSheet = false
-    
-    // Movie data - can be passed in or use dummy data
-    let movie: MovieDetailInfo
     
     // Simple cast member struct for display (to avoid conflict with Codable CastMember)
     struct SimpleCastMember: Identifiable {
@@ -23,56 +21,35 @@ struct MovieDetailView: View {
         let character: String
     }
     
-    // Initializer for Movie model
+    // Computed property to convert MovieDetail to MovieDetailInfo
+    private var movie: MovieDetailInfo {
+        guard let movieDetail = viewModel.movie else {
+            // Fallback to dummy data if no movie loaded
+            return MovieDetailData.juror2
+        }
+        
+        return movieDetail.toMovieDetailInfo()
+    }
+    
+    // Initializer for Movie model - fetches from TMDB
     init(movie: Movie) {
-        // Convert Movie to MovieDetailInfo
-        let genres = movie.genres
-        let runtime = movie.runtime ?? "N/A"
-        // Extract year from releaseDate or use movie.year
-        let releaseDate: String
-        if let releaseDateStr = movie.releaseDate, !releaseDateStr.isEmpty {
-            releaseDate = releaseDateStr
+        // Try to convert string ID to Int for TMDB API
+        // If it's a numeric string (like "550"), use it as Int ID
+        // Otherwise, use string ID (MovieDetailViewModel supports both)
+        if let intId = Int(movie.id) {
+            // Use Int ID for TMDB API
+            _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieId: intId))
         } else {
-            releaseDate = String(movie.year)
+            // Use string ID - MovieDetailService will try to fetch from TMDB if possible
+            // or fall back to JSON/local data
+            _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieStringId: movie.id))
         }
-        let director = movie.director ?? "N/A"
-        let rating = movie.rating ?? "N/A"
-        
-        // Create cast members from movie data (dummy for now)
-        // Note: Using a simple struct for display, not the Codable CastMember from MovieDetail.swift
-        let cast = [
-            SimpleCastMember(name: "Actor 1", character: "Character 1"),
-            SimpleCastMember(name: "Actor 2", character: "Character 2"),
-            SimpleCastMember(name: "Actor 3", character: "Character 3")
-        ]
-        
-        // Convert tastyScore from 0-1 range to percentage (0-100)
-        let tastyScorePercent: Int
-        if let tastyScore = movie.tastyScore {
-            // If it's already a percentage (> 1), use it directly, otherwise multiply by 100
-            tastyScorePercent = tastyScore > 1 ? Int(tastyScore) : Int(tastyScore * 100)
-        } else {
-            tastyScorePercent = 0
-        }
-        
-        self.movie = MovieDetailInfo(
-            title: movie.title,
-            overview: movie.overview ?? "No overview available.",
-            genres: genres,
-            runtime: runtime,
-            releaseDate: releaseDate,
-            director: director,
-            rating: rating,
-            writer: "N/A",
-            cast: cast,
-            tastyScore: tastyScorePercent,
-            aiScore: movie.aiScore ?? 0.0
-        )
     }
     
     // Initializer for MovieDetailInfo (for dummy data or direct use)
     init(movie: MovieDetailInfo = MovieDetailData.juror2) {
-        self.movie = movie
+        // For dummy data, use a default ID
+        _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieId: 0))
     }
     
     var body: some View {
@@ -80,40 +57,46 @@ struct MovieDetailView: View {
             Color(hex: "#fdfdfd")
                 .ignoresSafeArea()
             
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Top Navigation Header
-                    topNavigationHeader
-                        .padding(.top, 60) // Status bar height
-                        .padding(.bottom, 16)
-                    
-                    // Video + Rate Section
-                    videoAndRateSection
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                    
-                    // Rate Bloc (Mango's Tips)
-                    rateBlocSection
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                    
-                    // Watch on Platform Icons
-                    watchOnSection
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                    
-                    // Tab Bar
-                    tabBarSection
-                        .padding(.top, 16)
-                    
-                    // Tab Content
-                    tabContentSection
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
+            if viewModel.isLoading {
+                loadingView
+            } else if viewModel.hasError {
+                errorView
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Top Navigation Header
+                        topNavigationHeader
+                            .padding(.top, 60) // Status bar height
+                            .padding(.bottom, 16)
+                        
+                        // Video + Rate Section
+                        videoAndRateSection
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+                        
+                        // Rate Bloc (Mango's Tips)
+                        rateBlocSection
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+                        
+                        // Watch on Platform Icons
+                        watchOnSection
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+                        
+                        // Tab Bar
+                        tabBarSection
+                            .padding(.top, 16)
+                        
+                        // Tab Content
+                        tabContentSection
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+                    }
                 }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                bottomActionButtons
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    bottomActionButtons
+                }
             }
         }
         .sheet(isPresented: $showMenuSheet) {
@@ -122,6 +105,58 @@ struct MovieDetailView: View {
         .sheet(isPresented: $showShareSheet) {
             ShareSheet()
         }
+        .task {
+            // Load movie data from TMDB when view appears
+            await viewModel.loadMovie()
+        }
+    }
+    
+    // MARK: - Loading View
+    
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.5)
+            Text("Loading movie details...")
+                .font(.custom("Inter-Regular", size: 16))
+                .foregroundColor(Color(hex: "#666666"))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: "#fdfdfd"))
+    }
+    
+    // MARK: - Error View
+    
+    private var errorView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 48))
+                .foregroundColor(Color(hex: "#FF6B6B"))
+            
+            Text("Oops!")
+                .font(.custom("Nunito-Bold", size: 24))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+            
+            Text(viewModel.errorMessage)
+                .font(.custom("Inter-Regular", size: 16))
+                .foregroundColor(Color(hex: "#666666"))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            
+            Button(action: {
+                viewModel.retry()
+            }) {
+                Text("Try Again")
+                    .font(.custom("Inter-SemiBold", size: 16))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 12)
+                    .background(Color(hex: "#8B5CF6"))
+                    .cornerRadius(8)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: "#fdfdfd"))
     }
     
     // MARK: - Top Navigation Header
@@ -1041,6 +1076,66 @@ struct MovieDetailInfo {
     let cast: [MovieDetailView.SimpleCastMember]
     let tastyScore: Int
     let aiScore: Double
+}
+
+// MARK: - MovieDetail Extension for Conversion
+
+extension MovieDetail {
+    /// Convert MovieDetail (from TMDB) to MovieDetailInfo (for display)
+    func toMovieDetailInfo() -> MovieDetailInfo {
+        // Convert genres from Genre objects to strings
+        let genreStrings = genres.map { $0.name }
+        
+        // Format runtime
+        let runtimeString = formattedRuntime
+        
+        // Format release date (use full date or just year)
+        let releaseDateString = releaseDate.isEmpty ? releaseYear : releaseDate
+        
+        // Get director
+        let directorName = director ?? "N/A"
+        
+        // Get rating
+        let ratingString = rating ?? "N/A"
+        
+        // Get writers from crew
+        let writers = crew?.filter { $0.job == "Writer" || $0.job == "Screenplay" } ?? []
+        let writerNames = writers.isEmpty ? "N/A" : writers.map { $0.name }.joined(separator: ", ")
+        
+        // Convert cast members
+        let castMembers = (cast ?? []).map { castMember in
+            MovieDetailView.SimpleCastMember(
+                name: castMember.name,
+                character: castMember.character
+            )
+        }
+        
+        // Convert tastyScore (0-1 range) to percentage (0-100)
+        let tastyScorePercent: Int
+        if let tastyScore = tastyScore {
+            tastyScorePercent = tastyScore > 1 ? Int(tastyScore) : Int(tastyScore * 100)
+        } else {
+            // Default to 0 if no tasty score
+            tastyScorePercent = 0
+        }
+        
+        // Use AI score or vote average as fallback
+        let aiScoreValue = aiScore ?? voteAverage ?? 0.0
+        
+        return MovieDetailInfo(
+            title: title,
+            overview: overview.isEmpty ? "No overview available." : overview,
+            genres: genreStrings,
+            runtime: runtimeString,
+            releaseDate: releaseDateString,
+            director: directorName,
+            rating: ratingString,
+            writer: writerNames,
+            cast: castMembers,
+            tastyScore: tastyScorePercent,
+            aiScore: aiScoreValue
+        )
+    }
 }
 
 // MARK: - Preview

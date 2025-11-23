@@ -244,25 +244,36 @@ class SearchViewModel: ObservableObject {
         // Cancel previous search
         searchTask?.cancel()
         
+        print("🔍 Search called with query: '\(searchQuery)' (length: \(searchQuery.count))")
+        
         // Clear results and reset state if query is too short
-        guard searchQuery.count >= 2 else {
+        guard searchQuery.count >= 1 else {
+            print("⚠️ Query too short, clearing results")
             searchResults = []
             hasSearched = false
             showSuggestions = false
             isSearching = false
+            error = nil
             return
         }
         
         // Show loading state immediately
         isSearching = true
         showSuggestions = false
+        error = nil
         
-        // Debounce - wait 0.5 seconds before searching
-        searchTask = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        print("⏳ Starting debounced search for '\(searchQuery)'")
+        
+        // Debounce - wait 0.3 seconds before searching (reduced for better responsiveness)
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
             
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                print("❌ Search task cancelled")
+                return
+            }
             
+            print("✅ Executing search for '\(searchQuery)'")
             await performSearch()
         }
     }
@@ -278,29 +289,52 @@ class SearchViewModel: ObservableObject {
         }
     }
     
-    /// Execute the actual search - using test data for now
+    /// Execute the actual search - using TMDB API
+    @MainActor
     private func performSearch() async {
         error = nil
-        hasSearched = true
         showSuggestions = false
         
-        // Add to search history
-        if !searchQuery.isEmpty {
-            historyManager.addToHistory(searchQuery)
-        }
-        
-        // Use test data - filter movies by search query (case-insensitive)
-        let query = searchQuery.lowercased().trimmingCharacters(in: .whitespaces)
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
         
         if query.isEmpty {
             searchResults = []
-        } else {
-            // Filter test movies by title (case-insensitive contains)
-            searchResults = SearchViewModel.testMovies.filter { movie in
-                movie.title.lowercased().contains(query)
+            hasSearched = false
+            isSearching = false
+            return
+        }
+        
+        do {
+            // Call TMDB API to search for movies
+            print("🌐 Calling TMDB API for query: '\(query)'")
+            let response = try await tmdbService.searchMovies(query: query, page: 1)
+            
+            // Convert TMDB movies to our Movie model
+            searchResults = response.results.map { tmdbMovie in
+                tmdbMovie.toMovie()
             }
             
-            print("✅ Found \(searchResults.count) movies for '\(searchQuery)'")
+            // Mark as searched
+            hasSearched = true
+            
+            // Add to search history
+            historyManager.addToHistory(searchQuery)
+            
+            print("✅ Found \(searchResults.count) movies from TMDB for '\(query)' (total: \(response.totalResults))")
+            
+        } catch let searchError as TMDBError {
+            // Handle TMDB-specific errors
+            self.error = searchError
+            searchResults = []
+            hasSearched = true
+            print("❌ TMDB API error: \(searchError.localizedDescription)")
+            
+        } catch let networkError {
+            // Handle other errors
+            self.error = TMDBError.networkError(networkError)
+            searchResults = []
+            hasSearched = true
+            print("❌ Search error: \(networkError.localizedDescription)")
         }
         
         isSearching = false
