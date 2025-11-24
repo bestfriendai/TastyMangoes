@@ -21,7 +21,6 @@ struct WatchlistView: View {
     @State private var watchedFilter: String = "Any"
     @State private var showFilterSheet = false
     @State private var showManageList = false
-    @State private var showCreateWatchlistSheet = false
     
     @EnvironmentObject private var watchlistManager: WatchlistManager
     
@@ -158,13 +157,6 @@ struct WatchlistView: View {
         .sheet(isPresented: $showManageList) {
             ManageListBottomSheet(isPresented: $showManageList, listId: "masterlist", listName: "Masterlist")
         }
-        .sheet(isPresented: $showCreateWatchlistSheet) {
-            CreateWatchlistBottomSheet(isPresented: $showCreateWatchlistSheet) { newWatchlist in
-                // Reload lists to include the new one
-                loadLists()
-            }
-            .environmentObject(watchlistManager)
-        }
         .onAppear {
             loadLists()
         }
@@ -275,7 +267,7 @@ struct WatchlistView: View {
                 HStack(spacing: 4) {
                     // Create New Watchlist Card
                     Button(action: {
-                        showCreateWatchlistSheet = true
+                        // Create new list
                     }) {
                         CreateNewListCard()
                     }
@@ -454,9 +446,14 @@ struct SmallListCard: View {
 
 struct MasterlistMovieCard: View {
     let movie: MasterlistMovie
+    @State private var showMoviePage = false
     
     var body: some View {
-        HStack(spacing: 12) {
+        Button(action: {
+            // Wire up NAVIGATE connection: Product Card → Movie Page
+            showMoviePage = true
+        }) {
+            HStack(spacing: 12) {
             // Poster
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
@@ -558,6 +555,13 @@ struct MasterlistMovieCard: View {
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1)
         .padding(.bottom, 8)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .fullScreenCover(isPresented: $showMoviePage) {
+            NavigationStack {
+                MoviePageView(movieId: movie.id)
+            }
+        }
     }
 }
 

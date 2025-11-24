@@ -5,6 +5,7 @@
 //  Notes: Fixed horizontal tab bar pinning - tab bar now properly pins below header when scrolling up, and scrolls to sections when tabs are clicked. Updated MenuBottomSheet to match Figma design with correct review icon. Changed AddToListView presentation from fullScreenCover to sheet to match bottom sheet design. Added navigation to list functionality from toast notifications. Replaced deprecated NavigationLink with fullScreenCover for navigating to IndividualListView.
 
 import SwiftUI
+import UIKit
 
 // MARK: - Sections
 
@@ -31,11 +32,15 @@ struct MoviePageView: View {
     @State private var selectedSection: MovieSection = .overview
     @State private var showMenuBottomSheet = false
     @State private var showAddToList = false
+    @State private var showRateBottomSheet = false
+    @State private var showPlatformBottomSheet = false
+    @State private var showFriendsBottomSheet = false
     @State private var scrollProxy: ScrollViewProxy?
     @State private var tabBarMinY: CGFloat = 1000 // Start with large value so pinned bar doesn't show initially
     @State private var showIndividualList = false
     @State private var navigateToListId: String? = nil
     @State private var navigateToListName: String? = nil
+    @State private var navigateToSearch = false
     
     // Computed property to determine if pinned tab bar should show
     private var shouldShowPinnedTabBar: Bool {
@@ -352,6 +357,21 @@ struct MoviePageView: View {
                     .environmentObject(WatchlistManager.shared)
                 }
             }
+            .sheet(isPresented: $showRateBottomSheet) {
+                if let movie = viewModel.movie {
+                    RateBottomSheet(
+                        isPresented: $showRateBottomSheet,
+                        movieId: movieId,
+                        movieTitle: movie.title
+                    )
+                }
+            }
+            .sheet(isPresented: $showPlatformBottomSheet) {
+                PlatformBottomSheet(isPresented: $showPlatformBottomSheet)
+            }
+            .sheet(isPresented: $showFriendsBottomSheet) {
+                FriendsBottomSheet(isPresented: $showFriendsBottomSheet)
+            }
             .fullScreenCover(isPresented: $showIndividualList) {
                 if let listId = navigateToListId, let listName = navigateToListName {
                     NavigationStack {
@@ -413,15 +433,26 @@ struct MoviePageView: View {
                 
                 // Share and Menu Icons
                 HStack(spacing: 16) {
+                    // Share button (wired from Figma: NAVIGATE or action)
                     Button(action: {
-                        // Share action
-                        print("Share tapped")
+                        // Share action - TODO: Implement share functionality
+                        if let movie = viewModel.movie {
+                            let activityVC = UIActivityViewController(
+                                activityItems: [movie.title, movie.posterURL ?? ""],
+                                applicationActivities: nil
+                            )
+                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                               let rootViewController = windowScene.windows.first?.rootViewController {
+                                rootViewController.present(activityVC, animated: true)
+                            }
+                        }
                     }) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 18, weight: .medium))
                             .foregroundColor(Color(hex: "#1a1a1a"))
                     }
                     
+                    // Menu button (wired from Figma: OVERLAY → Menu Bottom Sheet)
                     Button(action: {
                         showMenuBottomSheet = true
                     }) {
@@ -626,67 +657,77 @@ struct MoviePageView: View {
                 .lineLimit(2)
             }
             
-            // Watch On / Liked By cards
+            // Watch On / Liked By cards (wired from Figma: CHANGE_TO → Expanded states)
             HStack(spacing: 4) {
-                // Watch On
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Watch on:")
-                            .font(.custom("Nunito-Bold", size: 12))
-                            .foregroundColor(Color(hex: "#333333"))
-                        Spacer()
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                    }
-                    
-                    HStack(spacing: -6) {
-                        ForEach(0..<3) { _ in
-                            Circle()
-                                .fill(Color.blue)
-                                .frame(width: 32, height: 32)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
-                                )
+                // Watch On / Platform Card (wired from Figma: CHANGE_TO → Property 1=4)
+                Button(action: {
+                    showPlatformBottomSheet = true
+                }) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Watch on:")
+                                .font(.custom("Nunito-Bold", size: 12))
+                                .foregroundColor(Color(hex: "#333333"))
+                            Spacer()
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                                .foregroundColor(.black)
+                        }
+                        
+                        HStack(spacing: -6) {
+                            ForEach(0..<3) { _ in
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
+                                    )
+                            }
                         }
                     }
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white)
+                    .cornerRadius(8)
+                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity)
-                .background(Color.white)
-                .cornerRadius(8)
-                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
+                .buttonStyle(PlainButtonStyle())
                 
-                // Liked By
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Liked by:")
-                            .font(.custom("Nunito-Bold", size: 12))
-                            .foregroundColor(Color(hex: "#333333"))
-                        Spacer()
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                    }
-                    
-                    HStack(spacing: -6) {
-                        ForEach(0..<3) { _ in
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 32, height: 32)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
-                                )
+                // Liked By / Friends Card (wired from Figma: CHANGE_TO → Property 1=2)
+                Button(action: {
+                    showFriendsBottomSheet = true
+                }) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Liked by:")
+                                .font(.custom("Nunito-Bold", size: 12))
+                                .foregroundColor(Color(hex: "#333333"))
+                            Spacer()
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                                .foregroundColor(.black)
+                        }
+                        
+                        HStack(spacing: -6) {
+                            ForEach(0..<3) { _ in
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
+                                    )
+                            }
                         }
                     }
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white)
+                    .cornerRadius(8)
+                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity)
-                .background(Color.white)
-                .cornerRadius(8)
-                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
+                .buttonStyle(PlainButtonStyle())
             }
         }
     }
@@ -946,9 +987,9 @@ struct MoviePageView: View {
             .padding(.horizontal, -16)
             .padding(.top, 12)
             
-            // Leave a Review button
+            // Leave a Review button (wired from Figma: OVERLAY → Rate Bottom Sheet)
             Button(action: {
-                print("Leave a Review tapped")
+                showRateBottomSheet = true
             }) {
                 HStack {
                     Image(systemName: "bubble.left")
@@ -1113,9 +1154,9 @@ struct MoviePageView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
             
-            // Start Rating button
+            // Start Rating button (wired from Figma: OVERLAY → Rate Bottom Sheet)
             Button(action: {
-                print("Start Rating tapped")
+                showRateBottomSheet = true
             }) {
                 Text("Start Rating")
                     .font(.custom("Nunito-Bold", size: 16))
@@ -1226,21 +1267,31 @@ struct MoviePageView: View {
     // MARK: - Bottom Action Buttons
     
     private var bottomActionButtons: some View {
-        HStack(spacing: 12) {
+        let isWatched = WatchlistManager.shared.isWatched(movieId: movieId)
+        
+        return HStack(spacing: 12) {
+            // Mark as Watched button (wired from Figma: CHANGE_TO → Active state, OVERLAY → Rate Bottom Sheet)
             Button(action: {
+                // First toggle watched status (CHANGE_TO connection - changes button state)
                 WatchlistManager.shared.toggleWatched(movieId: movieId)
+                // Then show rate bottom sheet (per Figma prototype connection)
+                showRateBottomSheet = true
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "popcorn.fill")
+                    Image(systemName: isWatched ? "popcorn.fill" : "popcorn")
                         .font(.system(size: 16, weight: .medium))
-                    Text("Mark as Watched")
+                    Text(isWatched ? "Watched" : "Mark as Watched")
                         .font(.custom("Inter-SemiBold", size: 14))
                 }
-                .foregroundColor(Color(hex: "#333333"))
+                .foregroundColor(isWatched ? Color(hex: "#648d00") : Color(hex: "#333333"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color(hex: "#F5F5F5"))
+                .background(isWatched ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
                 .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isWatched ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
+                )
             }
             
             Button(action: {

@@ -59,6 +59,9 @@
 		C5B95D4B2ECB59C500B47098 /* SearchFilterDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D4A2ECB59C500B47098 /* SearchFilterDetailSheet.swift */; };
 		C5E27A3B2EC9979400065347 /* MoviePageHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A392EC9979400065347 /* MoviePageHeader.swift */; };
 		C5E27A3C2EC9979400065347 /* WatchlistBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */; };
+		C5E27A3D2EC9979400065348 /* RateBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A3E2EC9979400065348 /* RateBottomSheet.swift */; };
+		C5E27A3F2EC9979400065349 /* PlatformBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A402EC9979400065349 /* PlatformBottomSheet.swift */; };
+		C5E27A412EC9979400065350 /* FriendsBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A422EC9979400065350 /* FriendsBottomSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -135,6 +138,9 @@
 		C5D0174A2E989F7900164472 /* TastyMangoesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TastyMangoesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5E27A392EC9979400065347 /* MoviePageHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageHeader.swift; sourceTree = "<group>"; };
 		C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistBottomSheet.swift; sourceTree = "<group>"; };
+		C5E27A3E2EC9979400065348 /* RateBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateBottomSheet.swift; sourceTree = "<group>"; };
+		C5E27A402EC9979400065349 /* PlatformBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformBottomSheet.swift; sourceTree = "<group>"; };
+		C5E27A422EC9979400065350 /* FriendsBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsBottomSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -195,6 +201,9 @@
 				C517CD112EC9806C00EAE1FE /* MoviePosterImage.swift */,
 				C517CD122EC9806C00EAE1FE /* movies.json */,
 				C5E27A392EC9979400065347 /* MoviePageHeader.swift */,
+				C5E27A3E2EC9979400065348 /* RateBottomSheet.swift */,
+				C5E27A402EC9979400065349 /* PlatformBottomSheet.swift */,
+				C5E27A422EC9979400065350 /* FriendsBottomSheet.swift */,
 				C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */,
 				C517CD132EC9806C00EAE1FE /* SearchComponents.swift */,
 				C5B95D262ECB1D4000B47098 /* SearchCategoriesView.swift */,
@@ -427,6 +436,9 @@
 				C5B95D412ECB383300B47098 /* WatchlistFilterState.swift in Sources */,
 				C5B95D3D2ECB334600B47098 /* YourListsView.swift in Sources */,
 				C5E27A3C2EC9979400065347 /* WatchlistBottomSheet.swift in Sources */,
+				C5E27A3D2EC9979400065348 /* RateBottomSheet.swift in Sources */,
+				C5E27A3F2EC9979400065349 /* PlatformBottomSheet.swift in Sources */,
+				C5E27A412EC9979400065350 /* FriendsBottomSheet.swift in Sources */,
 				C517CD362EC9806C00EAE1FE /* CustomIcons.swift in Sources */,
 				C517CD372EC9806C00EAE1FE /* MovieDetailService.swift in Sources */,
 				C5B95D4B2ECB59C500B47098 /* SearchFilterDetailSheet.swift in Sources */,

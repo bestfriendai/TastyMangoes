@@ -470,9 +470,14 @@ struct SearchView: View {
 
 struct SearchMovieCard: View {
     let movie: Movie
+    @State private var showMoviePage = false
     
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        Button(action: {
+            // Wire up NAVIGATE connection: Product Card → Movie Page
+            showMoviePage = true
+        }) {
+            HStack(alignment: .top, spacing: 12) {
             // Poster
             MoviePosterImage(
                 posterURL: movie.posterImageURL,
@@ -589,6 +594,13 @@ struct SearchMovieCard: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .fullScreenCover(isPresented: $showMoviePage) {
+            NavigationStack {
+                MoviePageView(movieId: movie.id)
+            }
+        }
     }
 }
 
