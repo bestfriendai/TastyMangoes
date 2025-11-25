@@ -52,6 +52,12 @@ struct CreateWatchlistBottomSheet: View {
                         .padding(.vertical, 12)
                         .background(Color(hex: "#f3f3f3"))
                         .cornerRadius(8)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            if !listName.trimmingCharacters(in: .whitespaces).isEmpty && !isCreating {
+                                createWatchlist()
+                            }
+                        }
                 }
                 .padding(.horizontal, 16)
                 

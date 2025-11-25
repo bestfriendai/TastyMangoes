@@ -145,6 +145,9 @@ class WatchlistManager: ObservableObject {
         watchlistMetadata[listId] = watchlist
         listMovies[listId] = Set<String>() // Initialize empty set
         
+        // Notify observers that lists have changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
         return watchlist
     }
     
@@ -163,6 +166,9 @@ class WatchlistManager: ObservableObject {
         // Remove the list
         listMovies.removeValue(forKey: listId)
         watchlistMetadata.removeValue(forKey: listId)
+        
+        // Notify observers that lists have changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
     }
     
     /// Get all watchlists (excluding masterlist)
@@ -187,6 +193,9 @@ class WatchlistManager: ObservableObject {
         case dateAdded
         case alphabetical
     }
+    
+    // Published sort option so views can observe changes
+    @Published var currentSortOption: SortOption = .listOrder
     
     /// Get a watchlist by ID
     func getWatchlist(listId: String) -> WatchlistItem? {
@@ -213,6 +222,9 @@ class WatchlistManager: ObservableObject {
                 filmCount: count,
                 thumbnailURL: metadata.thumbnailURL
             )
+            
+            // Notify observers that lists have changed
+            NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
         }
     }
     

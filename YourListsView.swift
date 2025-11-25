@@ -15,7 +15,6 @@ struct YourListsView: View {
     @State private var showManageListSheet = false
     @State private var selectedListForMenu: WatchlistItem? = nil
     @State private var selectedListIds: Set<String> = []
-    @State private var currentSortOption: WatchlistManager.SortOption = .listOrder
     
     @EnvironmentObject private var watchlistManager: WatchlistManager
     
@@ -122,9 +121,9 @@ struct YourListsView: View {
         .sheet(isPresented: $showSortSheet) {
             SortByBottomSheet(
                 isPresented: $showSortSheet,
-                currentSort: currentSortOption
+                currentSort: watchlistManager.currentSortOption
             ) { newSortOption in
-                currentSortOption = newSortOption
+                watchlistManager.currentSortOption = newSortOption
                 loadLists()
             }
         }
@@ -247,7 +246,7 @@ struct YourListsView: View {
     
     private func loadLists() {
         // Load lists from WatchlistManager with current sort
-        lists = watchlistManager.getAllWatchlists(sortBy: currentSortOption)
+        lists = watchlistManager.getAllWatchlists(sortBy: watchlistManager.currentSortOption)
     }
     
     private func toggleSelection(_ listId: String) {

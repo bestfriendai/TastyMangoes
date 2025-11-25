@@ -5,6 +5,7 @@
 //  Notes: Built Watchlist / Masterlist section with header, Your Lists horizontal scroll, and Masterlist vertical movie list with filters. Updated to use new bottom sheets and match Figma design exactly.
 
 import SwiftUI
+import Combine
 
 // MARK: - All Lists View (placeholder)
 
@@ -21,10 +22,12 @@ struct WatchlistView: View {
     @State private var watchedFilter: String = "Any"
     @State private var showFilterSheet = false
     @State private var showManageList = false
+    @State private var showCreateWatchlistSheet = false
     
     @EnvironmentObject private var watchlistManager: WatchlistManager
     
     @State private var yourLists: [WatchlistItem] = []
+    @State private var masterlistName: String = "Masterlist"
     
     @State private var masterlistMovies: [MasterlistMovie] = [
         MasterlistMovie(
@@ -155,10 +158,31 @@ struct WatchlistView: View {
             WatchlistFiltersBottomSheet(isPresented: $showFilterSheet)
         }
         .sheet(isPresented: $showManageList) {
-            ManageListBottomSheet(isPresented: $showManageList, listId: "masterlist", listName: "Masterlist")
+            ManageListBottomSheet(isPresented: $showManageList, listId: "masterlist", listName: masterlistName)
+                .environmentObject(watchlistManager)
+                .onDisappear {
+                    // Reload master list name when sheet dismisses (in case it was edited)
+                    loadMasterlistName()
+                }
+        }
+        .sheet(isPresented: $showCreateWatchlistSheet) {
+            CreateWatchlistBottomSheet(isPresented: $showCreateWatchlistSheet) { newWatchlist in
+                // Reload lists to include the new one
+                loadLists()
+            }
+            .environmentObject(watchlistManager)
         }
         .onAppear {
             loadLists()
+        }
+        .onChange(of: watchlistManager.currentSortOption) { oldValue, newValue in
+            // Reload lists when sort option changes (e.g., from YourListsView)
+            loadLists()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("WatchlistManagerDidUpdate"))) { _ in
+            // Reload lists when watchlist manager updates (e.g., after creating/deleting lists)
+            loadLists()
+            loadMasterlistName() // Also reload masterlist name in case it was edited
         }
         }
     }
@@ -262,26 +286,69 @@ struct WatchlistView: View {
                 }
             }
             
-            // Horizontal Scrollable List Cards
+            // Horizontal Scrollable Grid (3 rows x 2 columns = 6 cards per page)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    // Create New Watchlist Card
-                    Button(action: {
-                        // Create new list
-                    }) {
-                        CreateNewListCard()
-                    }
-                    
-                    // All lists
-                    ForEach(yourLists) { list in
-                        NavigationLink(destination: IndividualListView(listId: list.id, listName: list.name)) {
-                            SmallListCard(list: list)
+                HStack(spacing: 12) {
+                    // Group lists into pages of 6 cards (3 rows x 2 columns)
+                    ForEach(0..<numberOfPages, id: \.self) { pageIndex in
+                        VStack(spacing: 4) {
+                            // Row 1 (2 cards)
+                            HStack(spacing: 4) {
+                                cardForPosition(page: pageIndex, row: 0, column: 0)
+                                cardForPosition(page: pageIndex, row: 0, column: 1)
+                            }
+                            
+                            // Row 2 (2 cards)
+                            HStack(spacing: 4) {
+                                cardForPosition(page: pageIndex, row: 1, column: 0)
+                                cardForPosition(page: pageIndex, row: 1, column: 1)
+                            }
+                            
+                            // Row 3 (2 cards)
+                            HStack(spacing: 4) {
+                                cardForPosition(page: pageIndex, row: 2, column: 0)
+                                cardForPosition(page: pageIndex, row: 2, column: 1)
+                            }
                         }
+                        .frame(width: UIScreen.main.bounds.width - 32) // Full width minus padding
                     }
                 }
                 .padding(.horizontal, 16)
             }
             .padding(.horizontal, -16)
+        }
+    }
+    
+    // Calculate number of pages needed (6 cards per page)
+    private var numberOfPages: Int {
+        let totalCards = yourLists.count + 1 // +1 for "Create New" card
+        return max(1, (totalCards + 5) / 6) // Round up to nearest page
+    }
+    
+    // Get card for specific position in grid
+    @ViewBuilder
+    private func cardForPosition(page: Int, row: Int, column: Int) -> some View {
+        let position = (page * 6) + (row * 2) + column
+        
+        if position == 0 {
+            // First position: "Create New" card
+            Button(action: {
+                showCreateWatchlistSheet = true
+            }) {
+                CreateNewListCard()
+            }
+        } else {
+            // Other positions: List cards
+            let listIndex = position - 1 // -1 because position 0 is "Create New"
+            if listIndex < yourLists.count {
+                NavigationLink(destination: IndividualListView(listId: yourLists[listIndex].id, listName: yourLists[listIndex].name)) {
+                    SmallListCard(list: yourLists[listIndex])
+                }
+            } else {
+                // Empty space
+                Spacer()
+                    .frame(width: 169.5, height: 56)
+            }
         }
     }
     
@@ -296,7 +363,7 @@ struct WatchlistView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("Masterlist (\(masterlistMovies.count))")
+                    Text("\(masterlistName) (\(masterlistMovies.count))")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
@@ -346,8 +413,22 @@ struct WatchlistView: View {
     // MARK: - Helper Methods
     
     private func loadLists() {
-        // Load lists from WatchlistManager
-        yourLists = watchlistManager.getAllWatchlists()
+        // Load lists from WatchlistManager with current sort option
+        // Use the shared sort option from WatchlistManager
+        yourLists = watchlistManager.getAllWatchlists(sortBy: watchlistManager.currentSortOption)
+        loadMasterlistName()
+    }
+    
+    private func loadMasterlistName() {
+        // Get master list name from WatchlistManager
+        // Masterlist has id "masterlist" or "1"
+        if let masterlist = watchlistManager.getWatchlist(listId: "masterlist") {
+            masterlistName = masterlist.name
+        } else if let masterlist = watchlistManager.getWatchlist(listId: "1") {
+            masterlistName = masterlist.name
+        } else {
+            masterlistName = "Masterlist" // Default fallback
+        }
     }
 }
 
