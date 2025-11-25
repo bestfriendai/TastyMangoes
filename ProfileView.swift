@@ -8,6 +8,7 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var profileManager: UserProfileManager
+    @Binding var selectedTab: Int
     @State private var editingUsername = false
     @State private var newUsername = ""
     @State private var selectedSubscriptions: Set<String> = []
@@ -125,7 +126,7 @@ struct ProfileView: View {
                         Button(action: {
                             saveSubscriptions()
                         }) {
-                            Text("Save Subscriptions")
+                            Text("Save Subscriptions (\(selectedSubscriptions.count))")
                                 .font(.custom("Nunito-Bold", size: 16))
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -177,8 +178,14 @@ struct ProfileView: View {
             .background(Color(hex: "#fdfdfd"))
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
+            .task {
+                // Reload profile and subscriptions from database when view appears
+                await profileManager.loadProfile()
                 selectedSubscriptions = Set(profileManager.subscriptions)
+            }
+            .onChange(of: profileManager.subscriptions) { oldValue, newValue in
+                // Update selected subscriptions when profileManager updates
+                selectedSubscriptions = Set(newValue)
             }
         }
     }
@@ -219,8 +226,14 @@ struct ProfileView: View {
         Task {
             do {
                 try await profileManager.updateSubscriptions(Array(selectedSubscriptions))
+                // Reload to ensure we have the latest data from database
+                await profileManager.loadProfile()
+                selectedSubscriptions = Set(profileManager.subscriptions)
                 isLoading = false
                 errorMessage = nil
+                
+                // Navigate back to Search view (tab 1) after saving
+                selectedTab = 1
             } catch {
                 errorMessage = "Error saving subscriptions: \(error.localizedDescription)"
                 isLoading = false
@@ -276,7 +289,7 @@ struct PlatformSubscriptionRow: View {
 // MARK: - Preview
 
 #Preview {
-    ProfileView()
+    ProfileView(selectedTab: .constant(4))
         .environmentObject(AuthManager.shared)
         .environmentObject(UserProfileManager.shared)
 }

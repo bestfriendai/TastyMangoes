@@ -41,7 +41,7 @@ struct TabBarView: View {
             case 3:
                 WatchlistView()
             case 4:
-                ProfileView()
+                ProfileView(selectedTab: $selectedTab)
                     .environmentObject(AuthManager.shared)
                     .environmentObject(UserProfileManager.shared)
             default:

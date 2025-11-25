@@ -74,6 +74,9 @@ struct SearchView: View {
                     Color.clear.frame(height: 0)
                 }
             }
+            .navigationDestination(isPresented: $navigateToResults) {
+                CategoryResultsView()
+            }
         }
         .sheet(isPresented: $showFilters) {
             SearchFiltersBottomSheet(isPresented: $showFilters)
@@ -83,9 +86,6 @@ struct SearchView: View {
         }
         .sheet(isPresented: $showGenresSheet) {
             SearchGenresBottomSheet(isPresented: $showGenresSheet)
-        }
-        .navigationDestination(isPresented: $navigateToResults) {
-            CategoryResultsView()
         }
         .onChange(of: filterState.selectedPlatforms) { oldValue, newValue in
             // Reset results when filters change

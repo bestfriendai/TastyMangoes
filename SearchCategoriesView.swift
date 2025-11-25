@@ -8,15 +8,16 @@ import SwiftUI
 
 struct SearchCategoriesView: View {
     @ObservedObject private var filterState = SearchFilterState.shared
+    @EnvironmentObject private var profileManager: UserProfileManager
     var searchQuery: String = "" // Passed from SearchView
     @State private var showMySubscriptions = false
     
     // All platform options (10 platforms total)
     private let allPlatforms = ["Netflix", "Prime Video", "Disney+", "Max", "Hulu", "Criterion", "Paramount+", "Apple TV+", "Peacock", "Tubi"]
     
-    // User's subscriptions (when checkbox is checked) - Prime Video and Criterion
+    // User's subscriptions from profile manager
     private var userSubscriptions: [String] {
-        ["Prime Video", "Criterion"]
+        profileManager.subscriptions
     }
     
     // Platforms to display based on checkbox state
@@ -142,13 +143,15 @@ struct SearchCategoriesView: View {
                                 showMySubscriptions.toggle()
                                 // Add/remove subscription platforms when toggling
                                 if showMySubscriptions {
-                                    // When checking ON: Add subscription platforms
-                                    filterState.selectedPlatforms.insert("Prime Video")
-                                    filterState.selectedPlatforms.insert("Criterion")
+                                    // When checking ON: Add all user's subscription platforms
+                                    for platform in userSubscriptions {
+                                        filterState.selectedPlatforms.insert(platform)
+                                    }
                                 } else {
-                                    // When checking OFF: Remove subscription platforms
-                                    filterState.selectedPlatforms.remove("Prime Video")
-                                    filterState.selectedPlatforms.remove("Criterion")
+                                    // When checking OFF: Remove all user's subscription platforms
+                                    for platform in userSubscriptions {
+                                        filterState.selectedPlatforms.remove(platform)
+                                    }
                                 }
                             }) {
                                 Image(systemName: showMySubscriptions ? "checkmark.square.fill" : "square")
@@ -156,7 +159,7 @@ struct SearchCategoriesView: View {
                                     .foregroundColor(showMySubscriptions ? Color(hex: "#FEA500") : Color(hex: "#B3B3B3"))
                             }
                             
-                            Text("My subscriptions")
+                            Text("My subscriptions (\(profileManager.subscriptions.count))")
                                 .font(.custom("Inter-SemiBold", size: 14))
                                 .foregroundColor(Color(hex: "#333333"))
                         }
