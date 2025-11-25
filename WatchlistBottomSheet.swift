@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct Watchlist: Identifiable {
+struct SelectableWatchlistItem: Identifiable {
     let id: String
     let name: String
     let filmCount: Int
@@ -19,17 +19,17 @@ struct WatchlistBottomSheet: View {
     @Binding var isPresented: Bool
     @State private var searchText: String = ""
     @State private var selectedWatchlists: Set<String> = []
-    @State private var watchlists: [Watchlist] = []
+    @State private var watchlists: [SelectableWatchlistItem] = []
     @State private var dragOffset: CGFloat = 0
     
     // Sample data - replace with your actual data source
     private let sampleWatchlists = [
-        Watchlist(id: "1", name: "Masterlist", filmCount: 8, imageURL: nil, isSelected: true),
-        Watchlist(id: "2", name: "Must-Watch Movies", filmCount: 12, imageURL: nil, isSelected: false),
-        Watchlist(id: "3", name: "Sci-Fi Masterpieces", filmCount: 10, imageURL: nil, isSelected: false),
-        Watchlist(id: "4", name: "Action Blockbusters", filmCount: 20, imageURL: nil, isSelected: false),
-        Watchlist(id: "5", name: "My Favorite Films", filmCount: 15, imageURL: nil, isSelected: false),
-        Watchlist(id: "6", name: "Animated Adventures", filmCount: 15, imageURL: nil, isSelected: false)
+        SelectableWatchlistItem(id: "1", name: "Masterlist", filmCount: 8, imageURL: nil, isSelected: true),
+        SelectableWatchlistItem(id: "2", name: "Must-Watch Movies", filmCount: 12, imageURL: nil, isSelected: false),
+        SelectableWatchlistItem(id: "3", name: "Sci-Fi Masterpieces", filmCount: 10, imageURL: nil, isSelected: false),
+        SelectableWatchlistItem(id: "4", name: "Action Blockbusters", filmCount: 20, imageURL: nil, isSelected: false),
+        SelectableWatchlistItem(id: "5", name: "My Favorite Films", filmCount: 15, imageURL: nil, isSelected: false),
+        SelectableWatchlistItem(id: "6", name: "Animated Adventures", filmCount: 15, imageURL: nil, isSelected: false)
     ]
     
     var body: some View {
@@ -98,7 +98,7 @@ struct WatchlistBottomSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Button(action: {}) {
                 ListCardView(
-                    watchlist: Watchlist(
+                    watchlist: SelectableWatchlistItem(
                         id: "master",
                         name: "Masterlist",
                         filmCount: 8,
@@ -221,7 +221,7 @@ struct WatchlistBottomSheet: View {
     
     // MARK: - Computed Properties
     
-    private var filteredWatchlists: [Watchlist] {
+    private var filteredWatchlists: [SelectableWatchlistItem] {
         if searchText.isEmpty {
             return watchlists
         } else {
@@ -247,7 +247,7 @@ struct WatchlistBottomSheet: View {
 // MARK: - List Card View
 
 struct ListCardView: View {
-    let watchlist: Watchlist
+    let watchlist: SelectableWatchlistItem
     let isDisabled: Bool
     
     var body: some View {

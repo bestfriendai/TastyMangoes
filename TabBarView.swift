@@ -41,7 +41,9 @@ struct TabBarView: View {
             case 3:
                 WatchlistView()
             case 4:
-                MoreView()
+                ProfileView()
+                    .environmentObject(AuthManager.shared)
+                    .environmentObject(UserProfileManager.shared)
             default:
                 SearchView()
             }

@@ -12,6 +12,7 @@ struct SearchView: View {
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
     @State private var showGenresSheet = false
+    @State private var navigateToResults = false
     
     // Computed property for selection count
     private var totalSelections: Int {
@@ -83,13 +84,31 @@ struct SearchView: View {
         .sheet(isPresented: $showGenresSheet) {
             SearchGenresBottomSheet(isPresented: $showGenresSheet)
         }
+        .navigationDestination(isPresented: $navigateToResults) {
+            CategoryResultsView()
+        }
+        .onChange(of: filterState.selectedPlatforms) { oldValue, newValue in
+            // Reset results when filters change
+            if newValue.isEmpty && filterState.selectedGenres.isEmpty {
+                viewModel.searchResults = []
+                viewModel.hasSearched = false
+            }
+        }
+        .onChange(of: filterState.selectedGenres) { oldValue, newValue in
+            // Reset results when filters change
+            if newValue.isEmpty && filterState.selectedPlatforms.isEmpty {
+                viewModel.searchResults = []
+                viewModel.hasSearched = false
+            }
+        }
     }
     
     // MARK: - Actions
     
     private func startSearching() {
-        // TODO: Navigate to search results with selected filters
-        print("Starting search with \(filterState.selectedPlatforms.count) platforms and \(filterState.selectedGenres.count) genres")
+        // Wire up NAVIGATE connection: Search button → Category Results View
+        // Navigate to results view with selected filters
+        navigateToResults = true
     }
     
     // MARK: - Search Header
@@ -394,16 +413,39 @@ struct SearchView: View {
             
             ScrollView {
                 VStack(spacing: 16) {
-                    // Results count
-                    HStack {
-                        Text("\(viewModel.searchResults.count) results found")
-                            .font(.custom("Inter-SemiBold", size: 14))
-                            .foregroundColor(Color(hex: "#666666"))
-                        
-                        Spacer()
+                    // Results count (only show when there are results or active filters)
+                    if !viewModel.searchResults.isEmpty || filterState.hasActiveFilters {
+                        HStack {
+                            // Show count based on whether we have search results or just filters
+                            let resultsText = !viewModel.searchResults.isEmpty 
+                                ? "\(viewModel.searchResults.count) results found"
+                                : (filterState.hasActiveFilters ? "0 results found" : "")
+                            
+                            if !resultsText.isEmpty {
+                                Text(resultsText)
+                                    .font(.custom("Inter-SemiBold", size: 14))
+                                    .foregroundColor(Color(hex: "#666666"))
+                            }
+                            
+                            Spacer()
+                            
+                            // Clear All button when filters are active
+                            if filterState.hasActiveFilters {
+                                Button(action: {
+                                    filterState.clearAllFilters()
+                                    // Also clear search results when clearing filters
+                                    viewModel.searchResults = []
+                                    viewModel.hasSearched = false
+                                }) {
+                                    Text("Clear All")
+                                        .font(.custom("Nunito-SemiBold", size: 14))
+                                        .foregroundColor(Color(hex: "#FEA500"))
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
                 
                     // Movie cards
                     LazyVStack(spacing: 12) {
