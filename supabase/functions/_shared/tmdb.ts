@@ -153,6 +153,34 @@ export async function searchMovies(query: string, year?: number): Promise<TMDBSe
   return response.json();
 }
 
+export interface TMDBSimilarMoviesResponse {
+  page: number;
+  results: Array<{
+    id: number;
+    title: string;
+    release_date: string;
+    poster_path: string;
+    vote_average: number;
+  }>;
+  total_pages: number;
+  total_results: number;
+}
+
+export async function fetchSimilarMovies(tmdbId: string): Promise<TMDBSimilarMoviesResponse> {
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY environment variable not set');
+  }
+  
+  const url = `${TMDB_BASE}/movie/${tmdbId}/similar?api_key=${TMDB_API_KEY}&language=en-US`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`TMDB similar movies error: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
 export function buildImageUrl(path: string | null, size: string = 'w500'): string {
   if (!path) return '';
   return `${TMDB_IMAGE_BASE}/${size}${path}`;

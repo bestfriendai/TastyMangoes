@@ -94,10 +94,48 @@ class MovieDetailViewModel: ObservableObject {
     
     private func loadSimilarMovies(movieId: Int) async {
         do {
-            let response = try await TMDBService.shared.getSimilarMovies(movieId: movieId)
-            self.similarMovies = response.results.prefix(6).map { $0.toMovie() }
+            // First, get the MovieCard to retrieve similar_movie_ids
+            let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            
+            // If we have similar movie IDs, use our endpoint
+            if let similarIds = movieCard.similarMovieIds, !similarIds.isEmpty {
+                let similarResults = try await SupabaseService.shared.fetchSimilarMovies(tmdbIds: similarIds)
+                
+                // Convert SimilarMovieResult to Movie objects
+                self.similarMovies = similarResults.prefix(6).map { result in
+                    Movie(
+                        id: String(result.tmdbId),
+                        title: result.title,
+                        year: result.year ?? 0,
+                        trailerURL: nil,
+                        trailerDuration: nil,
+                        posterImageURL: result.posterUrl, // Already full URL from Supabase storage
+                        tastyScore: nil,
+                        aiScore: result.rating, // Convert from 0-100 scale to 0-10
+                        genres: [],
+                        rating: nil,
+                        director: nil,
+                        runtime: nil,
+                        releaseDate: result.year != nil ? String(result.year!) : nil,
+                        language: nil,
+                        overview: nil
+                    )
+                }
+            } else {
+                // Fallback to TMDB API if no similar IDs in database
+                print("⚠️ No similar_movie_ids found, falling back to TMDB API")
+                let response = try await TMDBService.shared.getSimilarMovies(movieId: movieId)
+                self.similarMovies = response.results.prefix(6).map { $0.toMovie() }
+            }
         } catch {
             print("⚠️ Failed to load similar movies: \(error)")
+            // Fallback to TMDB API on error
+            do {
+                let response = try await TMDBService.shared.getSimilarMovies(movieId: movieId)
+                self.similarMovies = response.results.prefix(6).map { $0.toMovie() }
+            } catch {
+                print("⚠️ TMDB fallback also failed: \(error)")
+            }
         }
     }
     

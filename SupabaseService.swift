@@ -570,6 +570,64 @@ class SupabaseService: ObservableObject {
         return try await fetchMovieCard(tmdbId: String(tmdbId))
     }
     
+    // MARK: - Similar Movies
+    
+    /// Similar movie result from get-similar-movies endpoint
+    struct SimilarMovieResult: Codable {
+        let tmdbId: Int
+        let title: String
+        let year: Int?
+        let posterUrl: String?
+        let rating: Double?
+        
+        enum CodingKeys: String, CodingKey {
+            case tmdbId = "tmdb_id"
+            case title
+            case year
+            case posterUrl = "poster_url"
+            case rating
+        }
+    }
+    
+    /// Similar movies response
+    struct SimilarMoviesResponse: Codable {
+        let movies: [SimilarMovieResult]
+    }
+    
+    /// Fetches similar movies by TMDB IDs with auto-ingestion
+    func fetchSimilarMovies(tmdbIds: [Int]) async throws -> [SimilarMovieResult] {
+        guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-similar-movies") else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let requestBody: [String: Any] = ["tmdb_ids": tmdbIds]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
+               let errorMessage = errorData["error"] {
+                throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
+            }
+            throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let responseObj = try decoder.decode(SimilarMoviesResponse.self, from: data)
+        return responseObj.movies
+    }
+    
     /// Gets the count of movies in our database for a specific genre
     func getGenreCount(genreName: String) async throws -> Int {
         guard let client = client else {

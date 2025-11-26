@@ -29,6 +29,7 @@ struct MovieCard: Codable, Identifiable {
     let aiScore: Double?
     let aiScoreRange: [Double]?
     let sourceScores: SourceScores?
+    let similarMovieIds: [Int]?
     let lastUpdated: String?
     
     var id: Int { workId }
@@ -55,6 +56,7 @@ struct MovieCard: Codable, Identifiable {
         case aiScore = "ai_score"
         case aiScoreRange = "ai_score_range"
         case sourceScores = "source_scores"
+        case similarMovieIds = "similar_movie_ids"
         case lastUpdated = "last_updated"
     }
 }

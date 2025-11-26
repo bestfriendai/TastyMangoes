@@ -10,6 +10,7 @@ import {
   fetchMovieDetails, 
   fetchMovieCredits, 
   fetchMovieVideos,
+  fetchSimilarMovies,
   buildImageUrl,
   formatRuntime,
   downloadImage,
@@ -37,10 +38,10 @@ serve(async (req) => {
     // Create admin client with service_role key for storage operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Check if movie exists and if it needs refresh
+    // Check if movie exists and its ingestion status
     const { data: existingWork, error: lookupError } = await supabaseAdmin
       .from('works')
-      .select('work_id, last_refreshed_at, release_date')
+      .select('work_id, last_refreshed_at, release_date, ingestion_status')
       .eq('tmdb_id', tmdb_id.toString())
       .maybeSingle();
     
@@ -48,35 +49,88 @@ serve(async (req) => {
       throw lookupError;
     }
     
-    // SKIP cache check entirely if force_refresh is true
-    if (existingWork && !force_refresh) {
-      console.log(`[INGEST] Checking cache for existing work_id: ${existingWork.work_id} (force_refresh=false)`);
+    // DUPLICATE PREVENTION: Check if already ingesting
+    if (existingWork && existingWork.ingestion_status === 'ingesting' && !force_refresh) {
+      console.log(`[INGEST] Movie is already being ingested (work_id: ${existingWork.work_id}), waiting for completion...`);
       
-      // Check staleness using the database function
-      const { data: isStale, error: staleError } = await supabaseAdmin
-        .rpc('is_stale', { work_id_input: existingWork.work_id });
+      // Wait up to 30 seconds for completion
+      const maxWaitTime = 30000; // 30 seconds
+      const checkInterval = 500; // Check every 500ms
+      const startTime = Date.now();
       
-      if (staleError) {
-        console.warn('[INGEST] Error checking staleness:', staleError);
-        // Continue with refresh if staleness check fails
-      } else if (!isStale) {
-        // Return cached card
-        const { data: cachedCard } = await supabaseAdmin
-          .from('work_cards_cache')
-          .select('payload')
+      while (Date.now() - startTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+        
+        const { data: updatedWork } = await supabaseAdmin
+          .from('works')
+          .select('work_id, ingestion_status')
           .eq('work_id', existingWork.work_id)
           .single();
         
-        if (cachedCard) {
-          console.log(`[INGEST] Returning cached card for work_id: ${existingWork.work_id}`);
-          return new Response(
-            JSON.stringify({ 
-              status: 'cached', 
-              work_id: existingWork.work_id,
-              card: cachedCard.payload 
-            }),
-            { headers: { 'Content-Type': 'application/json' } }
-          );
+        if (updatedWork && updatedWork.ingestion_status === 'complete') {
+          // Return cached card
+          const { data: cachedCard } = await supabaseAdmin
+            .from('work_cards_cache')
+            .select('payload')
+            .eq('work_id', existingWork.work_id)
+            .single();
+          
+          if (cachedCard) {
+            console.log(`[INGEST] Duplicate ingestion completed, returning cached card for work_id: ${existingWork.work_id}`);
+            return new Response(
+              JSON.stringify({ 
+                status: 'cached', 
+                work_id: existingWork.work_id,
+                card: cachedCard.payload 
+              }),
+              { headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+        } else if (updatedWork && updatedWork.ingestion_status === 'failed') {
+          console.log(`[INGEST] Previous ingestion failed, retrying...`);
+          break; // Break out and retry
+        }
+      }
+      
+      // If we timed out, return error
+      return new Response(
+        JSON.stringify({ error: 'Ingestion timeout - another process is still ingesting this movie' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // SKIP cache check entirely if force_refresh is true
+    if (existingWork && !force_refresh) {
+      // If status is 'complete', check staleness
+      if (existingWork.ingestion_status === 'complete') {
+        console.log(`[INGEST] Checking cache for existing work_id: ${existingWork.work_id} (force_refresh=false)`);
+        
+        // Check staleness using the database function
+        const { data: isStale, error: staleError } = await supabaseAdmin
+          .rpc('is_stale', { work_id_input: existingWork.work_id });
+        
+        if (staleError) {
+          console.warn('[INGEST] Error checking staleness:', staleError);
+          // Continue with refresh if staleness check fails
+        } else if (!isStale) {
+          // Return cached card
+          const { data: cachedCard } = await supabaseAdmin
+            .from('work_cards_cache')
+            .select('payload')
+            .eq('work_id', existingWork.work_id)
+            .single();
+          
+          if (cachedCard) {
+            console.log(`[INGEST] Returning cached card for work_id: ${existingWork.work_id}`);
+            return new Response(
+              JSON.stringify({ 
+                status: 'cached', 
+                work_id: existingWork.work_id,
+                card: cachedCard.payload 
+              }),
+              { headers: { 'Content-Type': 'application/json' } }
+            );
+          }
         }
       }
     } else if (force_refresh) {
@@ -85,14 +139,39 @@ serve(async (req) => {
       console.log(`[INGEST] Work does not exist, proceeding with full ingestion`);
     }
     
+    // Set status to 'ingesting' before starting
+    if (existingWork) {
+      await supabaseAdmin
+        .from('works')
+        .update({ ingestion_status: 'ingesting' })
+        .eq('work_id', existingWork.work_id);
+    }
+    
     console.log('[INGEST] Fetching fresh data from TMDB...');
     
-    // Fetch fresh data from TMDB
-    const [details, credits, videos] = await Promise.all([
-      fetchMovieDetails(tmdb_id.toString()),
-      fetchMovieCredits(tmdb_id.toString()),
-      fetchMovieVideos(tmdb_id.toString())
-    ]);
+    // Fetch fresh data from TMDB with delays to respect rate limits
+    // Add 250ms delay between calls
+    const details = await fetchMovieDetails(tmdb_id.toString());
+    await new Promise(resolve => setTimeout(resolve, 250));
+    
+    const credits = await fetchMovieCredits(tmdb_id.toString());
+    await new Promise(resolve => setTimeout(resolve, 250));
+    
+    const videos = await fetchMovieVideos(tmdb_id.toString());
+    await new Promise(resolve => setTimeout(resolve, 250));
+    
+    // Fetch similar movies (limit to first 10)
+    let similarMovieIds: number[] = [];
+    try {
+      const similarMovies = await fetchSimilarMovies(tmdb_id.toString());
+      similarMovieIds = similarMovies.results
+        .slice(0, 10)
+        .map(m => m.id);
+      console.log(`[INGEST] Fetched ${similarMovieIds.length} similar movie IDs`);
+    } catch (error) {
+      console.warn(`[INGEST] Failed to fetch similar movies:`, error);
+      // Continue without similar movies
+    }
     
     console.log(`[INGEST] Fetched TMDB data for: ${details.title}`);
     
@@ -106,7 +185,7 @@ serve(async (req) => {
     // Extract year from release_date
     const year = details.release_date ? parseInt(details.release_date.substring(0, 4)) : null;
     
-    // Upsert into works table
+    // Upsert into works table with ingestion_status
     const workData = {
       tmdb_id: tmdb_id.toString(),
       imdb_id: details.imdb_id || null,
@@ -115,6 +194,7 @@ serve(async (req) => {
       year: year,
       release_date: details.release_date || null,
       last_refreshed_at: new Date().toISOString(),
+      ingestion_status: 'ingesting', // Set status to ingesting
     };
     
     const { data: work, error: workError } = await supabaseAdmin
@@ -123,7 +203,16 @@ serve(async (req) => {
       .select('work_id')
       .single();
     
-    if (workError) throw workError;
+    if (workError) {
+      // Set status to failed on error
+      if (existingWork) {
+        await supabaseAdmin
+          .from('works')
+          .update({ ingestion_status: 'failed' })
+          .eq('work_id', existingWork.work_id);
+      }
+      throw workError;
+    }
     
     console.log(`[INGEST] Created/updated work with work_id: ${work.work_id}`);
     console.log(`[INGEST] Starting image upload for work_id: ${work.work_id}`);
@@ -366,7 +455,7 @@ serve(async (req) => {
     
     console.log(`[DATABASE] Updating works_meta with storage URLs...`);
     
-    // Upsert into works_meta table with storage URLs
+    // Upsert into works_meta table with storage URLs and similar_movie_ids
     const metaData = {
       work_id: work.work_id,
       runtime_minutes: details.runtime || null,
@@ -386,6 +475,7 @@ serve(async (req) => {
       trailer_thumbnail: storageUrls.trailerThumb || null,
       cast_members: castMembers,
       crew_members: crewMembers,
+      similar_movie_ids: similarMovieIds.length > 0 ? similarMovieIds : null, // Store array of TMDB IDs
       fetched_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -396,6 +486,11 @@ serve(async (req) => {
     
     if (metaError) {
       console.error(`[DATABASE] Error updating works_meta:`, metaError);
+      // Set status to failed on error
+      await supabaseAdmin
+        .from('works')
+        .update({ ingestion_status: 'failed' })
+        .eq('work_id', work.work_id);
       throw metaError;
     }
     
@@ -414,7 +509,14 @@ serve(async (req) => {
         last_seen_at: new Date().toISOString(),
       }, { onConflict: 'work_id,source_name' });
     
-    if (ratingError) throw ratingError;
+    if (ratingError) {
+      // Set status to failed on error
+      await supabaseAdmin
+        .from('works')
+        .update({ ingestion_status: 'failed' })
+        .eq('work_id', work.work_id);
+      throw ratingError;
+    }
     
     // Compute AI Score (for now, just use TMDB; expand later)
     const aiScore = details.vote_average * 10;
@@ -435,7 +537,14 @@ serve(async (req) => {
         computed_at: new Date().toISOString(),
       }, { onConflict: 'work_id,method_version' });
     
-    if (aggregateError) throw aggregateError;
+    if (aggregateError) {
+      // Set status to failed on error
+      await supabaseAdmin
+        .from('works')
+        .update({ ingestion_status: 'failed' })
+        .eq('work_id', work.work_id);
+      throw aggregateError;
+    }
     
     console.log(`[CACHE] Building movie card...`);
     
@@ -469,6 +578,7 @@ serve(async (req) => {
       source_scores: {
         tmdb: { score: aiScore, votes: details.vote_count }
       },
+      similar_movie_ids: similarMovieIds, // Include similar movie IDs in card
       last_updated: new Date().toISOString(),
     };
     
@@ -490,8 +600,19 @@ serve(async (req) => {
     
     if (cacheError) {
       console.error(`[CACHE] Error caching movie card:`, cacheError);
+      // Set status to failed on error
+      await supabaseAdmin
+        .from('works')
+        .update({ ingestion_status: 'failed' })
+        .eq('work_id', work.work_id);
       throw cacheError;
     }
+    
+    // Set status to 'complete' after successful ingestion
+    await supabaseAdmin
+      .from('works')
+      .update({ ingestion_status: 'complete' })
+      .eq('work_id', work.work_id);
     
     console.log(`[INGEST] Ingestion complete for work_id: ${work.work_id}`);
     
@@ -506,6 +627,26 @@ serve(async (req) => {
     
   } catch (error) {
     console.error('[INGEST] Ingestion error:', error);
+    
+    // Try to set status to 'failed' if we have a work_id
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+      const { data: failedWork } = await supabaseAdmin
+        .from('works')
+        .select('work_id')
+        .eq('tmdb_id', String(tmdb_id))
+        .maybeSingle();
+      
+      if (failedWork) {
+        await supabaseAdmin
+          .from('works')
+          .update({ ingestion_status: 'failed' })
+          .eq('work_id', failedWork.work_id);
+      }
+    } catch (statusError) {
+      console.error('[INGEST] Failed to update status to failed:', statusError);
+    }
+    
     return new Response(
       JSON.stringify({ error: error.message || 'Unknown error' }), 
       { status: 500, headers: { 'Content-Type': 'application/json' } }
