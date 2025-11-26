@@ -24,12 +24,15 @@ struct MovieCard: Codable, Identifiable {
     let poster: PosterUrls?
     let backdrop: String?
     let trailerYoutubeId: String?
+    let trailerThumbnail: String?
+    let certification: String?
     let cast: [MovieCardCastMember]?
     let director: String?
     let aiScore: Double?
     let aiScoreRange: [Double]?
     let sourceScores: SourceScores?
     let similarMovieIds: [Int]?
+    let stillImages: [String]?
     let lastUpdated: String?
     
     var id: Int { workId }
@@ -51,12 +54,15 @@ struct MovieCard: Codable, Identifiable {
         case poster
         case backdrop
         case trailerYoutubeId = "trailer_youtube_id"
+        case trailerThumbnail = "trailer_thumbnail"
+        case certification
         case cast
         case director
         case aiScore = "ai_score"
         case aiScoreRange = "ai_score_range"
         case sourceScores = "source_scores"
         case similarMovieIds = "similar_movie_ids"
+        case stillImages = "still_images"
         case lastUpdated = "last_updated"
     }
 }

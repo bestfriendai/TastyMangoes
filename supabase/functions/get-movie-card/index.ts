@@ -98,6 +98,35 @@ serve(async (req) => {
       .eq('work_id', work.work_id)
       .single();
     
+    // Check if cached card exists and has certification
+    if (card && card.payload) {
+      const cert = card.payload.certification;
+      const hasCertification = cert !== null && cert !== undefined && cert !== '' && String(cert).trim() !== '';
+      if (!hasCertification) {
+        console.log(`[GET-CARD] Cached card missing certification, triggering refresh for work_id: ${work.work_id}`);
+        // Trigger refresh to get certification
+        const ingestResponse = await fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({ tmdb_id: tmdbId, force_refresh: true }),
+        });
+        
+        const result = await ingestResponse.json();
+        if (ingestResponse.ok && result.card) {
+          console.log(`[GET-CARD] Refresh successful, returning updated card with certification`);
+          return new Response(
+            JSON.stringify(result.card), 
+            { headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        // If refresh fails, continue with existing cached card
+        console.warn(`[GET-CARD] Refresh failed, returning cached card without certification`);
+      }
+    }
+    
     if (cardError) {
       // Card not cached - trigger rebuild
       console.log(`[GET-CARD] Card not cached, triggering rebuild for work_id: ${work.work_id}`);

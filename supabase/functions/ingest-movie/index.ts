@@ -11,6 +11,8 @@ import {
   fetchMovieCredits, 
   fetchMovieVideos,
   fetchSimilarMovies,
+  fetchMovieReleaseDates,
+  fetchMovieImages,
   buildImageUrl,
   formatRuntime,
   downloadImage,
@@ -171,6 +173,47 @@ serve(async (req) => {
     } catch (error) {
       console.warn(`[INGEST] Failed to fetch similar movies:`, error);
       // Continue without similar movies
+    }
+    
+    // Fetch release dates to get US certification
+    let certification: string | null = null;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const releaseDates = await fetchMovieReleaseDates(tmdb_id.toString());
+      console.log(`[INGEST] Release dates response:`, JSON.stringify(releaseDates, null, 2));
+      
+      const usRelease = releaseDates.results.find(r => r.iso_3166_1 === 'US');
+      if (usRelease) {
+        console.log(`[INGEST] Found US release, release_dates count: ${usRelease.release_dates?.length || 0}`);
+        // Try to find certification - check all release dates, prefer theatrical release
+        const theatricalRelease = usRelease.release_dates?.find(rd => 
+          rd.type === 3 && rd.certification && rd.certification.trim() !== ''
+        );
+        const anyReleaseWithCert = usRelease.release_dates?.find(rd => 
+          rd.certification && rd.certification.trim() !== ''
+        );
+        
+        certification = theatricalRelease?.certification || anyReleaseWithCert?.certification || null;
+        console.log(`[INGEST] Fetched certification: ${certification || 'none'} (theatrical: ${theatricalRelease?.certification || 'none'}, any: ${anyReleaseWithCert?.certification || 'none'})`);
+      } else {
+        console.log(`[INGEST] No US release found in release dates`);
+      }
+    } catch (error) {
+      console.error(`[INGEST] Failed to fetch release dates:`, error);
+      // Continue without certification
+    }
+    
+    // Fetch images to get still images (backdrops)
+    let stillImagePaths: Array<{ file_path: string }> = [];
+    try {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const images = await fetchMovieImages(tmdb_id.toString());
+      // Take top 5 backdrops
+      stillImagePaths = images.backdrops.slice(0, 5);
+      console.log(`[INGEST] Found ${stillImagePaths.length} backdrops to download as still images`);
+    } catch (error) {
+      console.warn(`[INGEST] Failed to fetch images:`, error);
+      // Continue without still images
     }
     
     console.log(`[INGEST] Fetched TMDB data for: ${details.title}`);
@@ -421,6 +464,39 @@ serve(async (req) => {
     
     console.log(`[STORAGE] Image upload complete. Uploaded ${storageUrls.castPhotos.size} cast photos.`);
     
+    // 6. Download and upload still images (top 5 backdrops)
+    const stillImageStorageUrls: string[] = [];
+    if (stillImagePaths.length > 0) {
+      console.log(`[DOWNLOAD] Processing ${stillImagePaths.length} still images...`);
+      
+      for (let i = 0; i < stillImagePaths.length; i++) {
+        const backdropPath = stillImagePaths[i].file_path;
+        const backdropUrl = buildImageUrl(backdropPath, 'w780'); // Use 780px width
+        console.log(`[DOWNLOAD] Downloading still image ${i + 1} from: ${backdropUrl}`);
+        
+        const stillImageData = await downloadImage(backdropUrl);
+        if (stillImageData) {
+          console.log(`[DOWNLOAD] Downloaded still image ${i + 1}, size: ${stillImageData.byteLength} bytes`);
+          
+          const storagePath = `stills/${work.work_id}_${i + 1}.jpg`;
+          const storageUrl = await uploadImageToStorage(stillImageData, storagePath);
+          if (storageUrl) {
+            stillImageStorageUrls.push(storageUrl);
+            console.log(`[STORAGE] Still image ${i + 1} URL: ${storageUrl}`);
+          }
+        } else {
+          console.warn(`[DOWNLOAD] Failed to download still image ${i + 1}`);
+        }
+        
+        // Add delay between downloads
+        if (i < stillImagePaths.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+      }
+      
+      console.log(`[STORAGE] Still image upload complete. Uploaded ${stillImageStorageUrls.length} still images.`);
+    }
+    
     // Build cast array (top 15) with storage URLs
     const castMembers = credits.cast.slice(0, 15).map(c => {
       const storageUrl = storageUrls.castPhotos.get(c.id.toString());
@@ -464,6 +540,7 @@ serve(async (req) => {
       overview: details.overview || null,
       overview_short: details.overview ? (details.overview.substring(0, 150) + (details.overview.length > 150 ? '...' : '')) : null,
       genres: details.genres.map(g => g.name),
+      certification: certification || null, // US MPAA rating
       // Use storage URLs if available, fallback to TMDB URLs
       poster_url_small: buildImageUrl(details.poster_path, 'w154'), // Keep small as TMDB for now
       poster_url_medium: storageUrls.posterMedium || buildImageUrl(details.poster_path, 'w342'),
@@ -476,9 +553,12 @@ serve(async (req) => {
       cast_members: castMembers,
       crew_members: crewMembers,
       similar_movie_ids: similarMovieIds.length > 0 ? similarMovieIds : null, // Store array of TMDB IDs
+      still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
       fetched_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    
+    console.log(`[DATABASE] Updating works_meta with ${stillImageStorageUrls.length} still images`);
     
     const { error: metaError } = await supabaseAdmin
       .from('works_meta')
@@ -571,6 +651,7 @@ serve(async (req) => {
       backdrop: metaData.backdrop_url,
       trailer_youtube_id: metaData.trailer_youtube_id,
       trailer_thumbnail: metaData.trailer_thumbnail,
+      certification: metaData.certification, // US MPAA rating
       cast: castMembers.slice(0, 8), // Top 8 for card, with storage URLs
       director: crewMembers.find(c => c.job === 'Director')?.name || null,
       ai_score: aiScore,
@@ -579,6 +660,7 @@ serve(async (req) => {
         tmdb: { score: aiScore, votes: details.vote_count }
       },
       similar_movie_ids: similarMovieIds, // Include similar movie IDs in card
+      still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
       last_updated: new Date().toISOString(),
     };
     

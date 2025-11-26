@@ -57,22 +57,22 @@ class MovieDetailViewModel: ObservableObject {
                 movieDetail = try await service.fetchMovieDetail(id: movieId)
                 
                 // Load additional data in parallel
-                async let similarMoviesTask = loadSimilarMovies(movieId: movieId)
-                async let imagesTask = loadMovieImages(movieId: movieId)
-                async let videosTask = loadMovieVideos(movieId: movieId)
+                async let similarMoviesResult = loadSimilarMovies(movieId: movieId)
+                async let imagesResult = loadMovieImages(movieId: movieId)
+                async let videosResult = loadMovieVideos(movieId: movieId)
                 
                 // Wait for all to complete
-                _ = try? await (similarMoviesTask, imagesTask, videosTask)
+                _ = await (similarMoviesResult, imagesResult, videosResult)
             } else if let movieStringId = movieStringId {
                 movieDetail = try await service.fetchMovieDetail(stringId: movieStringId)
                 
                 // If we can convert string ID to Int, load additional data
                 if let movieId = Int(movieStringId) {
-                    async let similarMoviesTask = loadSimilarMovies(movieId: movieId)
-                    async let imagesTask = loadMovieImages(movieId: movieId)
-                    async let videosTask = loadMovieVideos(movieId: movieId)
+                    async let similarMoviesResult = loadSimilarMovies(movieId: movieId)
+                    async let imagesResult = loadMovieImages(movieId: movieId)
+                    async let videosResult = loadMovieVideos(movieId: movieId)
                     
-                    _ = try? await (similarMoviesTask, imagesTask, videosTask)
+                    _ = await (similarMoviesResult, imagesResult, videosResult)
                 }
             } else {
                 throw MovieDetailError.invalidData
@@ -141,11 +141,39 @@ class MovieDetailViewModel: ObservableObject {
     
     private func loadMovieImages(movieId: Int) async {
         do {
-            let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
-            // Combine backdrops and posters, prefer backdrops for photos section
-            self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
+            // Get MovieCard to retrieve stillImages
+            let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            
+            // If we have still images from the database, use them
+            if let stillImageUrls = movieCard.stillImages, !stillImageUrls.isEmpty {
+                // Convert still image URLs to TMDBImage format
+                self.movieImages = stillImageUrls.map { url in
+                    TMDBImage(
+                        filePath: url, // Full URL from Supabase storage
+                        width: nil,
+                        height: nil,
+                        aspectRatio: nil,
+                        voteAverage: nil,
+                        voteCount: nil
+                    )
+                }
+                print("✅ Loaded \(self.movieImages.count) still images from database")
+            } else {
+                // Fallback to TMDB API if no still images in database
+                print("⚠️ No still_images found in MovieCard, falling back to TMDB API")
+                let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
+                // Combine backdrops and posters, prefer backdrops for photos section
+                self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
+            }
         } catch {
             print("⚠️ Failed to load movie images: \(error)")
+            // Fallback to TMDB API on error
+            do {
+                let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
+                self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
+            } catch {
+                print("⚠️ TMDB fallback also failed: \(error)")
+            }
         }
     }
     

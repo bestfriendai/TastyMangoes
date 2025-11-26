@@ -139,11 +139,21 @@ struct TMDBImage: Codable, Identifiable {
     let voteCount: Int?
     
     var imageURL: URL? {
-        URL(string: "https://image.tmdb.org/t/p/w500\(filePath)")
+        // If filePath is already a full URL (from Supabase storage), use it directly
+        if filePath.hasPrefix("http://") || filePath.hasPrefix("https://") {
+            return URL(string: filePath)
+        }
+        // Otherwise, build TMDB URL
+        return URL(string: "https://image.tmdb.org/t/p/w500\(filePath)")
     }
     
     var originalImageURL: URL? {
-        URL(string: "https://image.tmdb.org/t/p/original\(filePath)")
+        // If filePath is already a full URL (from Supabase storage), use it directly
+        if filePath.hasPrefix("http://") || filePath.hasPrefix("https://") {
+            return URL(string: filePath)
+        }
+        // Otherwise, build TMDB URL
+        return URL(string: "https://image.tmdb.org/t/p/original\(filePath)")
     }
     
     // Identifiable conformance - use filePath as ID

@@ -411,6 +411,16 @@ struct MoviePageView: View {
                             .font(.custom("Inter-Regular", size: 14))
                             .foregroundColor(Color(hex: "#666666"))
                         
+                        if let rating = movie.rating, !rating.isEmpty, rating.trimmingCharacters(in: .whitespaces) != "" {
+                            Text("·")
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#666666"))
+                            
+                            Text(rating)
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#666666"))
+                        }
+                        
                         Text("·")
                             .font(.custom("Inter-Regular", size: 14))
                             .foregroundColor(Color(hex: "#666666"))
@@ -521,8 +531,8 @@ struct MoviePageView: View {
             .padding(.top, 12)
             .padding(.leading, 12)
             .onTapGesture {
-                if let trailerURL = movie.trailerURL {
-                    print("Play trailer: \(trailerURL)")
+                if let trailerURL = movie.trailerURL, let url = URL(string: trailerURL) {
+                    UIApplication.shared.open(url)
                 }
             }
         }
@@ -1256,7 +1266,7 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("Photos (\(viewModel.movieImages.count))")
+                    Text("Photos")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
@@ -1278,7 +1288,7 @@ struct MoviePageView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     if !viewModel.movieImages.isEmpty {
-                        ForEach(viewModel.movieImages.prefix(6)) { image in
+                        ForEach(viewModel.movieImages.prefix(5)) { image in
                             MoviePagePhotoCard(image: image)
                         }
                     } else {
@@ -1520,6 +1530,11 @@ private struct MoviePageClipCard: View {
                                 .foregroundColor(Color(hex: "#1a1a1a"))
                         }
                     )
+                    .onTapGesture {
+                        if let youtubeURL = video.youtubeURL {
+                            UIApplication.shared.open(youtubeURL)
+                        }
+                    }
                 } else {
                     // Fallback placeholder
                     Rectangle()
@@ -1536,6 +1551,11 @@ private struct MoviePageClipCard: View {
                                     .foregroundColor(Color(hex: "#1a1a1a"))
                             }
                         )
+                        .onTapGesture {
+                            if let youtubeURL = video.youtubeURL {
+                                UIApplication.shared.open(youtubeURL)
+                            }
+                        }
                 }
             }
             
@@ -1547,6 +1567,11 @@ private struct MoviePageClipCard: View {
                 .lineLimit(2)
         }
         .frame(width: 248)
+        .onTapGesture {
+            if let youtubeURL = video.youtubeURL {
+                UIApplication.shared.open(youtubeURL)
+            }
+        }
     }
 }
 

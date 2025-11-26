@@ -181,6 +181,65 @@ export async function fetchSimilarMovies(tmdbId: string): Promise<TMDBSimilarMov
   return response.json();
 }
 
+export interface TMDBReleaseDatesResponse {
+  id: number;
+  results: Array<{
+    iso_3166_1: string;
+    release_dates: Array<{
+      certification?: string;
+      release_date?: string;
+      type?: number;
+    }>;
+  }>;
+}
+
+export async function fetchMovieReleaseDates(tmdbId: string): Promise<TMDBReleaseDatesResponse> {
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY environment variable not set');
+  }
+  
+  const url = `${TMDB_BASE}/movie/${tmdbId}/release_dates?api_key=${TMDB_API_KEY}`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`TMDB release dates error: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+export interface TMDBImage {
+  file_path: string;
+  width?: number;
+  height?: number;
+  aspect_ratio?: number;
+  iso_639_1?: string | null;
+  vote_average?: number;
+  vote_count?: number;
+}
+
+export interface TMDBImagesResponse {
+  id: number;
+  backdrops: TMDBImage[];
+  posters: TMDBImage[];
+  logos: TMDBImage[];
+}
+
+export async function fetchMovieImages(tmdbId: string): Promise<TMDBImagesResponse> {
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY environment variable not set');
+  }
+  
+  const url = `${TMDB_BASE}/movie/${tmdbId}/images?api_key=${TMDB_API_KEY}`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`TMDB images error: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
 export function buildImageUrl(path: string | null, size: string = 'w500'): string {
   if (!path) return '';
   return `${TMDB_IMAGE_BASE}/${size}${path}`;

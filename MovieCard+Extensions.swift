@@ -44,6 +44,21 @@ extension MovieCard {
         // Use runtimeMinutes if available, otherwise parse from runtimeDisplay
         let runtimeValue = runtimeMinutes ?? parseRuntimeFromDisplay(runtimeDisplay)
         
+        // Process certification - filter out empty strings and whitespace-only strings
+        let processedRating: String? = {
+            guard let cert = certification, !cert.isEmpty else {
+                print("⚠️ [MovieCard] No certification found (nil or empty)")
+                return nil
+            }
+            let trimmed = cert.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                print("⚠️ [MovieCard] Certification is whitespace-only")
+                return nil
+            }
+            print("✅ [MovieCard] Certification: '\(trimmed)'")
+            return trimmed
+        }()
+        
         return MovieDetail(
             id: workId,
             title: title,
@@ -55,7 +70,7 @@ extension MovieCard {
             runtime: runtimeValue,
             genres: genreObjects,
             director: director,
-            rating: nil, // Not in MovieCard
+            rating: processedRating, // MPAA rating (R, PG-13, etc.)
             tastyScore: nil, // Not in MovieCard
             aiScore: aiScore,
             criticsScore: nil, // Not in MovieCard
