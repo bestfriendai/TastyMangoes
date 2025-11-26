@@ -570,6 +570,32 @@ class SupabaseService: ObservableObject {
         return try await fetchMovieCard(tmdbId: String(tmdbId))
     }
     
+    /// Gets the count of movies in our database for a specific genre
+    func getGenreCount(genreName: String) async throws -> Int {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        // Create a simple struct to decode the response
+        struct WorksMetaGenre: Codable {
+            let genres: [String]?
+        }
+        
+        let response: [WorksMetaGenre] = try await client
+            .from("works_meta")
+            .select("genres")
+            .execute()
+            .value
+        
+        // Count where genres array contains the genre name
+        let count = response.filter { worksMeta in
+            guard let genres = worksMeta.genres else { return false }
+            return genres.contains(genreName)
+        }.count
+        
+        return count
+    }
+    
     /// Searches for movies using TMDB API
     func searchMovies(query: String, year: Int? = nil) async throws -> [MovieSearchResult] {
         guard let client = client else {

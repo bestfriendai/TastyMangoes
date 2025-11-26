@@ -1028,20 +1028,32 @@ struct MoviePageView: View {
                 
                 Spacer()
                 
-                Text("See All")
-                    .font(.custom("Inter-SemiBold", size: 14))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
+                if !viewModel.similarMovies.isEmpty {
+                    Text("See All")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                }
             }
             
             // Horizontal scrolling similar movies
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<5) { index in
-                        SimilarMovieCard(index: index)
+                    if !viewModel.similarMovies.isEmpty {
+                        ForEach(viewModel.similarMovies.prefix(5)) { movie in
+                            NavigationLink(destination: MoviePageView(movieId: movie.id)) {
+                                MoviePageSimilarMovieCard(movie: movie)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    } else {
+                        // Show loading placeholders while similar movies are being fetched
+                        ForEach(0..<5) { index in
+                            SimilarMovieCard(index: index)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1196,27 +1208,36 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("Movie Clips (3)")
+                    Text("Movie Clips (\(viewModel.movieVideos.count))")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
                 
                 Spacer()
                 
-                Text("See All")
-                    .font(.custom("Inter-SemiBold", size: 14))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
+                if !viewModel.movieVideos.isEmpty {
+                    Text("See All")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                }
             }
             
             // Horizontal scrolling movie clips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<3) { index in
-                        MovieClipCard(index: index)
+                    if !viewModel.movieVideos.isEmpty {
+                        ForEach(viewModel.movieVideos.prefix(5)) { video in
+                            MoviePageClipCard(video: video)
+                        }
+                    } else {
+                        // Show loading placeholders while videos are being fetched
+                        ForEach(0..<3) { index in
+                            MovieClipCard(index: index)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1235,27 +1256,36 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("Photos (12)")
+                    Text("Photos (\(viewModel.movieImages.count))")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
                 
                 Spacer()
                 
-                Text("See All")
-                    .font(.custom("Inter-SemiBold", size: 14))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
+                if !viewModel.movieImages.isEmpty {
+                    Text("See All")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                }
             }
             
             // Horizontal scrolling photos
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<6) { index in
-                        PhotoCard(index: index)
+                    if !viewModel.movieImages.isEmpty {
+                        ForEach(viewModel.movieImages.prefix(6)) { image in
+                            MoviePagePhotoCard(image: image)
+                        }
+                    } else {
+                        // Show loading placeholders while images are being fetched
+                        ForEach(0..<6) { index in
+                            PhotoCard(index: index)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1447,6 +1477,79 @@ private struct SectionTabButton: View {
 
 // MARK: - Movie Clip Card
 
+private struct MoviePageClipCard: View {
+    let video: TMDBVideo
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                // Video thumbnail from YouTube
+                if let thumbnailURL = video.thumbnailURL {
+                    AsyncImage(url: thumbnailURL) { phase in
+                        switch phase {
+                        case .empty:
+                            Rectangle()
+                                .fill(Color(hex: "#1a1a1a"))
+                                .frame(width: 248, height: 140)
+                                .overlay(ProgressView())
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 248, height: 140)
+                                .clipped()
+                        case .failure:
+                            Rectangle()
+                                .fill(Color(hex: "#1a1a1a"))
+                                .frame(width: 248, height: 140)
+                        @unknown default:
+                            Rectangle()
+                                .fill(Color(hex: "#1a1a1a"))
+                                .frame(width: 248, height: 140)
+                        }
+                    }
+                    .overlay(
+                        // Play button overlay
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.9))
+                                .frame(width: 48, height: 48)
+                            
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
+                        }
+                    )
+                } else {
+                    // Fallback placeholder
+                    Rectangle()
+                        .fill(Color(hex: "#1a1a1a"))
+                        .frame(width: 248, height: 140)
+                        .overlay(
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.9))
+                                    .frame(width: 48, height: 48)
+                                
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(Color(hex: "#1a1a1a"))
+                            }
+                        )
+                }
+            }
+            
+            // Clip title
+            Text(video.name)
+                .font(.custom("Inter-SemiBold", size: 14))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .padding(.top, 8)
+                .lineLimit(2)
+        }
+        .frame(width: 248)
+    }
+}
+
 private struct MovieClipCard: View {
     let index: Int
     
@@ -1469,26 +1572,10 @@ private struct MovieClipCard: View {
                                 .foregroundColor(Color(hex: "#1a1a1a"))
                         }
                     )
-                
-                // Duration badge
-                VStack {
-                    HStack {
-                        Spacer()
-                        Text("0:30")
-                            .font(.custom("Inter-Regular", size: 12))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.6))
-                            .cornerRadius(4)
-                    }
-                    Spacer()
-                }
-                .padding(8)
             }
             
-            // Clip title
-            Text("Clip Title \(index + 1)")
+            // Clip title placeholder
+            Text("Loading...")
                 .font(.custom("Inter-SemiBold", size: 14))
                 .foregroundColor(Color(hex: "#1a1a1a"))
                 .padding(.top, 8)
@@ -1499,6 +1586,45 @@ private struct MovieClipCard: View {
 }
 
 // MARK: - Photo Card
+
+private struct MoviePagePhotoCard: View {
+    let image: TMDBImage
+    
+    var body: some View {
+        AsyncImage(url: image.imageURL) { phase in
+            switch phase {
+            case .empty:
+                // Loading placeholder
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+                    .overlay(
+                        ProgressView()
+                    )
+            case .success(let loadedImage):
+                loadedImage
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 140, height: 210)
+                    .clipped()
+                    .cornerRadius(8)
+            case .failure:
+                // Error placeholder
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(Color(hex: "#999999"))
+                    )
+            @unknown default:
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+            }
+        }
+    }
+}
 
 private struct PhotoCard: View {
     let index: Int
@@ -1572,6 +1698,66 @@ private struct ReviewCard: View {
 
 // MARK: - Similar Movie Card
 
+private struct MoviePageSimilarMovieCard: View {
+    let movie: Movie
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Poster
+            MoviePosterImage(
+                posterURL: movie.posterImageURL,
+                width: 120,
+                height: 180,
+                cornerRadius: 8
+            )
+            
+            Text(movie.title)
+                .font(.custom("Nunito-Bold", size: 14))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .lineLimit(1)
+            
+            // Year and genres
+            HStack(spacing: 4) {
+                Text(String(movie.year))
+                if !movie.genres.isEmpty {
+                    Text("·")
+                    Text(movie.genres.prefix(2).joined(separator: "/"))
+                        .lineLimit(1)
+                }
+            }
+            .font(.custom("Inter-Regular", size: 12))
+            .foregroundColor(Color(hex: "#666666"))
+            
+            // Scores
+            HStack(spacing: 4) {
+                // Tasty Score
+                if let tastyScore = movie.tastyScore {
+                    Image("TastyScoreIcon")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+                    Text("\(Int(tastyScore * 100))%")
+                        .font(.custom("Inter-SemiBold", size: 12))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                
+                Spacer()
+                
+                // AI Score
+                if let aiScore = movie.aiScore {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    Text(String(format: "%.1f", aiScore))
+                        .font(.custom("Inter-SemiBold", size: 12))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+            }
+        }
+        .frame(width: 120)
+    }
+}
+
 private struct SimilarMovieCard: View {
     let index: Int
     
@@ -1583,32 +1769,17 @@ private struct SimilarMovieCard: View {
                 .frame(width: 120, height: 180)
                 .cornerRadius(8)
             
-            Text("Movie Title")
+            Text("Loading...")
                 .font(.custom("Nunito-Bold", size: 14))
                 .foregroundColor(Color(hex: "#1a1a1a"))
                 .lineLimit(1)
             
-            Text("2024 · Action/Sci-Fi")
+            Text("—")
                 .font(.custom("Inter-Regular", size: 12))
                 .foregroundColor(Color(hex: "#666666"))
             
             HStack(spacing: 4) {
-                Image("TastyScoreIcon")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 14, height: 14)
-                Text("99%")
-                    .font(.custom("Inter-SemiBold", size: 12))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
-                
                 Spacer()
-                
-                Image(systemName: "star.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                Text("7.2")
-                    .font(.custom("Inter-SemiBold", size: 12))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
             }
         }
         .frame(width: 120)
