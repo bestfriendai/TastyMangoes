@@ -523,6 +523,192 @@ class SupabaseService: ObservableObject {
             .upsert(dbMovie)
             .execute()
     }
+    
+    // MARK: - Movie Card Operations (New Ingestion Pipeline)
+    
+    /// Fetches a pre-built movie card from the ingestion pipeline
+    /// If the movie doesn't exist, it will trigger ingestion automatically
+    func fetchMovieCard(tmdbId: String) async throws -> MovieCard {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        // Build URL with query parameter
+        var urlComponents = URLComponents(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-movie-card")
+        urlComponents?.queryItems = [URLQueryItem(name: "tmdb_id", value: tmdbId)]
+        
+        guard let url = urlComponents?.url else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
+               let errorMessage = errorData["error"] {
+                throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
+            }
+            throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(MovieCard.self, from: data)
+    }
+    
+    /// Searches for movies using TMDB API
+    func searchMovies(query: String, year: Int? = nil) async throws -> [MovieSearchResult] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        // Build URL with query parameters
+        var urlComponents = URLComponents(string: "\(SupabaseConfig.supabaseURL)/functions/v1/search-movies")
+        var queryItems = [URLQueryItem(name: "q", value: query)]
+        if let year = year {
+            queryItems.append(URLQueryItem(name: "year", value: String(year)))
+        }
+        urlComponents?.queryItems = queryItems
+        
+        guard let url = urlComponents?.url else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
+               let errorMessage = errorData["error"] {
+                throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
+            }
+            throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let result = try decoder.decode(SearchResponse.self, from: data)
+        return result.movies
+    }
+    
+    /// Triggers ingestion for a movie (force refresh)
+    func ingestMovie(tmdbId: String, forceRefresh: Bool = false) async throws -> MovieCard {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/ingest-movie") else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        struct IngestRequest: Codable {
+            let tmdb_id: String
+            let force_refresh: Bool
+        }
+        
+        let requestBody = IngestRequest(tmdb_id: tmdbId, force_refresh: forceRefresh)
+        let encoder = JSONEncoder()
+        let requestData = try encoder.encode(requestBody)
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = requestData
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
+               let errorMessage = errorData["error"] {
+                throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
+            }
+            throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        
+        // Response might have 'card' wrapper or be the card directly
+        if let wrapper = try? decoder.decode([String: AnyCodable].self, from: data),
+           let cardData = wrapper["card"],
+           let cardJSON = try? JSONSerialization.data(withJSONObject: cardData.value) {
+            return try decoder.decode(MovieCard.self, from: cardJSON)
+        }
+        return try decoder.decode(MovieCard.self, from: data)
+    }
+}
+
+// MARK: - Helper for Dynamic JSON Decoding
+
+private struct AnyCodable: Codable {
+    let value: Any
+    
+    init(_ value: Any) {
+        self.value = value
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        
+        if let bool = try? container.decode(Bool.self) {
+            value = bool
+        } else if let int = try? container.decode(Int.self) {
+            value = int
+        } else if let double = try? container.decode(Double.self) {
+            value = double
+        } else if let string = try? container.decode(String.self) {
+            value = string
+        } else if let array = try? container.decode([AnyCodable].self) {
+            value = array.map { $0.value }
+        } else if let dictionary = try? container.decode([String: AnyCodable].self) {
+            value = dictionary.mapValues { $0.value }
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "AnyCodable value cannot be decoded")
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        
+        switch value {
+        case let bool as Bool:
+            try container.encode(bool)
+        case let int as Int:
+            try container.encode(int)
+        case let double as Double:
+            try container.encode(double)
+        case let string as String:
+            try container.encode(string)
+        case let array as [Any]:
+            try container.encode(array.map { AnyCodable($0) })
+        case let dictionary as [String: Any]:
+            try container.encode(dictionary.mapValues { AnyCodable($0) })
+        default:
+            throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: container.codingPath, debugDescription: "AnyCodable value cannot be encoded"))
+        }
+    }
 }
 
 // MARK: - Error Types
