@@ -137,6 +137,10 @@ struct CastMember: Codable, Identifiable {
     
     var profileURL: URL? {
         guard let profilePath = profilePath else { return nil }
+        // Handle both full URLs (from Supabase Storage) and TMDB paths
+        if profilePath.starts(with: "http") {
+            return URL(string: profilePath)
+        }
         return URL(string: "https://image.tmdb.org/t/p/w185\(profilePath)")
     }
     
@@ -155,6 +159,10 @@ struct CrewMember: Codable, Identifiable {
     
     var profileURL: URL? {
         guard let profilePath = profilePath else { return nil }
+        // Handle both full URLs (from Supabase Storage) and TMDB paths
+        if profilePath.starts(with: "http") {
+            return URL(string: profilePath)
+        }
         return URL(string: "https://image.tmdb.org/t/p/w185\(profilePath)")
     }
     

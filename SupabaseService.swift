@@ -528,23 +528,23 @@ class SupabaseService: ObservableObject {
     
     /// Fetches a pre-built movie card from the ingestion pipeline
     /// If the movie doesn't exist, it will trigger ingestion automatically
+    /// Accepts tmdbId as String or Int
     func fetchMovieCard(tmdbId: String) async throws -> MovieCard {
-        guard let client = client else {
-            throw SupabaseError.notConfigured
-        }
-        
-        // Build URL with query parameter
-        var urlComponents = URLComponents(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-movie-card")
-        urlComponents?.queryItems = [URLQueryItem(name: "tmdb_id", value: tmdbId)]
-        
-        guard let url = urlComponents?.url else {
+        guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-movie-card") else {
             throw SupabaseError.invalidResponse
         }
         
+        // Use POST with body (supports both string and number)
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = "POST"
         request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Try to convert to Int if possible, otherwise use as String
+        let tmdbIdValue: Any = Int(tmdbId) ?? tmdbId
+        let requestBody: [String: Any] = ["tmdb_id": tmdbIdValue]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -563,6 +563,11 @@ class SupabaseService: ObservableObject {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(MovieCard.self, from: data)
+    }
+    
+    /// Fetches a pre-built movie card using Int tmdbId
+    func fetchMovieCard(tmdbId: Int) async throws -> MovieCard {
+        return try await fetchMovieCard(tmdbId: String(tmdbId))
     }
     
     /// Searches for movies using TMDB API

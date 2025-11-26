@@ -53,7 +53,20 @@ class MovieDetailService {
             return cached.movieDetail
         }
         
-        // Try TMDB API first
+        // Try Supabase get-movie-card endpoint first (auto-ingests if not in DB)
+        do {
+            let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: id)
+            let movieDetail = movieCard.toMovieDetail()
+            
+            // Cache the result
+            movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: id))
+            
+            return movieDetail
+        } catch {
+            print("⚠️ Supabase get-movie-card failed for ID \(id), falling back to TMDB: \(error)")
+        }
+        
+        // Fallback to TMDB API
         do {
             let movieDetail = try await fetchFromTMDB(movieId: id)
             
@@ -65,7 +78,7 @@ class MovieDetailService {
             print("⚠️ TMDB API failed for ID \(id), falling back to JSON: \(error)")
         }
         
-        // Fall back to JSON
+        // Final fallback to JSON
         let movie = try await loadFromJSON(id: id)
         
         // Cache the result
@@ -81,9 +94,23 @@ class MovieDetailService {
             return cached.movieDetail
         }
         
-        // Try to convert string ID to Int for TMDB API
+        // Try to convert string ID to Int for Supabase get-movie-card
         if let movieId = Int(stringId) {
-            // Fetch from TMDB API
+            // Try Supabase get-movie-card endpoint first (auto-ingests if not in DB)
+            do {
+                let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                let movieDetail = movieCard.toMovieDetail()
+                
+                // Cache the result
+                stringIdCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: stringId as NSString)
+                movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: movieId))
+                
+                return movieDetail
+            } catch {
+                print("⚠️ Supabase get-movie-card failed for string ID \(stringId), falling back to TMDB: \(error)")
+            }
+            
+            // Fallback to TMDB API
             do {
                 let movieDetail = try await fetchFromTMDB(movieId: movieId)
                 
