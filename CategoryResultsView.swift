@@ -1,54 +1,24 @@
-//
 //  CategoryResultsView.swift
-//  Tasty Mangoes
-//
-//  Updated by Claude on 11/13/25 at 7:53 PM
-//  TOTAL LINES: 385
-//
+//  Created automatically by Cursor Assistant
+//  Created on: 2025-01-15 at 21:30 (America/Los_Angeles - Pacific Time)
+//  Notes: Updated to use real search results from Supabase instead of dummy data
 
 import SwiftUI
 
 struct CategoryResultsView: View {
     @State private var searchText = ""
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var filterState = SearchFilterState.shared
     
-    // Sample data - using your existing Movie model with REAL IDs from movies.json
-    let movies: [Movie] = [
-        Movie(
-            id: "inception",
-            title: "Inception",
-            year: 2010,
-            trailerURL: "https://example.com/trailer/inception",
-            trailerDuration: "2:24",
-            posterImageURL: nil,
-            tastyScore: 93.0,
-            aiScore: 8.9,
-            genres: ["Sci-Fi", "Thriller"],
-            rating: "PG-13",
-            director: "Christopher Nolan",
-            runtime: "2h 28m",
-            releaseDate: "July 16, 2010",
-            language: "English",
-            overview: "A thief who steals secrets through dreams is given a chance to plant an idea instead."
-        ),
-        Movie(
-            id: "parasite",
-            title: "Parasite",
-            year: 2019,
-            trailerURL: "https://example.com/trailer/parasite",
-            trailerDuration: "2:11",
-            posterImageURL: nil,
-            tastyScore: 96.0,
-            aiScore: 9.2,
-            genres: ["Thriller", "Drama"],
-            rating: "R",
-            director: "Bong Joon-ho",
-            runtime: "2h 12m",
-            releaseDate: "May 30, 2019",
-            language: "Korean",
-            overview: "A poor family schemes to enter the lives of a wealthy household, with unexpected consequences."
-        )
-    ]
+    // Real search results from Supabase
+    @State private var movies: [Movie] = []
+    @State private var isLoading = false
+    @State private var error: Error?
+    
+    // Get search query from filterState or use empty string
+    private var searchQuery: String {
+        filterState.searchQuery.isEmpty ? "" : filterState.searchQuery
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -64,9 +34,13 @@ struct CategoryResultsView: View {
                                     .frame(width: 20, height: 20)
                             }
                             
-                            Text("Searching film by name...")
+                            TextField("Searching film by name...", text: $searchText)
                                 .font(.system(size: 14))
                                 .foregroundColor(Color(hex: "#666666"))
+                                .onSubmit {
+                                    filterState.searchQuery = searchText
+                                    loadMovies()
+                                }
                             
                             Spacer()
                             
@@ -102,45 +76,169 @@ struct CategoryResultsView: View {
                 .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: 2)
                 
                 // Results List
-                ScrollView {
+                if isLoading {
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Searching movies...")
+                            .font(.system(size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                            .padding(.top, 16)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = error {
                     VStack(spacing: 16) {
-                        // Filter Badges
-                        HStack(spacing: 4) {
-                            FilterBadge(
-                                title: "Platform:",
-                                count: 2,
-                                showAvatars: true
-                            )
-                            
-                            FilterBadge(
-                                title: "Geners:",
-                                count: 3,
-                                showAvatars: false
-                            )
-                            
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                        
-                        // Movie Cards with Navigation
-                        VStack(spacing: 8) {
-                            ForEach(movies) { movie in
-                                NavigationLink(destination: MoviePageView(movieId: movie.id)) {
-                                    MovieCardHorizontal(movie: movie)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 48))
+                            .foregroundColor(Color(hex: "#FF6B6B"))
+                        Text("Error loading movies")
+                            .font(.custom("Nunito-Bold", size: 20))
+                            .foregroundColor(Color(hex: "#1a1a1a"))
+                        Text(error.localizedDescription)
+                            .font(.system(size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                        Button(action: {
+                            loadMovies()
+                        }) {
+                            Text("Try Again")
+                                .font(.custom("Inter-SemiBold", size: 16))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 32)
+                                .padding(.vertical, 12)
+                                .background(Color(hex: "#8B5CF6"))
+                                .cornerRadius(8)
                         }
                     }
-                    .padding(.bottom, 20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if movies.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "film")
+                            .font(.system(size: 64))
+                            .foregroundColor(Color(hex: "#CCCCCC"))
+                        Text("No movies found")
+                            .font(.custom("Nunito-Bold", size: 24))
+                            .foregroundColor(Color(hex: "#1a1a1a"))
+                        Text("Try adjusting your search or filters")
+                            .font(.system(size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Filter Badges
+                            HStack(spacing: 4) {
+                                if !filterState.selectedPlatforms.isEmpty {
+                                    FilterBadge(
+                                        title: "Platform:",
+                                        count: filterState.selectedPlatforms.count,
+                                        showAvatars: true
+                                    )
+                                }
+                                
+                                if !filterState.selectedGenres.isEmpty {
+                                    FilterBadge(
+                                        title: "Genres:",
+                                        count: filterState.selectedGenres.count,
+                                        showAvatars: false
+                                    )
+                                }
+                                
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+                            
+                            // Results count
+                            HStack {
+                                Text("\(movies.count) results found")
+                                    .font(.custom("Inter-SemiBold", size: 14))
+                                    .foregroundColor(Color(hex: "#666666"))
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            
+                            // Movie Cards with Navigation
+                            VStack(spacing: 8) {
+                                ForEach(movies) { movie in
+                                    NavigationLink(destination: MoviePageView(movieId: movie.id)) {
+                                        MovieCardHorizontal(movie: movie)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                        }
+                        .padding(.bottom, 20)
+                    }
+                    .background(Color(hex: "#fdfdfd"))
                 }
-                .background(Color(hex: "#fdfdfd"))
             }
         }
         .navigationBarBackButtonHidden(false)
         .navigationBarTitleDisplayMode(.inline)
         .ignoresSafeArea(edges: .top)
+        .task {
+            // Load movies when view appears
+            searchText = searchQuery
+            loadMovies()
+        }
+        .onChange(of: filterState.selectedPlatforms) { oldValue, newValue in
+            // Reload when filters change
+            loadMovies()
+        }
+        .onChange(of: filterState.selectedGenres) { oldValue, newValue in
+            // Reload when filters change
+            loadMovies()
+        }
+    }
+    
+    // MARK: - Methods
+    
+    private func loadMovies() {
+        isLoading = true
+        error = nil
+        
+        Task {
+            do {
+                // Use Supabase search-movies endpoint
+                let query = searchQuery.isEmpty ? "popular" : searchQuery
+                let searchResults = try await SupabaseService.shared.searchMovies(query: query)
+                
+                // Convert MovieSearchResult to Movie
+                let convertedMovies = searchResults.map { result -> Movie in
+                    Movie(
+                        id: result.tmdbId,
+                        title: result.title,
+                        year: result.year ?? 0,
+                        trailerURL: nil,
+                        trailerDuration: nil,
+                        posterImageURL: result.posterUrl,
+                        tastyScore: nil,
+                        aiScore: result.voteAverage,
+                        genres: [],
+                        rating: nil,
+                        director: nil,
+                        runtime: nil,
+                        releaseDate: nil,
+                        language: nil,
+                        overview: result.overviewShort
+                    )
+                }
+                
+                await MainActor.run {
+                    self.movies = convertedMovies
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.error = error
+                    self.isLoading = false
+                    print("❌ Error loading movies: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 }
 

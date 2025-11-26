@@ -31,31 +31,11 @@ struct SearchCategoriesView: View {
     }
     
     // Computed property for filtered movies count (based on search + filters)
+    // Note: This is a placeholder - actual movie counts will come from search results
     private var filteredMoviesCount: Int {
-        let allMovies = SearchViewModel.testMovies
-        let query = searchQuery.lowercased().trimmingCharacters(in: .whitespaces)
-        
-        var filtered = allMovies
-        
-        // Filter by search query if present
-        if !query.isEmpty {
-            filtered = filtered.filter { movie in
-                movie.title.lowercased().contains(query)
-            }
-        }
-        
-        // Filter by selected genres if any
-        if !filterState.selectedGenres.isEmpty {
-            filtered = filtered.filter { movie in
-                // Check if movie has any of the selected genres
-                !Set(movie.genres).isDisjoint(with: filterState.selectedGenres)
-            }
-        }
-        
-        // Note: Platform filtering would require movie.platforms property (not implemented yet)
-        // For now, platform selection doesn't filter movies, only counts as a selection
-        
-        return filtered.count
+        // Return 0 as placeholder - real counts will come from actual search results
+        // This property may not be used anymore since we're using real search
+        return 0
     }
     
     // Category groups with counts (matching Figma design)
