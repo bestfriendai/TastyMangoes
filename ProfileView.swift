@@ -127,8 +127,8 @@ struct ProfileView: View {
                             saveSubscriptions()
                         }) {
                             Text("Save Subscriptions (\(selectedSubscriptions.count))")
-                                .font(.custom("Nunito-Bold", size: 16))
-                                .foregroundColor(.white)
+                                .font(.custom("Nunito-Bold", size: 18))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(
@@ -162,7 +162,7 @@ struct ProfileView: View {
                             }
                         }) {
                             Text("Sign Out")
-                                .font(.custom("Nunito-Bold", size: 16))
+                                .font(.custom("Nunito-Bold", size: 18))
                                 .foregroundColor(Color(hex: "#333333"))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
@@ -171,7 +171,7 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
-                        .padding(.bottom, 32)
+                        .padding(.bottom, 100)
                     }
                 }
             }
@@ -268,6 +268,9 @@ struct PlatformSubscriptionRow: View {
                             .foregroundColor(.white)
                     }
                 }
+                
+                // Platform Icon
+                PlatformIconHelper.icon(for: platform, size: 24)
                 
                 // Platform Name
                 Text(platform)

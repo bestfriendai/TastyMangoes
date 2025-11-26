@@ -12,6 +12,7 @@ struct SignInView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingSignUp = false
+    @State private var showPassword = false
     
     var body: some View {
         NavigationStack {
@@ -59,13 +60,29 @@ struct SignInView: View {
                                     .font(.custom("Inter-SemiBold", size: 14))
                                     .foregroundColor(Color(hex: "#333333"))
                                 
-                                SecureField("Enter your password", text: $password)
-                                    .font(.custom("Inter-Regular", size: 16))
-                                    .foregroundColor(Color(hex: "#333333"))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 12)
-                                    .background(Color(hex: "#f3f3f3"))
-                                    .cornerRadius(8)
+                                HStack {
+                                    if showPassword {
+                                        TextField("Enter your password", text: $password)
+                                            .font(.custom("Inter-Regular", size: 16))
+                                            .foregroundColor(Color(hex: "#333333"))
+                                    } else {
+                                        SecureField("Enter your password", text: $password)
+                                            .font(.custom("Inter-Regular", size: 16))
+                                            .foregroundColor(Color(hex: "#333333"))
+                                    }
+                                    
+                                    Button(action: {
+                                        showPassword.toggle()
+                                    }) {
+                                        Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(Color(hex: "#666666"))
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 12)
+                                .background(Color(hex: "#f3f3f3"))
+                                .cornerRadius(8)
                             }
                             
                             // Error Message

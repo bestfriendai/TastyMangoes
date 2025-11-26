@@ -75,6 +75,7 @@
 		C5E27A4D2EC9979400065356 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A4E2EC9979400065356 /* SupabaseService.swift */; };
 		C5E27A4F2EC9979400065357 /* SupabaseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A502EC9979400065357 /* SupabaseModels.swift */; };
 		C5E27A512EC9979400065358 /* SupabaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A522EC9979400065358 /* SupabaseConfig.swift */; };
+		C5E27A532EC9979400065359 /* PlatformIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A542EC9979400065359 /* PlatformIconHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -162,6 +163,7 @@
 		C5E27A4E2EC9979400065356 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		C5E27A502EC9979400065357 /* SupabaseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseModels.swift; sourceTree = "<group>"; };
 		C5E27A522EC9979400065358 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
+		C5E27A542EC9979400065359 /* PlatformIconHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformIconHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -245,6 +247,7 @@
 				C5E27A4E2EC9979400065356 /* SupabaseService.swift */,
 				C5E27A502EC9979400065357 /* SupabaseModels.swift */,
 				C5E27A522EC9979400065358 /* SupabaseConfig.swift */,
+				C5E27A542EC9979400065359 /* PlatformIconHelper.swift */,
 				C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */,
 				C517CD132EC9806C00EAE1FE /* SearchComponents.swift */,
 				C5B95D262ECB1D4000B47098 /* SearchCategoriesView.swift */,
@@ -497,6 +500,7 @@
 				C5E27A4D2EC9979400065356 /* SupabaseService.swift in Sources */,
 				C5E27A4F2EC9979400065357 /* SupabaseModels.swift in Sources */,
 				C5E27A512EC9979400065358 /* SupabaseConfig.swift in Sources */,
+				C5E27A532EC9979400065359 /* PlatformIconHelper.swift in Sources */,
 				C517CD362EC9806C00EAE1FE /* CustomIcons.swift in Sources */,
 				C517CD372EC9806C00EAE1FE /* MovieDetailService.swift in Sources */,
 				C5B95D4B2ECB59C500B47098 /* SearchFilterDetailSheet.swift in Sources */,
