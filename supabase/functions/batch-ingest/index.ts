@@ -8,8 +8,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 serve(async (req) => {
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SERVICE_ROLE_KEY')!;
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
@@ -33,14 +33,14 @@ serve(async (req) => {
     
     for (const work of works) {
       try {
-        // Call ingest function for each movie
+        // Call ingest function for each movie with force_refresh=true
         const response = await fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseServiceKey}`,
           },
-          body: JSON.stringify({ tmdb_id: work.tmdb_id }),
+          body: JSON.stringify({ tmdb_id: work.tmdb_id, force_refresh: true }),
         });
         
         const result = await response.json();

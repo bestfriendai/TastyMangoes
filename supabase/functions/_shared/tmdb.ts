@@ -173,3 +173,53 @@ export function formatRuntime(minutes: number | null | undefined): string {
   }
 }
 
+/**
+ * Download an image from a URL and return as ArrayBuffer
+ */
+export async function downloadImage(url: string): Promise<ArrayBuffer | null> {
+  if (!url) return null;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`Failed to download image from ${url}: ${response.status}`);
+      return null;
+    }
+    return await response.arrayBuffer();
+  } catch (error) {
+    console.warn(`Error downloading image from ${url}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Download YouTube thumbnail
+ * Tries maxresdefault first, falls back to hqdefault
+ */
+export async function downloadYouTubeThumbnail(youtubeId: string): Promise<ArrayBuffer | null> {
+  if (!youtubeId) return null;
+  
+  // Try maxresdefault first
+  const maxresUrl = `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+  const maxresImage = await downloadImage(maxresUrl);
+  
+  if (maxresImage) {
+    // Check if it's actually an image (not the default "video unavailable" placeholder)
+    // YouTube returns a 120x90 placeholder if maxres doesn't exist
+    const view = new Uint8Array(maxresImage.slice(0, 100));
+    const header = Array.from(view.slice(0, 4));
+    
+    // If it's a valid JPEG, return it
+    if (header[0] === 0xFF && header[1] === 0xD8) {
+      // Check file size - placeholder is usually very small
+      if (maxresImage.byteLength > 5000) {
+        return maxresImage;
+      }
+    }
+  }
+  
+  // Fallback to hqdefault
+  const hqUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+  return await downloadImage(hqUrl);
+}
+
