@@ -33,6 +33,7 @@ struct MovieCard: Codable, Identifiable {
     let sourceScores: SourceScores?
     let similarMovieIds: [Int]?
     let stillImages: [String]?
+    let trailers: [MovieClip]?
     let lastUpdated: String?
     
     var id: Int { workId }
@@ -63,7 +64,24 @@ struct MovieCard: Codable, Identifiable {
         case sourceScores = "source_scores"
         case similarMovieIds = "similar_movie_ids"
         case stillImages = "still_images"
+        case trailers
         case lastUpdated = "last_updated"
+    }
+}
+
+// MARK: - Movie Clip (for trailers array)
+
+struct MovieClip: Codable, Identifiable {
+    let key: String
+    let name: String
+    let type: String
+    let thumbnailUrl: String?
+    
+    var id: String { key }
+    
+    enum CodingKeys: String, CodingKey {
+        case key, name, type
+        case thumbnailUrl = "thumbnail_url"
     }
 }
 

@@ -24,6 +24,128 @@ const supabaseServiceKey = Deno.env.get('SERVICE_ROLE_KEY')!;
 const STORAGE_BUCKET = 'movie-images';
 const STORAGE_BASE_URL = `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}`;
 
+// Schema versioning for lazy re-ingestion
+const CURRENT_SCHEMA_VERSION = 2;
+
+/**
+ * Upgrade movie schema from one version to another
+ * Fetches only missing data based on version differences
+ */
+async function upgradeSchemaIfNeeded(
+  supabaseAdmin: any,
+  workId: number,
+  currentVersion: number,
+  tmdbId: string
+): Promise<{ trailers?: any[] }> {
+  const upgradeResult: { trailers?: any[] } = {};
+  
+  if (currentVersion >= CURRENT_SCHEMA_VERSION) {
+    console.log(`[UPGRADE] Movie ${workId} already at schema version ${currentVersion}, no upgrade needed`);
+    return upgradeResult;
+  }
+  
+  console.log(`[UPGRADE] Upgrading movie ${workId} from v${currentVersion} to v${CURRENT_SCHEMA_VERSION}`);
+  
+  // v1 → v2: Add trailers array
+  if (currentVersion < 2 && CURRENT_SCHEMA_VERSION >= 2) {
+    console.log(`[UPGRADE] Fetching videos for v1 → v2 upgrade...`);
+    
+    try {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const videos = await fetchMovieVideos(tmdbId);
+      
+      const trailersArray: Array<{
+        key: string;
+        name: string;
+        type: string;
+        thumbnail_url: string | null;
+      }> = [];
+      
+      const videosToProcess = videos.results.slice(0, 10);
+      
+      // Helper function to upload image to storage (reuse from main function)
+      const uploadImageToStorage = async (
+        imageBuffer: ArrayBuffer,
+        storagePath: string
+      ): Promise<string | null> => {
+        try {
+          const uint8Array = new Uint8Array(imageBuffer);
+          const { data: uploadData, error: uploadError } = await supabaseAdmin
+            .storage
+            .from('movie-images')
+            .upload(storagePath, uint8Array, {
+              contentType: 'image/jpeg',
+              upsert: true
+            });
+          
+          if (uploadError) {
+            console.error(`[UPGRADE] Upload failed for ${storagePath}:`, uploadError);
+            return null;
+          }
+          
+          return `${STORAGE_BASE_URL}/${storagePath}`;
+        } catch (error) {
+          console.error(`[UPGRADE] Error uploading ${storagePath}:`, error);
+          return null;
+        }
+      };
+      
+      for (let i = 0; i < videosToProcess.length; i++) {
+        const video = videosToProcess[i];
+        if (!video.key || video.site !== 'YouTube') {
+          continue;
+        }
+        
+        let thumbnailUrl: string | null = null;
+        try {
+          const thumbnailData = await downloadYouTubeThumbnail(video.key);
+          if (thumbnailData) {
+            const storagePath = `trailers/${workId}_${i}.jpg`;
+            thumbnailUrl = await uploadImageToStorage(thumbnailData, storagePath);
+          }
+        } catch (error) {
+          console.warn(`[UPGRADE] Failed to download thumbnail for video ${video.name}:`, error);
+        }
+        
+        trailersArray.push({
+          key: video.key,
+          name: video.name,
+          type: video.type,
+          thumbnail_url: thumbnailUrl,
+        });
+        
+        if (i < videosToProcess.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+      }
+      
+      // Update works_meta with trailers and schema_version
+      const { error: updateError } = await supabaseAdmin
+        .from('works_meta')
+        .update({
+          trailers: trailersArray.length > 0 ? trailersArray : null,
+          schema_version: 2,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('work_id', workId);
+      
+      if (updateError) {
+        console.error(`[UPGRADE] Failed to update works_meta:`, updateError);
+        throw updateError;
+      }
+      
+      upgradeResult.trailers = trailersArray.length > 0 ? trailersArray : null;
+      console.log(`[UPGRADE] Successfully upgraded to v2, added ${trailersArray.length} trailers`);
+      
+    } catch (error) {
+      console.error(`[UPGRADE] Error during v1 → v2 upgrade:`, error);
+      throw error;
+    }
+  }
+  
+  return upgradeResult;
+}
+
 serve(async (req) => {
   try {
     const { tmdb_id, force_refresh = false } = await req.json();
@@ -70,7 +192,7 @@ serve(async (req) => {
           .single();
         
         if (updatedWork && updatedWork.ingestion_status === 'complete') {
-          // Return cached card
+          // Return cached card, but check for schema upgrade first
           const { data: cachedCard } = await supabaseAdmin
             .from('work_cards_cache')
             .select('payload')
@@ -78,6 +200,58 @@ serve(async (req) => {
             .single();
           
           if (cachedCard) {
+            // Check if schema upgrade is needed
+            const { data: workMeta } = await supabaseAdmin
+              .from('works_meta')
+              .select('schema_version')
+              .eq('work_id', existingWork.work_id)
+              .single();
+            
+            const schemaVersion = workMeta?.schema_version || 1;
+            
+            if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+              console.log(`[INGEST] Cached card needs schema upgrade: v${schemaVersion} → v${CURRENT_SCHEMA_VERSION}`);
+              
+              try {
+                // Perform schema upgrade
+                const upgradeResult = await upgradeSchemaIfNeeded(
+                  supabaseAdmin,
+                  existingWork.work_id,
+                  schemaVersion,
+                  tmdb_id.toString()
+                );
+                
+                // Merge upgraded data into cached card
+                let upgradedCard = { ...cachedCard.payload };
+                if (upgradeResult.trailers) {
+                  upgradedCard.trailers = upgradeResult.trailers;
+                }
+                
+                // Update cache with upgraded card
+                await supabaseAdmin
+                  .from('work_cards_cache')
+                  .update({
+                    payload: upgradedCard,
+                    computed_at: new Date().toISOString(),
+                  })
+                  .eq('work_id', existingWork.work_id);
+                
+                console.log(`[INGEST] Schema upgrade complete, returning upgraded card for work_id: ${existingWork.work_id}`);
+                return new Response(
+                  JSON.stringify({ 
+                    status: 'upgraded', 
+                    work_id: existingWork.work_id,
+                    card: upgradedCard 
+                  }),
+                  { headers: { 'Content-Type': 'application/json' } }
+                );
+              } catch (upgradeError) {
+                console.error(`[INGEST] Schema upgrade failed:`, upgradeError);
+                // Return original cached card if upgrade fails
+                console.log(`[INGEST] Returning original cached card despite upgrade failure`);
+              }
+            }
+            
             console.log(`[INGEST] Duplicate ingestion completed, returning cached card for work_id: ${existingWork.work_id}`);
             return new Response(
               JSON.stringify({ 
@@ -115,7 +289,7 @@ serve(async (req) => {
           console.warn('[INGEST] Error checking staleness:', staleError);
           // Continue with refresh if staleness check fails
         } else if (!isStale) {
-          // Return cached card
+          // Return cached card, but check for schema upgrade first
           const { data: cachedCard } = await supabaseAdmin
             .from('work_cards_cache')
             .select('payload')
@@ -123,6 +297,58 @@ serve(async (req) => {
             .single();
           
           if (cachedCard) {
+            // Check if schema upgrade is needed
+            const { data: workMeta } = await supabaseAdmin
+              .from('works_meta')
+              .select('schema_version')
+              .eq('work_id', existingWork.work_id)
+              .single();
+            
+            const schemaVersion = workMeta?.schema_version || 1;
+            
+            if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+              console.log(`[INGEST] Cached card needs schema upgrade: v${schemaVersion} → v${CURRENT_SCHEMA_VERSION}`);
+              
+              try {
+                // Perform schema upgrade
+                const upgradeResult = await upgradeSchemaIfNeeded(
+                  supabaseAdmin,
+                  existingWork.work_id,
+                  schemaVersion,
+                  tmdb_id.toString()
+                );
+                
+                // Merge upgraded data into cached card
+                let upgradedCard = { ...cachedCard.payload };
+                if (upgradeResult.trailers) {
+                  upgradedCard.trailers = upgradeResult.trailers;
+                }
+                
+                // Update cache with upgraded card
+                await supabaseAdmin
+                  .from('work_cards_cache')
+                  .update({
+                    payload: upgradedCard,
+                    computed_at: new Date().toISOString(),
+                  })
+                  .eq('work_id', existingWork.work_id);
+                
+                console.log(`[INGEST] Schema upgrade complete, returning upgraded card for work_id: ${existingWork.work_id}`);
+                return new Response(
+                  JSON.stringify({ 
+                    status: 'cached_upgraded', 
+                    work_id: existingWork.work_id,
+                    card: upgradedCard 
+                  }),
+                  { headers: { 'Content-Type': 'application/json' } }
+                );
+              } catch (upgradeError) {
+                console.error(`[INGEST] Schema upgrade failed:`, upgradeError);
+                // Return original cached card if upgrade fails
+                console.log(`[INGEST] Returning original cached card despite upgrade failure`);
+              }
+            }
+            
             console.log(`[INGEST] Returning cached card for work_id: ${existingWork.work_id}`);
             return new Response(
               JSON.stringify({ 
@@ -497,6 +723,60 @@ serve(async (req) => {
       console.log(`[STORAGE] Still image upload complete. Uploaded ${stillImageStorageUrls.length} still images.`);
     }
     
+    // ============================================
+    // PROCESS VIDEOS TO CREATE TRAILERS ARRAY (Schema v2)
+    // ============================================
+    const trailersArray: Array<{
+      key: string;
+      name: string;
+      type: string;
+      thumbnail_url: string | null;
+    }> = [];
+    
+    // Process up to 10 videos (all types, not just trailers)
+    const videosToProcess = videos.results.slice(0, 10);
+    console.log(`[VIDEOS] Processing ${videosToProcess.length} videos for trailers array...`);
+    
+    for (let i = 0; i < videosToProcess.length; i++) {
+      const video = videosToProcess[i];
+      if (!video.key || video.site !== 'YouTube') {
+        continue; // Skip non-YouTube videos
+      }
+      
+      // Download YouTube thumbnail
+      let thumbnailUrl: string | null = null;
+      try {
+        console.log(`[DOWNLOAD] Downloading YouTube thumbnail for video: ${video.name} (ID: ${video.key})`);
+        const thumbnailData = await downloadYouTubeThumbnail(video.key);
+        
+        if (thumbnailData) {
+          const storagePath = `trailers/${work.work_id}_${i}.jpg`;
+          const storageUrl = await uploadImageToStorage(thumbnailData, storagePath);
+          if (storageUrl) {
+            thumbnailUrl = storageUrl;
+            console.log(`[STORAGE] Trailer thumbnail URL: ${storageUrl}`);
+          }
+        }
+      } catch (error) {
+        console.warn(`[VIDEOS] Failed to download thumbnail for video ${video.name}:`, error);
+        // Continue without thumbnail
+      }
+      
+      trailersArray.push({
+        key: video.key,
+        name: video.name,
+        type: video.type,
+        thumbnail_url: thumbnailUrl,
+      });
+      
+      // Add delay between downloads
+      if (i < videosToProcess.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    }
+    
+    console.log(`[VIDEOS] Processed ${trailersArray.length} videos into trailers array`);
+    
     // Build cast array (top 15) with storage URLs
     const castMembers = credits.cast.slice(0, 15).map(c => {
       const storageUrl = storageUrls.castPhotos.get(c.id.toString());
@@ -554,6 +834,8 @@ serve(async (req) => {
       crew_members: crewMembers,
       similar_movie_ids: similarMovieIds.length > 0 ? similarMovieIds : null, // Store array of TMDB IDs
       still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
+      trailers: trailersArray.length > 0 ? trailersArray : null, // Schema v2: trailers array with thumbnails
+      schema_version: CURRENT_SCHEMA_VERSION, // Set to current schema version
       fetched_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -661,6 +943,7 @@ serve(async (req) => {
       },
       similar_movie_ids: similarMovieIds, // Include similar movie IDs in card
       still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
+      trailers: trailersArray.length > 0 ? trailersArray : null, // Schema v2: trailers array
       last_updated: new Date().toISOString(),
     };
     

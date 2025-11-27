@@ -187,6 +187,7 @@ struct TMDBVideo: Codable, Identifiable {
     let type: String // "Trailer", "Teaser", "Clip", etc.
     let official: Bool
     let publishedAt: String
+    let customThumbnailURL: String? // Optional custom thumbnail URL (e.g., from Supabase storage)
     
     var youtubeURL: URL? {
         guard site == "YouTube" else { return nil }
@@ -194,6 +195,11 @@ struct TMDBVideo: Codable, Identifiable {
     }
     
     var thumbnailURL: URL? {
+        // Use custom thumbnail URL if available (from Supabase storage)
+        if let customUrl = customThumbnailURL, let url = URL(string: customUrl) {
+            return url
+        }
+        // Otherwise, use YouTube default thumbnail
         guard site == "YouTube" else { return nil }
         return URL(string: "https://img.youtube.com/vi/\(key)/maxresdefault.jpg")
     }
@@ -201,6 +207,20 @@ struct TMDBVideo: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, key, name, site, size, type, official
         case publishedAt = "published_at"
+        case customThumbnailURL = "custom_thumbnail_url"
+    }
+    
+    // Custom initializer for creating from MovieClip
+    init(id: String, key: String, name: String, site: String, size: Int, type: String, official: Bool, publishedAt: String, customThumbnailURL: String? = nil) {
+        self.id = id
+        self.key = key
+        self.name = name
+        self.site = site
+        self.size = size
+        self.type = type
+        self.official = official
+        self.publishedAt = publishedAt
+        self.customThumbnailURL = customThumbnailURL
     }
 }
 

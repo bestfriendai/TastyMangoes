@@ -179,13 +179,47 @@ class MovieDetailViewModel: ObservableObject {
     
     private func loadMovieVideos(movieId: Int) async {
         do {
-            let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
-            // Filter for clips and teasers (exclude trailers as we show those separately)
-            self.movieVideos = response.results.filter { 
-                $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 
-            }.prefix(5).map { $0 }
+            // Get MovieCard to retrieve trailers array (Schema v2)
+            let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            
+            // If we have trailers from the database, use them
+            if let trailers = movieCard.trailers, !trailers.isEmpty {
+                // Convert MovieClip array to TMDBVideo format for existing UI
+                // Use custom thumbnail URL from Supabase storage if available
+                self.movieVideos = trailers.map { clip in
+                    TMDBVideo(
+                        id: clip.key, // Use key as ID
+                        key: clip.key,
+                        name: clip.name,
+                        site: "YouTube",
+                        size: 1080, // Default size
+                        type: clip.type,
+                        official: true,
+                        publishedAt: "", // Empty string as placeholder
+                        customThumbnailURL: clip.thumbnailUrl // Use Supabase storage URL
+                    )
+                }
+                print("✅ Loaded \(self.movieVideos.count) videos from database trailers array")
+            } else {
+                // Fallback to TMDB API if no trailers in database (for movies not yet upgraded to v2)
+                print("⚠️ No trailers found in MovieCard, falling back to TMDB API")
+                let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
+                // Filter for clips and teasers (exclude trailers as we show those separately)
+                self.movieVideos = response.results.filter { 
+                    $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 
+                }.prefix(5).map { $0 }
+            }
         } catch {
             print("⚠️ Failed to load movie videos: \(error)")
+            // Fallback to TMDB API on error
+            do {
+                let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
+                self.movieVideos = response.results.filter { 
+                    $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 
+                }.prefix(5).map { $0 }
+            } catch {
+                print("⚠️ TMDB fallback also failed: \(error)")
+            }
         }
     }
     

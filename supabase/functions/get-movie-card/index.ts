@@ -91,6 +91,46 @@ serve(async (req) => {
       );
     }
     
+    // Get works_meta to check schema version
+    const { data: workMeta, error: metaError } = await supabase
+      .from('works_meta')
+      .select('schema_version, trailers')
+      .eq('work_id', work.work_id)
+      .single();
+    
+    const CURRENT_SCHEMA_VERSION = 2;
+    const schemaVersion = workMeta?.schema_version || 1;
+    
+    // Check if upgrade is needed
+    if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+      console.log(`[GET-CARD] Movie ${work.work_id} needs upgrade: v${schemaVersion} → v${CURRENT_SCHEMA_VERSION}`);
+      
+      // Trigger upgrade via ingest-movie (it will handle the upgrade logic)
+      try {
+        const upgradeResponse = await fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({ tmdb_id: tmdbId, force_refresh: false }),
+        });
+        
+        const upgradeResult = await upgradeResponse.json();
+        if (upgradeResponse.ok && upgradeResult.card) {
+          console.log(`[GET-CARD] Upgrade successful, returning upgraded card`);
+          return new Response(
+            JSON.stringify(upgradeResult.card),
+            { headers: { 'Content-Type': 'application/json' } }
+          );
+        } else {
+          console.warn(`[GET-CARD] Upgrade failed, continuing with existing data:`, upgradeResult);
+        }
+      } catch (upgradeError) {
+        console.warn(`[GET-CARD] Upgrade error, continuing with existing data:`, upgradeError);
+      }
+    }
+    
     // Get cached card
     const { data: card, error: cardError } = await supabase
       .from('work_cards_cache')
@@ -160,8 +200,17 @@ serve(async (req) => {
     
     console.log(`[GET-CARD] Returning cached card for work_id: ${work.work_id}`);
     
+    // Merge trailers from works_meta if available (for v2+)
+    let cardPayload = card.payload;
+    if (workMeta?.trailers && (!cardPayload.trailers || cardPayload.trailers.length === 0)) {
+      cardPayload = {
+        ...cardPayload,
+        trailers: workMeta.trailers,
+      };
+    }
+    
     return new Response(
-      JSON.stringify(card.payload), 
+      JSON.stringify(cardPayload), 
       {
         headers: {
           'Content-Type': 'application/json',
