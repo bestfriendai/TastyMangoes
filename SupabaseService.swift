@@ -560,9 +560,20 @@ class SupabaseService: ObservableObject {
             throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
         }
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(MovieCard.self, from: data)
+        // Check if response is wrapped in a "card" property
+        if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let cardData = jsonObject["card"] {
+            // Response is wrapped: { "card": { ... } }
+            let cardJSON = try JSONSerialization.data(withJSONObject: cardData)
+            let decoder = JSONDecoder()
+            // Don't use .convertFromSnakeCase since MovieCard has explicit CodingKeys
+            return try decoder.decode(MovieCard.self, from: cardJSON)
+        } else {
+            // Response is direct: { "work_id": 3, "trailer_youtube_id": "...", ... }
+            let decoder = JSONDecoder()
+            // Don't use .convertFromSnakeCase since MovieCard has explicit CodingKeys
+            return try decoder.decode(MovieCard.self, from: data)
+        }
     }
     
     /// Fetches a pre-built movie card using Int tmdbId
@@ -623,7 +634,7 @@ class SupabaseService: ObservableObject {
         }
         
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use .convertFromSnakeCase since SimilarMovieResult has explicit CodingKeys
         let responseObj = try decoder.decode(SimilarMoviesResponse.self, from: data)
         return responseObj.movies
     }
@@ -736,16 +747,21 @@ class SupabaseService: ObservableObject {
             throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
         }
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        
-        // Response might have 'card' wrapper or be the card directly
-        if let wrapper = try? decoder.decode([String: AnyCodable].self, from: data),
-           let cardData = wrapper["card"],
-           let cardJSON = try? JSONSerialization.data(withJSONObject: cardData.value) {
+        // Check if response is wrapped in a "card" property
+        // The API can return: { "card": { ... } } or { "work_id": 3, ... } directly
+        if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let cardData = jsonObject["card"] {
+            // Response is wrapped: { "card": { "work_id": 3, ... } }
+            let cardJSON = try JSONSerialization.data(withJSONObject: cardData)
+            let decoder = JSONDecoder()
+            // Don't use .convertFromSnakeCase since MovieCard has explicit CodingKeys
             return try decoder.decode(MovieCard.self, from: cardJSON)
+        } else {
+            // Response is direct: { "work_id": 3, "trailer_youtube_id": "...", ... }
+            let decoder = JSONDecoder()
+            // Don't use .convertFromSnakeCase since MovieCard has explicit CodingKeys
+            return try decoder.decode(MovieCard.self, from: data)
         }
-        return try decoder.decode(MovieCard.self, from: data)
     }
 }
 

@@ -76,6 +76,7 @@ extension MovieCard {
             criticsScore: nil, // Not in MovieCard
             audienceScore: nil, // Not in MovieCard
             trailerURL: trailerYoutubeId != nil ? "https://www.youtube.com/watch?v=\(trailerYoutubeId!)" : nil,
+            trailerYoutubeId: trailerYoutubeId, // Store raw ID for URL construction
             trailerDuration: nil,
             cast: castMembers.isEmpty ? nil : castMembers,
             crew: crewMembers.isEmpty ? nil : crewMembers,

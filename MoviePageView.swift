@@ -483,7 +483,7 @@ struct MoviePageView: View {
     
     private func trailerSection(_ movie: MovieDetail) -> some View {
         ZStack(alignment: .topLeading) {
-            // Backdrop Image
+            // Backdrop Image - disable hit testing so button can receive taps
             if let backdropURL = movie.backdropURL {
                 AsyncImage(url: backdropURL) { phase in
                     switch phase {
@@ -504,37 +504,92 @@ struct MoviePageView: View {
                 }
                 .frame(height: 193)
                 .clipped()
+                .allowsHitTesting(false) // Allow taps to pass through to button
             } else {
                 Rectangle()
                     .fill(Color(hex: "#1a1a1a"))
                     .frame(height: 193)
+                    .allowsHitTesting(false) // Allow taps to pass through to button
             }
             
-            // Play Trailer Button
-            HStack(spacing: 6) {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#f3f3f3"))
+            // Play Trailer Button - bigger and white (using Button like movie clips)
+            Button(action: {
+                print("🎬 [Trailer] Button tapped for movie: \(movie.title)")
+                print("🎬 [Trailer] movie.trailerYoutubeId: \(movie.trailerYoutubeId ?? "nil")")
+                print("🎬 [Trailer] movie.trailerURL: \(movie.trailerURL ?? "nil")")
+                print("🎬 [Trailer] viewModel.movieVideos count: \(viewModel.movieVideos.count)")
                 
-                Text("Play Trailer")
-                    .font(.custom("Nunito-Bold", size: 12))
-                    .foregroundColor(Color(hex: "#f3f3f3"))
+                // Try multiple sources for trailer URL
+                var youtubeURLToOpen: URL?
                 
-                if let duration = formatTrailerDuration(movie.trailerDuration) {
-                    Text(duration)
-                        .font(.custom("Inter-Regular", size: 12))
-                        .foregroundColor(Color(hex: "#ececec"))
+                // Priority 1: Use trailer_youtube_id from database
+                if let trailerYouTubeId = movie.trailerYoutubeId, !trailerYouTubeId.isEmpty {
+                    let youtubeURLString = "https://www.youtube.com/watch?v=\(trailerYouTubeId)"
+                    print("🎬 [Trailer] Constructing YouTube URL from ID: \(trailerYouTubeId) -> \(youtubeURLString)")
+                    youtubeURLToOpen = URL(string: youtubeURLString)
                 }
+                
+                // Priority 2: Extract ID from trailerURL if it's a full URL
+                if youtubeURLToOpen == nil, let trailerURL = movie.trailerURL, !trailerURL.isEmpty {
+                    print("🎬 [Trailer] Attempting to extract YouTube ID from trailerURL: \(trailerURL)")
+                    if let extractedId = extractYouTubeId(from: trailerURL) {
+                        let youtubeURLString = "https://www.youtube.com/watch?v=\(extractedId)"
+                        print("🎬 [Trailer] Extracted ID: \(extractedId) -> \(youtubeURLString)")
+                        youtubeURLToOpen = URL(string: youtubeURLString)
+                    } else if trailerURL.contains("youtube.com") || trailerURL.contains("youtu.be") {
+                        // If it's already a YouTube URL, use it directly
+                        youtubeURLToOpen = URL(string: trailerURL)
+                    }
+                }
+                
+                // Priority 3: Fallback to viewModel videos (same as movie clips)
+                if youtubeURLToOpen == nil {
+                    print("🎬 [Trailer] Checking viewModel.movieVideos for trailer...")
+                    if let firstTrailer = viewModel.movieVideos.first(where: { $0.type == "Trailer" }),
+                       let youtubeURL = firstTrailer.youtubeURL {
+                        print("🎬 [Trailer] Using trailer from viewModel videos: \(youtubeURL)")
+                        youtubeURLToOpen = youtubeURL
+                    }
+                }
+                
+                // Open the URL if we found one
+                if let url = youtubeURLToOpen {
+                    print("🎬 [Trailer] Opening URL: \(url)")
+                    UIApplication.shared.open(url, options: [:], completionHandler: { success in
+                        if success {
+                            print("✅ [Trailer] Successfully opened YouTube URL")
+                        } else {
+                            print("❌ [Trailer] Failed to open YouTube URL - completion handler returned false")
+                        }
+                    })
+                } else {
+                    print("❌ [Trailer] No valid trailer URL found from any source")
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text("Play Trailer")
+                        .font(.custom("Nunito-Bold", size: 18))
+                        .foregroundColor(.white)
+                    
+                    if let duration = formatTrailerDuration(movie.trailerDuration) {
+                        Text(duration)
+                            .font(.custom("Inter-Regular", size: 16))
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.black.opacity(0.3)) // Add subtle background for better visibility
+                .cornerRadius(8)
+                .contentShape(Rectangle()) // Ensure entire area is tappable
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .buttonStyle(PlainButtonStyle()) // Prevent default button styling
             .padding(.top, 12)
             .padding(.leading, 12)
-            .onTapGesture {
-                if let trailerURL = movie.trailerURL, let url = URL(string: trailerURL) {
-                    UIApplication.shared.open(url)
-                }
-            }
         }
         .frame(height: 193)
         .cornerRadius(8)
@@ -812,7 +867,7 @@ struct MoviePageView: View {
                 }
                 
                 if !movie.releaseDate.isEmpty {
-                    InfoRow(label: "Release dates", value: movie.releaseDate)
+                    InfoRow(label: "Release dates", value: formatReleaseDate(movie.releaseDate))
                 }
                 
                 InfoRow(label: "Country", value: "United States")
@@ -865,30 +920,30 @@ struct MoviePageView: View {
             // Horizontal scrolling cast cards
             if !viewModel.displayedCast.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 1) {
                         ForEach(viewModel.displayedCast.prefix(10), id: \.id) { member in
                             VStack(spacing: 8) {
-                                // Profile Image
+                                // Profile Image - 8% larger with 40% less spacing
                                 AsyncImage(url: member.profileURL) { phase in
                                     switch phase {
                                     case .empty:
-                                        Circle()
+                                        RoundedRectangle(cornerRadius: 8)
                                             .fill(Color(hex: "#f0f0f0"))
-                                            .frame(width: 80, height: 80)
+                                            .frame(width: 119, height: 178)
                                     case .success(let image):
                                         image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
-                                            .frame(width: 80, height: 80)
-                                            .clipShape(Circle())
+                                            .frame(width: 119, height: 178)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
                                     case .failure:
-                                        Circle()
+                                        RoundedRectangle(cornerRadius: 8)
                                             .fill(Color(hex: "#f0f0f0"))
-                                            .frame(width: 80, height: 80)
+                                            .frame(width: 119, height: 178)
                                     @unknown default:
-                                        Circle()
+                                        RoundedRectangle(cornerRadius: 8)
                                             .fill(Color(hex: "#f0f0f0"))
-                                            .frame(width: 80, height: 80)
+                                            .frame(width: 119, height: 178)
                                     }
                                 }
                                 
@@ -904,7 +959,7 @@ struct MoviePageView: View {
                                         .lineLimit(1)
                                 }
                             }
-                            .frame(width: 100)
+                            .frame(width: 140)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -912,19 +967,22 @@ struct MoviePageView: View {
                 .padding(.horizontal, -16)
             }
             
-            // Director and Writer
-            if let director = movie.director {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Director")
-                        .font(.custom("Inter-SemiBold", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
-                    
-                    Text(director)
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#333333"))
+            // All Crew Positions - stacked vertically with aligned names
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(getCrewPositions(from: movie), id: \.job) { position in
+                    HStack(alignment: .top, spacing: 0) {
+                        Text(position.job)
+                            .font(.custom("Inter-SemiBold", size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                            .frame(width: 100, alignment: .leading)
+                        
+                        Text(position.names)
+                            .font(.custom("Inter-Regular", size: 14))
+                            .foregroundColor(Color(hex: "#333333"))
+                    }
                 }
-                .padding(.top, 16)
             }
+            .padding(.top, 16)
         }
     }
     
@@ -1353,7 +1411,128 @@ struct MoviePageView: View {
         .padding(.horizontal, 16)
     }
     
-    // MARK: - Helper
+    // MARK: - Helper Functions
+    
+    // MARK: - Crew Position Data Structure
+    struct CrewPosition: Identifiable {
+        let id: String
+        let job: String
+        let names: String
+    }
+    
+    private func getCrewPositions(from movie: MovieDetail) -> [CrewPosition] {
+        guard let crew = movie.crew, !crew.isEmpty else { return [] }
+        
+        // Group crew by job title
+        var positions: [String: [String]] = [:]
+        
+        for member in crew {
+            let job = normalizeJobTitle(member.job)
+            if positions[job] == nil {
+                positions[job] = []
+            }
+            positions[job]?.append(member.name)
+        }
+        
+        // Define priority order for display
+        let priorityOrder = [
+            "Director",
+            "Writer",
+            "Screenplay",
+            "Producer",
+            "Director of Photography",
+            "Cinematography",
+            "Composer",
+            "Original Music Composer",
+            "Music",
+            "Editor",
+            "Production Design",
+            "Costume Design",
+            "Makeup",
+            "Sound",
+            "Visual Effects"
+        ]
+        
+        // Sort positions by priority, then alphabetically
+        let sortedPositions = positions.sorted { first, second in
+            let firstIndex = priorityOrder.firstIndex(of: first.key) ?? Int.max
+            let secondIndex = priorityOrder.firstIndex(of: second.key) ?? Int.max
+            
+            if firstIndex != secondIndex {
+                return firstIndex < secondIndex
+            }
+            return first.key < second.key
+        }
+        
+        // Convert to CrewPosition array
+        return sortedPositions.map { job, names in
+            CrewPosition(
+                id: job,
+                job: job,
+                names: names.joined(separator: ", ")
+            )
+        }
+    }
+    
+    private func normalizeJobTitle(_ job: String) -> String {
+        // Normalize job titles for consistent display
+        let normalized: String
+        switch job.lowercased() {
+        case "screenplay", "writer", "story":
+            normalized = "Writer"
+        case "director of photography", "cinematography":
+            normalized = "Director of Photography"
+        case "original music composer", "music":
+            normalized = "Composer"
+        default:
+            normalized = job
+        }
+        return normalized
+    }
+    
+    /// Extracts YouTube ID from a YouTube URL string
+    private func extractYouTubeId(from urlString: String) -> String? {
+        // Handle formats like: https://www.youtube.com/watch?v=VIDEO_ID
+        if let range = urlString.range(of: "watch?v=") {
+            let idStart = urlString.index(range.upperBound, offsetBy: 0)
+            let id = String(urlString[idStart...])
+            // Remove any query parameters after the ID
+            if let ampersandIndex = id.firstIndex(of: "&") {
+                return String(id[..<ampersandIndex])
+            }
+            return id
+        }
+        // Handle short format: https://youtu.be/VIDEO_ID
+        if let range = urlString.range(of: "youtu.be/") {
+            let idStart = urlString.index(range.upperBound, offsetBy: 0)
+            let id = String(urlString[idStart...])
+            if let questionIndex = id.firstIndex(of: "?") {
+                return String(id[..<questionIndex])
+            }
+            return id
+        }
+        return nil
+    }
+    
+    private func formatReleaseDate(_ dateString: String) -> String {
+        // Parse date string (format: "YYYY-MM-DD" or similar)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
+        if let date = dateFormatter.date(from: dateString) {
+            // Format as "Month Day, Year" (e.g., "November 1, 2024")
+            let outputFormatter = DateFormatter()
+            outputFormatter.dateFormat = "MMMM d, yyyy"
+            return outputFormatter.string(from: date)
+        }
+        
+        // Fallback: try to extract year if format is different
+        if let year = Int(dateString.prefix(4)) {
+            return dateString // Return as-is if we can't parse
+        }
+        
+        return dateString // Return original if parsing fails
+    }
     
     private func formatTrailerDuration(_ durationInSeconds: Int?) -> String? {
         guard let duration = durationInSeconds else { return nil }

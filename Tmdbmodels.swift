@@ -283,6 +283,7 @@ extension TMDBMovieDetail {
             criticsScore: nil,
             audienceScore: voteAverage, // Use TMDB score as audience score
             trailerURL: nil, // Would need separate videos API call
+            trailerYoutubeId: nil, // Would need separate videos API call  
             trailerDuration: nil,
             cast: castMembers,
             crew: crewMembers,
