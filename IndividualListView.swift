@@ -59,7 +59,7 @@ struct IndividualListView: View {
                         
                         // Movie Cards
                         ForEach(movies) { movie in
-                            NavigationLink(destination: MoviePageView(movieId: Int(movie.id) ?? 0)) {
+                            NavigationLink(destination: MoviePageView(movieId: movie.id)) {
                                 WatchlistProductCard(movie: movie)
                             }
                             .buttonStyle(.plain)
@@ -427,7 +427,7 @@ struct WatchlistProductCard: View {
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $showMoviePage) {
             NavigationStack {
-                MoviePageView(movieId: movie.id)
+                MoviePageView(movieId: movie.id) // movie.id is now TMDB ID string
             }
         }
     }

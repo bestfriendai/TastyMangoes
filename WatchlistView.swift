@@ -419,12 +419,12 @@ extension MovieCard {
         }()
         
         return MasterlistMovie(
-            id: String(workId),
+            id: tmdbId, // Use TMDB ID, not work_id, so navigation works correctly
             title: title,
             year: yearString,
             genres: genres ?? [],
             runtime: runtimeDisplay ?? (runtimeMinutes.map { "\($0) min" } ?? ""),
-            posterURL: poster?.medium ?? poster?.small ?? poster?.large,
+            posterURL: poster?.medium ?? poster?.large ?? poster?.small,
             tastyScore: tastyScore,
             aiScore: aiScore,
             friendsCount: friendsCount,
@@ -515,15 +515,12 @@ struct MasterlistMovieCard: View {
         }) {
             HStack(spacing: 12) {
             // Poster
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(hex: "#f0f0f0"))
-                    .frame(width: 60, height: 90)
-                
-                Image(systemName: "photo.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(Color(hex: "#999999"))
-            }
+            MoviePosterImage(
+                posterURL: movie.posterURL,
+                width: 60,
+                height: 90,
+                cornerRadius: 8
+            )
             
             // Movie Info
             VStack(alignment: .leading, spacing: 6) {

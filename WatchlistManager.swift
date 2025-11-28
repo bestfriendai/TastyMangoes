@@ -69,6 +69,20 @@ class WatchlistManager: ObservableObject {
         }
         movieLists[movieId]?.insert(listId)
         
+        // Update watchlist metadata with new film count
+        if let metadata = watchlistMetadata[listId] {
+            let count = getListCount(listId: listId)
+            watchlistMetadata[listId] = WatchlistItem(
+                id: metadata.id,
+                name: metadata.name,
+                filmCount: count,
+                thumbnailURL: metadata.thumbnailURL
+            )
+        }
+        
+        // Notify observers that lists have changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
         return true // Successfully added
     }
     
@@ -77,6 +91,17 @@ class WatchlistManager: ObservableObject {
         listMovies[listId]?.remove(movieId)
         movieLists[movieId]?.remove(listId)
         
+        // Update watchlist metadata with new film count
+        if let metadata = watchlistMetadata[listId] {
+            let count = getListCount(listId: listId)
+            watchlistMetadata[listId] = WatchlistItem(
+                id: metadata.id,
+                name: metadata.name,
+                filmCount: count,
+                thumbnailURL: metadata.thumbnailURL
+            )
+        }
+        
         // Clean up empty sets
         if listMovies[listId]?.isEmpty ?? false {
             listMovies.removeValue(forKey: listId)
@@ -84,6 +109,9 @@ class WatchlistManager: ObservableObject {
         if movieLists[movieId]?.isEmpty ?? false {
             movieLists.removeValue(forKey: movieId)
         }
+        
+        // Notify observers that lists have changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
     }
     
     /// Add a movie to multiple lists
@@ -175,6 +203,16 @@ class WatchlistManager: ObservableObject {
     func getAllWatchlists(sortBy: SortOption = .listOrder) -> [WatchlistItem] {
         let lists = watchlistMetadata.values
             .filter { $0.id != "masterlist" && $0.id != "1" } // Exclude masterlist
+            .map { metadata -> WatchlistItem in
+                // Update film count dynamically
+                let count = getListCount(listId: metadata.id)
+                return WatchlistItem(
+                    id: metadata.id,
+                    name: metadata.name,
+                    filmCount: count,
+                    thumbnailURL: metadata.thumbnailURL
+                )
+            }
         
         switch sortBy {
         case .listOrder:

@@ -59,13 +59,16 @@ extension MovieCard {
             return trimmed
         }()
         
+        // Get poster URL - prefer medium, fallback to large, then small
+        let posterUrl: String? = poster?.medium ?? poster?.large ?? poster?.small
+        
         return MovieDetail(
             id: workId,
             title: title,
             originalTitle: originalTitle,
             overview: overview ?? "",
             releaseDate: releaseDateString,
-            posterPath: poster?.medium,
+            posterPath: posterUrl,
             backdropPath: backdrop,
             runtime: runtimeValue,
             genres: genreObjects,

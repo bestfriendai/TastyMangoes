@@ -23,8 +23,9 @@ struct AddToListView: View {
     @State private var toastListId: String = ""
     @State private var showCreateWatchlistSheet = false
     
+    // Count should show number of movies being added (always 1)
     var selectedCount: Int {
-        selectedListIds.count
+        return 1 // Always 1 movie being added
     }
     
     var body: some View {
@@ -129,13 +130,26 @@ struct AddToListView: View {
     
     private var masterlistSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ListItemRow(
-                list: WatchlistItem(id: "masterlist", name: "Masterlist", filmCount: 8, thumbnailURL: nil),
-                movieId: movieId,
-                watchlistManager: watchlistManager,
-                isMasterlist: true
-            ) {
-                // Masterlist is always selected and disabled
+            // Get masterlist with actual film count
+            if let masterlist = watchlistManager.getWatchlist(listId: "masterlist") {
+                ListItemRow(
+                    list: masterlist,
+                    movieId: movieId,
+                    watchlistManager: watchlistManager,
+                    isMasterlist: true
+                ) {
+                    // Masterlist is always selected and disabled
+                }
+            } else {
+                // Fallback if masterlist doesn't exist
+                ListItemRow(
+                    list: WatchlistItem(id: "masterlist", name: "Masterlist", filmCount: 0, thumbnailURL: nil),
+                    movieId: movieId,
+                    watchlistManager: watchlistManager,
+                    isMasterlist: true
+                ) {
+                    // Masterlist is always selected and disabled
+                }
             }
         }
     }
@@ -261,24 +275,37 @@ struct AddToListView: View {
     }
     
     private func submitSelections() {
-        // Add to all selected lists
-        for listId in selectedListIds {
+        // If no lists selected, default to Masterlist
+        var listsToAddTo = selectedListIds
+        if listsToAddTo.isEmpty {
+            listsToAddTo.insert("masterlist")
+        }
+        
+        // Add to all selected lists (including Masterlist if nothing selected)
+        for listId in listsToAddTo {
             _ = watchlistManager.addMovieToList(movieId: movieId, listId: listId)
         }
         
-        // Show toast for first selected list
-        if let firstListId = selectedListIds.first,
-           let list = watchlists.first(where: { $0.id == firstListId }) {
-            toastMessage = "\(movieTitle) added to \(list.name)."
-            toastListName = list.name
-            toastListId = firstListId
-            showToast = true
-            
-            // Hide toast after 3 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation {
-                    showToast = false
-                }
+        // Show toast for first selected list (or Masterlist if nothing selected)
+        let firstListId = listsToAddTo.first ?? "masterlist"
+        let listName: String
+        if firstListId == "masterlist" {
+            listName = "Masterlist"
+        } else if let list = watchlists.first(where: { $0.id == firstListId }) {
+            listName = list.name
+        } else {
+            listName = "Watchlist"
+        }
+        
+        toastMessage = "\(movieTitle) added to \(listName)."
+        toastListName = listName
+        toastListId = firstListId
+        showToast = true
+        
+        // Hide toast after 3 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            withAnimation {
+                showToast = false
             }
         }
         

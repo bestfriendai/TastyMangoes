@@ -1350,6 +1350,7 @@ struct MoviePageView: View {
     
     private var bottomActionButtons: some View {
         let isWatched = WatchlistManager.shared.isWatched(movieId: movieId)
+        let isInWatchlist = !WatchlistManager.shared.getListsForMovie(movieId: movieId).isEmpty
         
         return HStack(spacing: 12) {
             // Mark as Watched button (wired from Figma: CHANGE_TO → Active state, OVERLAY → Rate Bottom Sheet)
@@ -1380,16 +1381,20 @@ struct MoviePageView: View {
                 showAddToList = true
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "list.bullet.rectangle")
+                    Image(systemName: isInWatchlist ? "checkmark.circle.fill" : "list.bullet.rectangle")
                         .font(.system(size: 16, weight: .medium))
-                    Text("Add to Watchlist")
+                    Text(isInWatchlist ? "In Watchlist" : "Add to Watchlist")
                         .font(.custom("Inter-SemiBold", size: 14))
                 }
-                .foregroundColor(Color(hex: "#333333"))
+                .foregroundColor(isInWatchlist ? Color(hex: "#648d00") : Color(hex: "#333333"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color(hex: "#F5F5F5"))
+                .background(isInWatchlist ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
                 .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isInWatchlist ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
+                )
             }
         }
         .padding(.horizontal, 16)
