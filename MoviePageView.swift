@@ -13,7 +13,8 @@ private enum MovieSection: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case castCrew = "Cast & Crew"
     case reviews = "Reviews"
-    case similar = "More to Watch"
+    // TODO: Similar movies disabled - re-enable later
+    // Keeping similar case commented out would break Swift - removed from allCases filter instead
     case getSmarter = "Get Smarter"
     case clips = "Movie Clips"
     case photos = "Photos"
@@ -221,21 +222,22 @@ struct MoviePageView: View {
                                 }
                             )
                         
-                        similarSection
-                            .id(MovieSection.similar.id)
-                            .background(
-                                GeometryReader { geometry in
-                                    let frame = geometry.frame(in: .named("scroll"))
-                                    Color.clear.preference(
-                                        key: SectionVisibilityPreferenceKey.self,
-                                        value: [SectionVisibility(
-                                            section: .similar,
-                                            minY: frame.minY,
-                                            maxY: frame.maxY
-                                        )]
-                                    )
-                                }
-                            )
+                        // TODO: Similar Movies section disabled - re-enable later
+                        // similarSection
+                        //     .id(MovieSection.similar.id)
+                        //     .background(
+                        //         GeometryReader { geometry in
+                        //             let frame = geometry.frame(in: .named("scroll"))
+                        //             Color.clear.preference(
+                        //                 key: SectionVisibilityPreferenceKey.self,
+                        //                 value: [SectionVisibility(
+                        //                     section: .similar,
+                        //                     minY: frame.minY,
+                        //                     maxY: frame.maxY
+                        //                 )]
+                        //             )
+                        //         }
+                        //     )
                         
                         // Help Us Get Smarter section
                         helpUsGetSmarterSection
@@ -802,7 +804,11 @@ struct MoviePageView: View {
     private func sectionTabsBar(proxy: ScrollViewProxy) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
-                ForEach(MovieSection.allCases) { section in
+                // TODO: Filter out disabled similar section - use activeCases instead of allCases
+                ForEach(MovieSection.allCases.filter { section in
+                    // Filter out similar section (commented out in enum but still exists)
+                    section.rawValue != "More to Watch"
+                }) { section in
                     SectionTabButton(
                         title: section.rawValue,
                         isSelected: selectedSection == section
@@ -1089,44 +1095,22 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("More Movies Like This")
+                    Text("Similar Movies")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
                 
                 Spacer()
-                
-                if !viewModel.similarMovies.isEmpty {
-                    Text("See All")
-                        .font(.custom("Inter-SemiBold", size: 14))
-                        .foregroundColor(Color(hex: "#FEA500"))
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "#FEA500"))
-                }
             }
             
-            // Horizontal scrolling similar movies
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    if !viewModel.similarMovies.isEmpty {
-                        ForEach(viewModel.similarMovies.prefix(5)) { movie in
-                            NavigationLink(destination: MoviePageView(movieId: movie.id)) {
-                                MoviePageSimilarMovieCard(movie: movie)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    } else {
-                        // Show loading placeholders while similar movies are being fetched
-                        ForEach(0..<5) { index in
-                            SimilarMovieCard(index: index)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
+            // Coming Soon placeholder - Similar Movies feature temporarily disabled
+            VStack(spacing: 8) {
+                Text("Coming Soon")
+                    .font(.custom("Inter-Regular", size: 14))
+                    .foregroundColor(Color(hex: "#999999"))
+                    .padding(.vertical, 24)
             }
-            .padding(.horizontal, -16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     

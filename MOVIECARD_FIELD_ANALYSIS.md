@@ -231,3 +231,4 @@ All fields match **EXCEPT**:
 - **Included in MovieCard:** ~15 fields (~30%)
 - **Used in UI but missing:** ~8 fields
 
+

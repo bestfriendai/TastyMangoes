@@ -870,21 +870,18 @@ struct MovieDetailView: View {
                 Spacer()
             }
             
-            // Movie Recommendations Horizontal Scroll
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    if !viewModel.similarMovies.isEmpty {
-                        ForEach(viewModel.similarMovies) { similarMovie in
-                            MovieRecommendationCard(movie: similarMovie)
-                        }
-                    } else {
-                        // Fallback placeholder
-                        ForEach(0..<6) { _ in
-                            MovieRecommendationCard()
-                        }
-                    }
-                }
+            // Coming Soon placeholder for Similar Movies
+            VStack(spacing: 8) {
+                Text("Similar Movies")
+                    .font(.custom("Inter-SemiBold", size: 14))
+                    .foregroundColor(Color(hex: "#666666"))
+                
+                Text("Coming Soon")
+                    .font(.custom("Inter-Regular", size: 14))
+                    .foregroundColor(Color(hex: "#999999"))
+                    .padding(.vertical, 16)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             
             // Mango's Recommendation Card
             MangoRecommendationCard()

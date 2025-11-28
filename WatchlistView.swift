@@ -28,105 +28,8 @@ struct WatchlistView: View {
     
     @State private var yourLists: [WatchlistItem] = []
     @State private var masterlistName: String = "Masterlist"
-    
-    @State private var masterlistMovies: [MasterlistMovie] = [
-        MasterlistMovie(
-            id: "1",
-            title: "Jurassic World: Reborn",
-            year: "2025",
-            genres: ["Action", "Sci-Fi"],
-            runtime: "2h 13m",
-            posterURL: nil,
-            tastyScore: 0.88,
-            aiScore: 5.5,
-            friendsCount: 3,
-            isWatched: true
-        ),
-        MasterlistMovie(
-            id: "2",
-            title: "Jurassic Park",
-            year: "1993",
-            genres: ["Action", "Sci-Fi"],
-            runtime: "2h 5m",
-            posterURL: nil,
-            tastyScore: 0.99,
-            aiScore: 7.2,
-            friendsCount: 3,
-            isWatched: false
-        ),
-        MasterlistMovie(
-            id: "3",
-            title: "Juror #2",
-            year: "2024",
-            genres: ["Thriller", "Drama"],
-            runtime: "1h 54min",
-            posterURL: nil,
-            tastyScore: 0.50,
-            aiScore: 3.4,
-            friendsCount: 3,
-            isWatched: false
-        ),
-        MasterlistMovie(
-            id: "4",
-            title: "Jurassic World: Dominion",
-            year: "2022",
-            genres: ["Action", "Sci-Fi"],
-            runtime: "1h 50m",
-            posterURL: nil,
-            tastyScore: 0.67,
-            aiScore: 6.8,
-            friendsCount: 3,
-            isWatched: false
-        ),
-        MasterlistMovie(
-            id: "5",
-            title: "Jurassic World",
-            year: "2015",
-            genres: ["Action", "Sci-Fi"],
-            runtime: "2h 20m",
-            posterURL: nil,
-            tastyScore: 0.95,
-            aiScore: 9.1,
-            friendsCount: 3,
-            isWatched: true
-        ),
-        MasterlistMovie(
-            id: "6",
-            title: "Jury Duty",
-            year: "2023",
-            genres: ["Comedy", "Thriller"],
-            runtime: "1h 40m",
-            posterURL: nil,
-            tastyScore: 0.75,
-            aiScore: 2.5,
-            friendsCount: 3,
-            isWatched: false
-        ),
-        MasterlistMovie(
-            id: "7",
-            title: "Jurassic Park III",
-            year: "2001",
-            genres: ["Action", "Sci-Fi"],
-            runtime: "1h 40m",
-            posterURL: nil,
-            tastyScore: 0.33,
-            aiScore: 0.8,
-            friendsCount: 3,
-            isWatched: true
-        ),
-        MasterlistMovie(
-            id: "8",
-            title: "Jurassic World: Fallen Kingdom",
-            year: "2018",
-            genres: ["Action", "Sci-Fi"],
-            runtime: "2h 8m",
-            posterURL: nil,
-            tastyScore: 0.24,
-            aiScore: 4.7,
-            friendsCount: 3,
-            isWatched: false
-        )
-    ]
+    @State private var masterlistMovies: [MasterlistMovie] = []
+    @State private var isLoadingMovies: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -174,6 +77,7 @@ struct WatchlistView: View {
         }
         .onAppear {
             loadLists()
+            loadMasterlistMovies()
         }
         .onChange(of: watchlistManager.currentSortOption) { oldValue, newValue in
             // Reload lists when sort option changes (e.g., from YourListsView)
@@ -183,6 +87,7 @@ struct WatchlistView: View {
             // Reload lists when watchlist manager updates (e.g., after creating/deleting lists)
             loadLists()
             loadMasterlistName() // Also reload masterlist name in case it was edited
+            loadMasterlistMovies() // Reload movies when watchlist changes
         }
         }
     }
@@ -287,35 +192,38 @@ struct WatchlistView: View {
             }
             
             // Horizontal Scrollable Grid (3 rows x 2 columns = 6 cards per page)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    // Group lists into pages of 6 cards (3 rows x 2 columns)
-                    ForEach(0..<numberOfPages, id: \.self) { pageIndex in
-                        VStack(spacing: 4) {
-                            // Row 1 (2 cards)
-                            HStack(spacing: 4) {
-                                cardForPosition(page: pageIndex, row: 0, column: 0)
-                                cardForPosition(page: pageIndex, row: 0, column: 1)
+            GeometryReader { geometry in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        // Group lists into pages of 6 cards (3 rows x 2 columns)
+                        ForEach(0..<numberOfPages, id: \.self) { pageIndex in
+                            VStack(spacing: 4) {
+                                // Row 1 (2 cards)
+                                HStack(spacing: 4) {
+                                    cardForPosition(page: pageIndex, row: 0, column: 0)
+                                    cardForPosition(page: pageIndex, row: 0, column: 1)
+                                }
+                                
+                                // Row 2 (2 cards)
+                                HStack(spacing: 4) {
+                                    cardForPosition(page: pageIndex, row: 1, column: 0)
+                                    cardForPosition(page: pageIndex, row: 1, column: 1)
+                                }
+                                
+                                // Row 3 (2 cards)
+                                HStack(spacing: 4) {
+                                    cardForPosition(page: pageIndex, row: 2, column: 0)
+                                    cardForPosition(page: pageIndex, row: 2, column: 1)
+                                }
                             }
-                            
-                            // Row 2 (2 cards)
-                            HStack(spacing: 4) {
-                                cardForPosition(page: pageIndex, row: 1, column: 0)
-                                cardForPosition(page: pageIndex, row: 1, column: 1)
-                            }
-                            
-                            // Row 3 (2 cards)
-                            HStack(spacing: 4) {
-                                cardForPosition(page: pageIndex, row: 2, column: 0)
-                                cardForPosition(page: pageIndex, row: 2, column: 1)
-                            }
+                            .frame(width: geometry.size.width - 32) // Full width minus padding
                         }
-                        .frame(width: UIScreen.main.bounds.width - 32) // Full width minus padding
                     }
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, -16)
             }
-            .padding(.horizontal, -16)
+            .frame(height: 180) // Fixed height for the grid
         }
     }
     
@@ -430,6 +338,39 @@ struct WatchlistView: View {
             masterlistName = "Masterlist" // Default fallback
         }
     }
+    
+    private func loadMasterlistMovies() {
+        guard !isLoadingMovies else { return }
+        isLoadingMovies = true
+        
+        Task {
+            // Get movie IDs from masterlist
+            let movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+            
+            // Fetch movie cards from Supabase
+            var fetchedMovies: [MasterlistMovie] = []
+            
+            for movieId in movieIds {
+                // movieId is stored as TMDB ID string
+                do {
+                    let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                    let masterlistMovie = movieCard.toMasterlistMovie(
+                        isWatched: watchlistManager.isWatched(movieId: movieId),
+                        friendsCount: 0 // TODO: Implement friends count when available
+                    )
+                    fetchedMovies.append(masterlistMovie)
+                } catch {
+                    print("⚠️ Failed to fetch movie card for ID \(movieId): \(error)")
+                    // Continue with other movies even if one fails
+                }
+            }
+            
+            await MainActor.run {
+                self.masterlistMovies = fetchedMovies
+                self.isLoadingMovies = false
+            }
+        }
+    }
 }
 
 // MARK: - Data Models
@@ -452,6 +393,44 @@ struct MasterlistMovie: Identifiable {
     let aiScore: Double?
     let friendsCount: Int
     let isWatched: Bool
+}
+
+// MARK: - MovieCard Extension for Watchlist
+
+extension MovieCard {
+    func toMasterlistMovie(isWatched: Bool = false, friendsCount: Int = 0) -> MasterlistMovie {
+        // Calculate tastyScore from sourceScores (TMDB rating normalized to 0-1)
+        let tastyScore: Double? = {
+            if let tmdbScore = sourceScores?.tmdb?.score {
+                // Normalize TMDB score (0-10) to 0-1 scale
+                return tmdbScore / 10.0
+            }
+            return nil
+        }()
+        
+        // Extract year from releaseDate if year is not available
+        let yearString: String = {
+            if let year = year {
+                return String(year)
+            } else if let releaseDate = releaseDate, releaseDate.count >= 4 {
+                return String(releaseDate.prefix(4))
+            }
+            return ""
+        }()
+        
+        return MasterlistMovie(
+            id: String(workId),
+            title: title,
+            year: yearString,
+            genres: genres ?? [],
+            runtime: runtimeDisplay ?? (runtimeMinutes.map { "\($0) min" } ?? ""),
+            posterURL: poster?.medium ?? poster?.small ?? poster?.large,
+            tastyScore: tastyScore,
+            aiScore: aiScore,
+            friendsCount: friendsCount,
+            isWatched: isWatched
+        )
+    }
 }
 
 // MARK: - Create New List Card

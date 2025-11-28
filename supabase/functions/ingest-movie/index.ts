@@ -388,18 +388,19 @@ serve(async (req) => {
     const videos = await fetchMovieVideos(tmdb_id.toString());
     await new Promise(resolve => setTimeout(resolve, 250));
     
+    // TODO: Similar movies disabled to reduce TMDB API usage
     // Fetch similar movies (limit to first 10)
     let similarMovieIds: number[] = [];
-    try {
-      const similarMovies = await fetchSimilarMovies(tmdb_id.toString());
-      similarMovieIds = similarMovies.results
-        .slice(0, 10)
-        .map(m => m.id);
-      console.log(`[INGEST] Fetched ${similarMovieIds.length} similar movie IDs`);
-    } catch (error) {
-      console.warn(`[INGEST] Failed to fetch similar movies:`, error);
-      // Continue without similar movies
-    }
+    // try {
+    //   const similarMovies = await fetchSimilarMovies(tmdb_id.toString());
+    //   similarMovieIds = similarMovies.results
+    //     .slice(0, 10)
+    //     .map(m => m.id);
+    //   console.log(`[INGEST] Fetched ${similarMovieIds.length} similar movie IDs`);
+    // } catch (error) {
+    //   console.warn(`[INGEST] Failed to fetch similar movies:`, error);
+    //   // Continue without similar movies
+    // }
     
     // Fetch release dates to get US certification
     let certification: string | null = null;

@@ -18,20 +18,7 @@ struct YourListsView: View {
     
     @EnvironmentObject private var watchlistManager: WatchlistManager
     
-    @State private var lists: [WatchlistItem] = [
-        WatchlistItem(id: "1", name: "Must-Watch Movies", filmCount: 8, thumbnailURL: nil),
-        WatchlistItem(id: "2", name: "Action Blockbusters", filmCount: 15, thumbnailURL: nil),
-        WatchlistItem(id: "3", name: "Holiday Favorites", filmCount: 9, thumbnailURL: nil),
-        WatchlistItem(id: "4", name: "Romantic Classics", filmCount: 12, thumbnailURL: nil),
-        WatchlistItem(id: "5", name: "Feel-Good Comedies", filmCount: 12, thumbnailURL: nil),
-        WatchlistItem(id: "6", name: "Award-Winning Documentaries", filmCount: 12, thumbnailURL: nil),
-        WatchlistItem(id: "7", name: "Classic Horror Collection", filmCount: 10, thumbnailURL: nil),
-        WatchlistItem(id: "8", name: "Cult Classics", filmCount: 7, thumbnailURL: nil),
-        WatchlistItem(id: "9", name: "Animated Adventures", filmCount: 10, thumbnailURL: nil),
-        WatchlistItem(id: "10", name: "International Films", filmCount: 12, thumbnailURL: nil),
-        WatchlistItem(id: "11", name: "Chilling Thrillers", filmCount: 9, thumbnailURL: nil),
-        WatchlistItem(id: "12", name: "Sci-Fi Masterpieces", filmCount: 11, thumbnailURL: nil)
-    ]
+    @State private var lists: [WatchlistItem] = []
     
     var filteredLists: [WatchlistItem] {
         if searchText.isEmpty {

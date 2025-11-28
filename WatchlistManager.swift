@@ -267,42 +267,13 @@ class WatchlistManager: ObservableObject {
     // MARK: - Mock Data Loading
     
     private func loadMockData() {
-        // Initialize masterlist
+        // Initialize masterlist only - no mock watchlists
         let masterlist = WatchlistItem(id: "masterlist", name: "Masterlist", filmCount: 0, thumbnailURL: nil)
         watchlistMetadata["masterlist"] = masterlist
+        listMovies["masterlist"] = Set<String>() // Initialize empty set
         
-        // Initialize some mock watchlists
-        let mockLists = [
-            WatchlistItem(id: "2", name: "Must-Watch Movies", filmCount: 0, thumbnailURL: nil),
-            WatchlistItem(id: "3", name: "Sci-Fi Masterpieces", filmCount: 0, thumbnailURL: nil),
-            WatchlistItem(id: "4", name: "Action Blockbusters", filmCount: 0, thumbnailURL: nil),
-            WatchlistItem(id: "5", name: "My Favorite Films", filmCount: 0, thumbnailURL: nil),
-            WatchlistItem(id: "6", name: "Animated Adventures", filmCount: 0, thumbnailURL: nil)
-        ]
-        
-        for list in mockLists {
-            watchlistMetadata[list.id] = list
-            listMovies[list.id] = Set<String>()
-        }
-        
-        // Add some movies to Masterlist
-        let masterlistMovies = ["1", "2", "3", "4", "5", "6", "7", "8"]
-        for movieId in masterlistMovies {
-            _ = addMovieToList(movieId: movieId, listId: "masterlist")
-        }
-        
-        // Mark some movies as watched
-        markAsWatched(movieId: "1") // Jurassic World: Reborn
-        markAsWatched(movieId: "5") // Jurassic World
-        markAsWatched(movieId: "7") // Jurassic Park III
-        
-        // Add some movies to other lists
-        _ = addMovieToList(movieId: "1", listId: "2") // Must-Watch Movies
-        _ = addMovieToList(movieId: "2", listId: "2") // Must-Watch Movies
-        _ = addMovieToList(movieId: "3", listId: "3") // Sci-Fi Masterpieces
-        
-        // Update nextListId to avoid conflicts
-        nextListId = 10
+        // Start nextListId from 100 to avoid conflicts
+        nextListId = 100
     }
 }
 

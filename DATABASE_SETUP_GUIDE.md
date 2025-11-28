@@ -235,3 +235,4 @@ If you encounter issues:
 4. Check database RLS policies
 5. Review Edge Function error responses
 
+

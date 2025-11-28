@@ -32,7 +32,7 @@ class AuthManager: ObservableObject {
         defer { isLoading = false }
         
         do {
-            if let session = try await supabaseService.getCurrentSession() {
+            if try await supabaseService.getCurrentSession() != nil {
                 isAuthenticated = true
                 if let user = try await supabaseService.getCurrentUser() {
                     // Load user profile - user.id is already a UUID

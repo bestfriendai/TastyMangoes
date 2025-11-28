@@ -57,22 +57,19 @@ class MovieDetailViewModel: ObservableObject {
                 movieDetail = try await service.fetchMovieDetail(id: movieId)
                 
                 // Load additional data in parallel
-                async let similarMoviesResult = loadSimilarMovies(movieId: movieId)
-                async let imagesResult = loadMovieImages(movieId: movieId)
-                async let videosResult = loadMovieVideos(movieId: movieId)
-                
-                // Wait for all to complete
-                _ = await (similarMoviesResult, imagesResult, videosResult)
+                // TODO: Re-enable similar movies once recommendation logic is improved
+                // _ = await loadSimilarMovies(movieId: movieId)
+                _ = await loadMovieImages(movieId: movieId)
+                _ = await loadMovieVideos(movieId: movieId)
             } else if let movieStringId = movieStringId {
                 movieDetail = try await service.fetchMovieDetail(stringId: movieStringId)
                 
                 // If we can convert string ID to Int, load additional data
                 if let movieId = Int(movieStringId) {
-                    async let similarMoviesResult = loadSimilarMovies(movieId: movieId)
-                    async let imagesResult = loadMovieImages(movieId: movieId)
-                    async let videosResult = loadMovieVideos(movieId: movieId)
-                    
-                    _ = await (similarMoviesResult, imagesResult, videosResult)
+                    // TODO: Re-enable similar movies once recommendation logic is improved
+                    // _ = await loadSimilarMovies(movieId: movieId)
+                    _ = await loadMovieImages(movieId: movieId)
+                    _ = await loadMovieVideos(movieId: movieId)
                 }
             } else {
                 throw MovieDetailError.invalidData
@@ -92,6 +89,9 @@ class MovieDetailViewModel: ObservableObject {
     
     // MARK: - Private Methods
     
+    // TODO: Re-enable similar movies once recommendation logic is improved
+    // Similar movies feature is completely disabled - no API calls, no UI display
+    /*
     private func loadSimilarMovies(movieId: Int) async {
         do {
             // First, get the MovieCard to retrieve similar_movie_ids
@@ -138,6 +138,7 @@ class MovieDetailViewModel: ObservableObject {
             }
         }
     }
+    */
     
     private func loadMovieImages(movieId: Int) async {
         do {

@@ -583,6 +583,9 @@ class SupabaseService: ObservableObject {
     
     // MARK: - Similar Movies
     
+    // TODO: Similar movies disabled - re-enable later
+    // NOTE: Similar movies feature is completely disabled - no API calls, no UI display
+    
     /// Similar movie result from get-similar-movies endpoint
     struct SimilarMovieResult: Codable {
         let tmdbId: Int
@@ -606,6 +609,8 @@ class SupabaseService: ObservableObject {
     }
     
     /// Fetches similar movies by TMDB IDs with auto-ingestion
+    // TODO: Similar movies disabled - re-enable later
+    /*
     func fetchSimilarMovies(tmdbIds: [Int]) async throws -> [SimilarMovieResult] {
         guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-similar-movies") else {
             throw SupabaseError.invalidResponse
@@ -638,6 +643,7 @@ class SupabaseService: ObservableObject {
         let responseObj = try decoder.decode(SimilarMoviesResponse.self, from: data)
         return responseObj.movies
     }
+    */
     
     /// Gets the count of movies in our database for a specific genre
     func getGenreCount(genreName: String) async throws -> Int {
@@ -667,7 +673,7 @@ class SupabaseService: ObservableObject {
     
     /// Searches for movies using TMDB API
     func searchMovies(query: String, year: Int? = nil) async throws -> [MovieSearchResult] {
-        guard let client = client else {
+        guard client != nil else {
             throw SupabaseError.notConfigured
         }
         
@@ -710,7 +716,7 @@ class SupabaseService: ObservableObject {
     
     /// Triggers ingestion for a movie (force refresh)
     func ingestMovie(tmdbId: String, forceRefresh: Bool = false) async throws -> MovieCard {
-        guard let client = client else {
+        guard client != nil else {
             throw SupabaseError.notConfigured
         }
         
