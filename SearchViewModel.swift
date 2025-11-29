@@ -128,7 +128,7 @@ class SearchViewModel: ObservableObject {
             )
             
             // Convert MovieSearchResult to Movie
-            self.searchResults = movieSearchResults.map { result in
+            var convertedMovies = movieSearchResults.map { result in
                 Movie(
                     id: result.tmdbId,
                     title: result.title,
@@ -147,6 +147,45 @@ class SearchViewModel: ObservableObject {
                     overview: result.overviewShort
                 )
             }
+            
+            // Apply sorting based on applied sortBy filter
+            let sortBy = filterState.appliedSortBy
+            print("🔀 [SEARCH VIEW MODEL] Applying sort: '\(sortBy)' to \(convertedMovies.count) movies")
+            switch sortBy {
+            case "Alphabetical":
+                // Sort alphabetically by title (A-Z)
+                convertedMovies.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                print("   ✅ Sorted alphabetically (A-Z)")
+            case "Year":
+                // Sort by year (ascending - oldest first)
+                convertedMovies.sort { $0.year < $1.year }
+                print("   ✅ Sorted by year (oldest first)")
+            case "Tasty Score":
+                // Sort by Tasty Score (descending - highest first)
+                convertedMovies.sort { ($0.tastyScore ?? 0) > ($1.tastyScore ?? 0) }
+                print("   ✅ Sorted by Tasty Score (highest first)")
+            case "AI Score":
+                // Sort by AI Score (descending - highest first)
+                convertedMovies.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+                print("   ✅ Sorted by AI Score (highest first)")
+            case "Watched":
+                // Sort watched movies first, then unwatched
+                convertedMovies.sort { movie1, movie2 in
+                    let watched1 = WatchlistManager.shared.isWatched(movieId: movie1.id)
+                    let watched2 = WatchlistManager.shared.isWatched(movieId: movie2.id)
+                    if watched1 == watched2 {
+                        return false // Keep relative order if both have same watched status
+                    }
+                    return watched1 && !watched2 // Watched movies first
+                }
+                print("   ✅ Sorted by watched status")
+            default:
+                // "List order" - keep original order from API
+                print("   ✅ Keeping list order (no sort applied)")
+                break
+            }
+            
+            self.searchResults = convertedMovies
             
             // Mark as searched
             hasSearched = true
@@ -173,6 +212,44 @@ class SearchViewModel: ObservableObject {
         showSuggestions = false
         Task {
             await performSearch()
+        }
+    }
+    
+    /// Apply sorting to existing search results
+    func applySorting() {
+        guard !searchResults.isEmpty else { return }
+        
+        let filterState = SearchFilterState.shared
+        let sortBy = filterState.appliedSortBy
+        print("🔀 [SEARCH VIEW MODEL] Applying sort: '\(sortBy)' to \(searchResults.count) existing movies")
+        
+        switch sortBy {
+        case "Alphabetical":
+            searchResults.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            print("   ✅ Sorted alphabetically (A-Z)")
+        case "Year":
+            searchResults.sort { $0.year < $1.year }
+            print("   ✅ Sorted by year (oldest first)")
+        case "Tasty Score":
+            searchResults.sort { ($0.tastyScore ?? 0) > ($1.tastyScore ?? 0) }
+            print("   ✅ Sorted by Tasty Score (highest first)")
+        case "AI Score":
+            searchResults.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+            print("   ✅ Sorted by AI Score (highest first)")
+        case "Watched":
+            searchResults.sort { movie1, movie2 in
+                let watched1 = WatchlistManager.shared.isWatched(movieId: movie1.id)
+                let watched2 = WatchlistManager.shared.isWatched(movieId: movie2.id)
+                if watched1 == watched2 {
+                    return false
+                }
+                return watched1 && !watched2
+            }
+            print("   ✅ Sorted by watched status")
+        default:
+            // "List order" - keep original order (would need to re-fetch)
+            print("   ⚠️ List order - would need to re-fetch to restore original order")
+            break
         }
     }
     

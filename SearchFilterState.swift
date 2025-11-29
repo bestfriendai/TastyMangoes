@@ -101,6 +101,14 @@ class SearchFilterState: ObservableObject {
         }
     }
     
+    var sortFilterText: String {
+        if appliedSortBy == "List order" {
+            return "Sort: Default"
+        } else {
+            return "Sort: \(appliedSortBy)"
+        }
+    }
+    
     // MARK: - Convenience Properties for Filter UI (use staged filters)
     
     // These are used by filter detail sheets - they work with staged filters

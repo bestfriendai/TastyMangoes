@@ -117,13 +117,20 @@ struct SearchFilterDetailSheet: View {
     
     private var sortByContent: some View {
         VStack(spacing: 0) {
-            let options = ["List order", "Tasty Score", "AI Score", "Watched", "Year"]
+            let options = ["List order", "Alphabetical", "AI Score", "Tasty Score", "Year", "Watched"]
             ForEach(options, id: \.self) { option in
                 RadioButtonRow(
                     title: option,
                     isSelected: filterState.sortBy == option
                 ) {
+                    print("🔘 [SORT] Selected: \(option)")
+                    print("   Staged sortBy BEFORE: \(filterState.stagedSortBy)")
                     filterState.sortBy = option
+                    print("   Staged sortBy AFTER: \(filterState.stagedSortBy)")
+                    
+                    // Apply immediately (sort is not staged like other filters)
+                    filterState.applyStagedFilters()
+                    print("   Applied sortBy: \(filterState.appliedSortBy)")
                 }
                 
                 if option != options.last {

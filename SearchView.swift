@@ -116,6 +116,11 @@ struct SearchView: View {
                 viewModel.search()
             }
         }
+        .onChange(of: filterState.appliedSortBy) { oldValue, newValue in
+            // Re-sort existing results immediately when sort changes
+            print("🔀 [SEARCH VIEW] Sort changed: '\(oldValue)' -> '\(newValue)'")
+            viewModel.applySorting()
+        }
         .onChange(of: showFilters) { oldValue, newValue in
             // When filter sheet is dismissed without applying, staged filters are discarded
             // When "Show Results" is tapped, applyStagedFilters() is called which triggers onChange above
@@ -254,6 +259,15 @@ struct SearchView: View {
                             title: filterState.yearFilterText,
                             onTap: {
                                 selectedFilterType = .year
+                                showFilters = true
+                            }
+                        )
+                        
+                        // Sort Badge
+                        FilterBadgeButton(
+                            title: filterState.sortFilterText,
+                            onTap: {
+                                selectedFilterType = .sortBy
                                 showFilters = true
                             }
                         )

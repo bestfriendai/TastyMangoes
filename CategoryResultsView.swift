@@ -58,20 +58,9 @@ struct CategoryResultsView: View {
                         .background(Color(hex: "#f3f3f3"))
                         .cornerRadius(8)
                         
-                        // Filter Button
-                        Button(action: {
-                            print("🔘 [CATEGORY RESULTS] Filter button tapped")
-                            print("   showFilters BEFORE: \(showFilters)")
-                            showFilters = true
-                            print("   showFilters AFTER: \(showFilters)")
-                        }) {
-                            Image(systemName: "slider.horizontal.3")
-                                .foregroundColor(Color(hex: "#414141"))
-                                .frame(width: 20, height: 20)
-                                .padding(12)
-                                .background(Color(hex: "#f3f3f3"))
-                                .cornerRadius(8)
-                        }
+                        // Filter Button placeholder - will be added as overlay
+                        Spacer()
+                            .frame(width: 44, height: 44)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -151,6 +140,33 @@ struct CategoryResultsView: View {
                                     )
                                 }
                                 
+                                // Sort Badge (always show if not default)
+                                if filterState.appliedSortBy != "List order" {
+                                    Button(action: {
+                                        // Open filter sheet to sort section
+                                        showFilters = true
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Text(filterState.sortFilterText)
+                                                .font(.system(size: 14))
+                                                .foregroundColor(Color(hex: "#332100"))
+                                            
+                                            Image(systemName: "chevron.down")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.black)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.white)
+                                        .cornerRadius(999)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 999)
+                                                .stroke(Color(hex: "#ececec"), lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                
                                 Spacer()
                             }
                             .padding(.horizontal, 16)
@@ -214,6 +230,33 @@ struct CategoryResultsView: View {
         }
         .onChange(of: showFilters) { oldValue, newValue in
             print("📋 [CATEGORY RESULTS] showFilters changed: \(oldValue) -> \(newValue)")
+            if newValue {
+                print("   ✅ Sheet should be presenting now")
+            } else {
+                print("   ❌ Sheet should be dismissed now")
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            // Filter Button as overlay - ensures it's above everything
+            Button(action: {
+                print("🔘 [CATEGORY RESULTS] Filter button OVERLAY tapped")
+                print("   showFilters BEFORE: \(showFilters)")
+                showFilters = true
+                print("   showFilters AFTER: \(showFilters)")
+            }) {
+                ZStack {
+                    Color(hex: "#f3f3f3")
+                        .cornerRadius(8)
+                    
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundColor(Color(hex: "#414141"))
+                        .font(.system(size: 20))
+                }
+                .frame(width: 44, height: 44)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .padding(.trailing, 16)
+            .padding(.top, 76) // Match the nav bar padding
         }
     }
     
@@ -280,21 +323,39 @@ struct CategoryResultsView: View {
                 
                 // Apply sorting based on applied sortBy filter
                 let sortBy = filterState.appliedSortBy
+                print("🔀 [SORT] Applying sort: '\(sortBy)' to \(convertedMovies.count) movies")
                 switch sortBy {
+                case "Alphabetical":
+                    // Sort alphabetically by title (A-Z)
+                    convertedMovies.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                    print("   ✅ Sorted alphabetically (A-Z)")
                 case "Year":
                     // Sort by year (ascending - oldest first)
                     convertedMovies.sort { $0.year < $1.year }
+                    print("   ✅ Sorted by year (oldest first)")
                 case "Tasty Score":
                     // Sort by Tasty Score (descending - highest first)
                     convertedMovies.sort { ($0.tastyScore ?? 0) > ($1.tastyScore ?? 0) }
+                    print("   ✅ Sorted by Tasty Score (highest first)")
                 case "AI Score":
                     // Sort by AI Score (descending - highest first)
                     convertedMovies.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+                    print("   ✅ Sorted by AI Score (highest first)")
                 case "Watched":
                     // TODO: Implement watched sorting when watchlist data is available
-                    break
+                    // For now, sort watched movies first, then unwatched
+                    convertedMovies.sort { movie1, movie2 in
+                        let watched1 = WatchlistManager.shared.isWatched(movieId: movie1.id)
+                        let watched2 = WatchlistManager.shared.isWatched(movieId: movie2.id)
+                        if watched1 == watched2 {
+                            return false // Keep relative order if both have same watched status
+                        }
+                        return watched1 && !watched2 // Watched movies first
+                    }
+                    print("   ✅ Sorted by watched status")
                 default:
                     // "List order" - keep original order from API
+                    print("   ✅ Keeping list order (no sort applied)")
                     break
                 }
                 
