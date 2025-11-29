@@ -8,15 +8,17 @@ import SwiftUI
 
 struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()
-    @StateObject private var filterState = SearchFilterState.shared
+    // Use @ObservedObject for singleton to avoid recreating state
+    @ObservedObject private var filterState = SearchFilterState.shared
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
     @State private var showGenresSheet = false
     @State private var navigateToResults = false
+    @State private var selectedFilterType: SearchFiltersBottomSheet.FilterType? = nil
     
-    // Computed property for selection count
+    // Computed property for selection count (use applied filters for display)
     private var totalSelections: Int {
-        filterState.selectedPlatforms.count + filterState.selectedGenres.count
+        filterState.appliedSelectedPlatforms.count + filterState.appliedSelectedGenres.count
     }
     
     var body: some View {
@@ -79,7 +81,16 @@ struct SearchView: View {
             }
         }
         .sheet(isPresented: $showFilters) {
-            SearchFiltersBottomSheet(isPresented: $showFilters)
+            SearchFiltersBottomSheet(
+                isPresented: $showFilters,
+                onApplyFilters: {
+                    // Trigger search when filters are applied
+                    if !viewModel.searchQuery.isEmpty {
+                        viewModel.search()
+                    }
+                },
+                initialFilterType: selectedFilterType
+            )
         }
         .sheet(isPresented: $showPlatformsSheet) {
             SearchPlatformsBottomSheet(isPresented: $showPlatformsSheet)
@@ -87,18 +98,32 @@ struct SearchView: View {
         .sheet(isPresented: $showGenresSheet) {
             SearchGenresBottomSheet(isPresented: $showGenresSheet)
         }
-        .onChange(of: filterState.selectedPlatforms) { oldValue, newValue in
-            // Reset results when filters change
-            if newValue.isEmpty && filterState.selectedGenres.isEmpty {
-                viewModel.searchResults = []
-                viewModel.hasSearched = false
+        .onChange(of: filterState.appliedSelectedPlatforms) { oldValue, newValue in
+            // Re-search when applied filters change (only after "Show Results" is tapped)
+            if !viewModel.searchQuery.isEmpty {
+                viewModel.search()
             }
         }
-        .onChange(of: filterState.selectedGenres) { oldValue, newValue in
-            // Reset results when filters change
-            if newValue.isEmpty && filterState.selectedPlatforms.isEmpty {
-                viewModel.searchResults = []
-                viewModel.hasSearched = false
+        .onChange(of: filterState.appliedSelectedGenres) { oldValue, newValue in
+            // Re-search when applied filters change (only after "Show Results" is tapped)
+            if !viewModel.searchQuery.isEmpty {
+                viewModel.search()
+            }
+        }
+        .onChange(of: filterState.appliedYearRange) { oldValue, newValue in
+            // Re-search when applied filters change (only after "Show Results" is tapped)
+            if !viewModel.searchQuery.isEmpty {
+                viewModel.search()
+            }
+        }
+        .onChange(of: showFilters) { oldValue, newValue in
+            // When filter sheet is dismissed without applying, staged filters are discarded
+            // When "Show Results" is tapped, applyStagedFilters() is called which triggers onChange above
+            if !newValue {
+                // Sheet was dismissed - reset selectedFilterType
+                selectedFilterType = nil
+                // If filters weren't applied, they're already discarded
+                // If they were applied, the onChange handlers above will trigger search
             }
         }
     }
@@ -161,6 +186,8 @@ struct SearchView: View {
                         .font(.custom("Inter-Regular", size: 16))
                         .foregroundColor(Color(hex: "#666666"))
                         .onChange(of: viewModel.searchQuery) { oldValue, newValue in
+                            print("📝 [SEARCH VIEW] Search query changed: '\(oldValue)' -> '\(newValue)'")
+                            print("   Current appliedYearRange: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
                             filterState.searchQuery = newValue // Sync to filterState for tab bar
                             viewModel.search()
                         }
@@ -200,6 +227,9 @@ struct SearchView: View {
             .padding(.bottom, 12)
             
             // Filter Badges (only show when there are active filters or search results)
+            // Debug: Log what the badge will show
+            let _ = print("🏷️ [BADGE] yearFilterText will show: '\(filterState.yearFilterText)' (appliedYearRange: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound))")
+            
             if filterState.hasActiveFilters || !viewModel.searchResults.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -216,6 +246,15 @@ struct SearchView: View {
                             title: filterState.genreFilterText,
                             onTap: {
                                 showGenresSheet = true
+                            }
+                        )
+                        
+                        // Year Badge
+                        FilterBadgeButton(
+                            title: filterState.yearFilterText,
+                            onTap: {
+                                selectedFilterType = .year
+                                showFilters = true
                             }
                         )
                     }
@@ -432,10 +471,14 @@ struct SearchView: View {
                             // Clear All button when filters are active
                             if filterState.hasActiveFilters {
                                 Button(action: {
-                                    filterState.clearAllFilters()
+                                    filterState.clearAllAppliedFilters()
                                     // Also clear search results when clearing filters
                                     viewModel.searchResults = []
                                     viewModel.hasSearched = false
+                                    // Trigger search if we have a query
+                                    if !viewModel.searchQuery.isEmpty {
+                                        viewModel.search()
+                                    }
                                 }) {
                                     Text("Clear All")
                                         .font(.custom("Nunito-SemiBold", size: 14))
@@ -742,3 +785,4 @@ struct SearchSuggestionItem: View {
 #Preview {
     SearchView()
 }
+

@@ -8,7 +8,8 @@ import SwiftUI
 struct SearchGenresBottomSheet: View {
     @Binding var isPresented: Bool
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var filterState = SearchFilterState.shared
+    // Use @ObservedObject for singleton to avoid recreating state
+    @ObservedObject private var filterState = SearchFilterState.shared
     
     @State private var expandedSections: Set<String> = ["Fun & Light"]
     @State private var selectedGenres: Set<String> = []
@@ -138,8 +139,21 @@ struct SearchGenresBottomSheet: View {
                 .background(Color(hex: "#f3f3f3"))
             
             Button(action: {
-                // Apply filters
+                print("🔘 [GENRES SHEET] 'Apply Filters' button tapped")
+                print("   Selected genres: \(Array(selectedGenres))")
+                print("   Staged genres BEFORE: \(Array(filterState.stagedSelectedGenres))")
+                print("   Applied genres BEFORE: \(Array(filterState.appliedSelectedGenres))")
+                
+                // Update staged filters first
                 filterState.selectedGenres = selectedGenres
+                
+                print("   Staged genres AFTER: \(Array(filterState.stagedSelectedGenres))")
+                
+                // Apply staged filters to applied filters
+                filterState.applyStagedFilters()
+                
+                print("   Applied genres AFTER: \(Array(filterState.appliedSelectedGenres))")
+                
                 dismiss()
             }) {
                 Text(activeFilterCount > 0 ? "Apply Filters (\(activeFilterCount))" : "Apply Filters")

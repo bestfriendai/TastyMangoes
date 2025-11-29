@@ -8,12 +8,14 @@ import SwiftUI
 struct CategoryResultsView: View {
     @State private var searchText = ""
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var filterState = SearchFilterState.shared
+    // Use @ObservedObject for singleton to avoid recreating state
+    @ObservedObject private var filterState = SearchFilterState.shared
     
     // Real search results from Supabase
     @State private var movies: [Movie] = []
     @State private var isLoading = false
     @State private var error: Error?
+    @State private var showFilters = false
     
     // Get search query from filterState or use empty string
     private var searchQuery: String {
@@ -58,7 +60,10 @@ struct CategoryResultsView: View {
                         
                         // Filter Button
                         Button(action: {
-                            // Show filter sheet
+                            print("🔘 [CATEGORY RESULTS] Filter button tapped")
+                            print("   showFilters BEFORE: \(showFilters)")
+                            showFilters = true
+                            print("   showFilters AFTER: \(showFilters)")
                         }) {
                             Image(systemName: "slider.horizontal.3")
                                 .foregroundColor(Color(hex: "#414141"))
@@ -128,20 +133,20 @@ struct CategoryResultsView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 16) {
-                            // Filter Badges
+                            // Filter Badges (show applied filters)
                             HStack(spacing: 4) {
-                                if !filterState.selectedPlatforms.isEmpty {
+                                if !filterState.appliedSelectedPlatforms.isEmpty {
                                     FilterBadge(
                                         title: "Platform:",
-                                        count: filterState.selectedPlatforms.count,
+                                        count: filterState.appliedSelectedPlatforms.count,
                                         showAvatars: true
                                     )
                                 }
                                 
-                                if !filterState.selectedGenres.isEmpty {
+                                if !filterState.appliedSelectedGenres.isEmpty {
                                     FilterBadge(
                                         title: "Genres:",
-                                        count: filterState.selectedGenres.count,
+                                        count: filterState.appliedSelectedGenres.count,
                                         showAvatars: false
                                     )
                                 }
@@ -184,13 +189,31 @@ struct CategoryResultsView: View {
             searchText = searchQuery
             loadMovies()
         }
-        .onChange(of: filterState.selectedPlatforms) { oldValue, newValue in
-            // Reload when filters change
+        .onChange(of: filterState.appliedSelectedPlatforms) { oldValue, newValue in
+            // Reload when applied filters change (only after "Show Results" is tapped)
             loadMovies()
         }
-        .onChange(of: filterState.selectedGenres) { oldValue, newValue in
-            // Reload when filters change
+        .onChange(of: filterState.appliedSelectedGenres) { oldValue, newValue in
+            // Reload when applied filters change (only after "Show Results" is tapped)
             loadMovies()
+        }
+        .onChange(of: filterState.appliedYearRange) { oldValue, newValue in
+            // Reload when applied filters change (only after "Show Results" is tapped)
+            loadMovies()
+        }
+        .onChange(of: filterState.appliedSortBy) { oldValue, newValue in
+            // Reload when sort order changes
+            loadMovies()
+        }
+        .sheet(isPresented: $showFilters) {
+            SearchFiltersBottomSheet(isPresented: $showFilters) {
+                // Trigger search when filters are applied
+                print("🔄 [CATEGORY RESULTS] Filters applied, reloading movies")
+                loadMovies()
+            }
+        }
+        .onChange(of: showFilters) { oldValue, newValue in
+            print("📋 [CATEGORY RESULTS] showFilters changed: \(oldValue) -> \(newValue)")
         }
     }
     
@@ -202,12 +225,40 @@ struct CategoryResultsView: View {
         
         Task {
             do {
-                // Use Supabase search-movies endpoint
+                // Use Supabase search-movies endpoint with filters
                 let query = searchQuery.isEmpty ? "popular" : searchQuery
-                let searchResults = try await SupabaseService.shared.searchMovies(query: query)
+                
+                // Debug: Log current applied year range
+                print("🔍 [CATEGORY] Current appliedYearRange: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
+                
+                // Get year range (only apply if not default range) - use APPLIED filters
+                let yearRange: ClosedRange<Int>? = (filterState.appliedYearRange.lowerBound == 1925 && filterState.appliedYearRange.upperBound == 2025)
+                    ? nil
+                    : filterState.appliedYearRange
+                
+                // Get genres (only apply if not empty) - use APPLIED filters
+                let genres: Set<String>? = filterState.appliedSelectedGenres.isEmpty ? nil : filterState.appliedSelectedGenres
+                
+                if let yearRange = yearRange {
+                    print("   ✅ Year range: \(yearRange.lowerBound)-\(yearRange.upperBound) (will be sent to API)")
+                } else {
+                    print("   ⚠️ Year range: NIL (default range detected, not sending to API)")
+                }
+                
+                if let genres = genres, !genres.isEmpty {
+                    print("   ✅ Genres: \(genres.joined(separator: ", ")) (will be sent to API)")
+                } else {
+                    print("   ⚠️ Genres: NIL (no genres selected, not sending to API)")
+                }
+                
+                let searchResults = try await SupabaseService.shared.searchMovies(
+                    query: query,
+                    yearRange: yearRange,
+                    genres: genres
+                )
                 
                 // Convert MovieSearchResult to Movie
-                let convertedMovies = searchResults.map { result -> Movie in
+                var convertedMovies = searchResults.map { result -> Movie in
                     Movie(
                         id: result.tmdbId,
                         title: result.title,
@@ -225,6 +276,26 @@ struct CategoryResultsView: View {
                         language: nil,
                         overview: result.overviewShort
                     )
+                }
+                
+                // Apply sorting based on applied sortBy filter
+                let sortBy = filterState.appliedSortBy
+                switch sortBy {
+                case "Year":
+                    // Sort by year (ascending - oldest first)
+                    convertedMovies.sort { $0.year < $1.year }
+                case "Tasty Score":
+                    // Sort by Tasty Score (descending - highest first)
+                    convertedMovies.sort { ($0.tastyScore ?? 0) > ($1.tastyScore ?? 0) }
+                case "AI Score":
+                    // Sort by AI Score (descending - highest first)
+                    convertedMovies.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+                case "Watched":
+                    // TODO: Implement watched sorting when watchlist data is available
+                    break
+                default:
+                    // "List order" - keep original order from API
+                    break
                 }
                 
                 await MainActor.run {
@@ -301,15 +372,12 @@ struct MovieCardHorizontal: View {
     var body: some View {
         HStack(spacing: 12) {
             // Poster Image
-            Rectangle()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 81, height: 120)
-                .cornerRadius(8)
-                .overlay(
-                    Text("POSTER")
-                        .font(.caption)
-                        .foregroundColor(.white)
-                )
+            MoviePosterImage(
+                posterURL: movie.posterImageURL,
+                width: 81,
+                height: 120,
+                cornerRadius: 8
+            )
             
             // Content
             VStack(alignment: .leading, spacing: 12) {

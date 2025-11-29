@@ -671,8 +671,8 @@ class SupabaseService: ObservableObject {
         return count
     }
     
-    /// Searches for movies using TMDB API
-    func searchMovies(query: String, year: Int? = nil) async throws -> [MovieSearchResult] {
+    /// Searches for movies using TMDB API with optional year range and genre filters
+    func searchMovies(query: String, yearRange: ClosedRange<Int>? = nil, genres: Set<String>? = nil) async throws -> [MovieSearchResult] {
         guard client != nil else {
             throw SupabaseError.notConfigured
         }
@@ -680,9 +680,25 @@ class SupabaseService: ObservableObject {
         // Build URL with query parameters
         var urlComponents = URLComponents(string: "\(SupabaseConfig.supabaseURL)/functions/v1/search-movies")
         var queryItems = [URLQueryItem(name: "q", value: query)]
-        if let year = year {
-            queryItems.append(URLQueryItem(name: "year", value: String(year)))
+        
+        // Add year range parameters
+        if let yearRange = yearRange {
+            print("   📅 Adding year filter to URL: year_from=\(yearRange.lowerBound), year_to=\(yearRange.upperBound)")
+            queryItems.append(URLQueryItem(name: "year_from", value: String(yearRange.lowerBound)))
+            queryItems.append(URLQueryItem(name: "year_to", value: String(yearRange.upperBound)))
+        } else {
+            print("   📅 No year range provided (yearRange is nil)")
         }
+        
+        // Add genres parameter (comma-separated genre names)
+        if let genres = genres, !genres.isEmpty {
+            let genresString = genres.joined(separator: ",")
+            queryItems.append(URLQueryItem(name: "genres", value: genresString))
+            print("   🎭 Adding genre filter to URL: genres=\(genresString)")
+        } else {
+            print("   🎭 No genres provided (genres is nil or empty)")
+        }
+        
         urlComponents?.queryItems = queryItems
         
         guard let url = urlComponents?.url else {
@@ -694,24 +710,71 @@ class SupabaseService: ObservableObject {
         request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        print("🔍 Making request to: \(url.absoluteString)")
+        print("   Method: GET")
+        print("   Headers: Authorization=Bearer [REDACTED], Content-Type=application/json")
+        
+        // Verify year parameters are in the URL
+        let urlString = url.absoluteString
+        if urlString.contains("year_from") || urlString.contains("year_to") {
+            print("   ✅ Year parameters found in URL")
+        } else if yearRange != nil {
+            print("   ⚠️ WARNING: yearRange was provided but not found in URL!")
+        }
+        
         let (data, response) = try await URLSession.shared.data(for: request)
+        
+        print("📥 Received response - Status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        if let responseString = String(data: data, encoding: .utf8) {
+            let preview = responseString.prefix(500)
+            print("   Response preview: \(preview)")
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SupabaseError.invalidResponse
         }
         
+        // Try to decode response first - even if status code indicates error,
+        // the Edge Function may return a valid movies array
+        // NOTE: Don't use .convertFromSnakeCase because MovieSearchResult has explicit CodingKeys
+        let decoder = JSONDecoder()
+        
+        // First, try to decode as SearchResponse to get movies
+        if let result = try? decoder.decode(SearchResponse.self, from: data) {
+            // Successfully decoded - return movies even if status code indicates error
+            if !result.movies.isEmpty || (200...299).contains(httpResponse.statusCode) {
+                return result.movies
+            }
+        }
+        
+        // If decoding failed or status code indicates error, check for error message
         guard (200...299).contains(httpResponse.statusCode) else {
+            // Try to decode error message
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
             }
+            
+            // If we can't decode error, try to see what we got
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("⚠️ Search API error response: \(responseString)")
+            }
+            
             throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
         }
         
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let result = try decoder.decode(SearchResponse.self, from: data)
-        return result.movies
+        // If we get here, status is OK but decoding failed - try again with better error info
+        do {
+            // Don't use .convertFromSnakeCase - MovieSearchResult has explicit CodingKeys
+            let result = try decoder.decode(SearchResponse.self, from: data)
+            return result.movies
+        } catch {
+            print("❌ Failed to decode SearchResponse: \(error)")
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("Response body: \(responseString.prefix(1000))")
+            }
+            throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Failed to decode response: \(error.localizedDescription)"]))
+        }
     }
     
     /// Triggers ingestion for a movie (force refresh)

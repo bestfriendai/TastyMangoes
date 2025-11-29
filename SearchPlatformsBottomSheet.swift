@@ -8,7 +8,8 @@ import SwiftUI
 struct SearchPlatformsBottomSheet: View {
     @Binding var isPresented: Bool
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var filterState = SearchFilterState.shared
+    // Use @ObservedObject for singleton to avoid recreating state
+    @ObservedObject private var filterState = SearchFilterState.shared
     
     @State private var mySubscriptionsSelected: Set<String> = []
     @State private var allPlatformsSelected: Set<String> = []

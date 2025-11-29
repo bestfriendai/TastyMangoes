@@ -80,6 +80,7 @@ export interface TMDBSearchResult {
   overview: string;
   vote_average: number;
   vote_count: number;
+  genre_ids?: number[]; // Genre IDs from TMDB
 }
 
 export interface TMDBSearchResponse {
@@ -134,12 +135,12 @@ export async function fetchMovieVideos(tmdbId: string): Promise<TMDBVideos> {
   return response.json();
 }
 
-export async function searchMovies(query: string, year?: number): Promise<TMDBSearchResponse> {
+export async function searchMovies(query: string, year?: number, page: number = 1): Promise<TMDBSearchResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  let url = `${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`;
+  let url = `${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&page=${page}`;
   if (year) {
     url += `&year=${year}`;
   }
@@ -148,6 +149,47 @@ export async function searchMovies(query: string, year?: number): Promise<TMDBSe
   
   if (!response.ok) {
     throw new Error(`TMDB search error: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+export interface TMDBDiscoverParams {
+  primaryReleaseDateGte?: string; // Format: YYYY-MM-DD
+  primaryReleaseDateLte?: string; // Format: YYYY-MM-DD
+  withGenres?: number[]; // Array of genre IDs
+  sortBy?: string; // e.g., "popularity.desc"
+  page?: number;
+}
+
+export async function discoverMovies(params: TMDBDiscoverParams): Promise<TMDBSearchResponse> {
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY environment variable not set');
+  }
+  
+  const urlParams = new URLSearchParams({
+    api_key: TMDB_API_KEY,
+    page: String(params.page || 1),
+    sort_by: params.sortBy || 'popularity.desc',
+  });
+  
+  if (params.primaryReleaseDateGte) {
+    urlParams.append('primary_release_date.gte', params.primaryReleaseDateGte);
+  }
+  
+  if (params.primaryReleaseDateLte) {
+    urlParams.append('primary_release_date.lte', params.primaryReleaseDateLte);
+  }
+  
+  if (params.withGenres && params.withGenres.length > 0) {
+    urlParams.append('with_genres', params.withGenres.join(','));
+  }
+  
+  const url = `${TMDB_BASE}/discover/movie?${urlParams.toString()}`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`TMDB discover error: ${response.status} ${response.statusText}`);
   }
   
   return response.json();

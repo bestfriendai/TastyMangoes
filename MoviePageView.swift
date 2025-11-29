@@ -292,16 +292,24 @@ struct MoviePageView: View {
                     }
                     .padding(.top, 24)
                     .padding(.horizontal, 16)
-                    
-                    // Bottom Action Buttons
-                    bottomActionButtons
-                        .padding(.top, 32)
-                        .padding(.bottom, 100) // Extra padding to ensure buttons are visible above tab bar
+                    .padding(.bottom, 100) // Extra padding to ensure content is visible above pinned buttons
                 }
             }
             .coordinateSpace(name: "scroll")
             .background(Color(hex: "#fdfdfd"))
             .navigationBarBackButtonHidden(true)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Pinned Bottom Action Buttons
+                VStack(spacing: 0) {
+                    Divider()
+                        .background(Color(hex: "#f3f3f3"))
+                    
+                    bottomActionButtons
+                        .padding(.top, 16)
+                        .padding(.bottom, 8)
+                        .background(Color.white)
+                }
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     // Pinned Header: Back arrow, Title, Details, Share, Menu
@@ -1516,7 +1524,7 @@ struct MoviePageView: View {
         }
         
         // Fallback: try to extract year if format is different
-        if let year = Int(dateString.prefix(4)) {
+        if Int(dateString.prefix(4)) != nil {
             return dateString // Return as-is if we can't parse
         }
         

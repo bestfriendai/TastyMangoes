@@ -80,7 +80,7 @@ class SearchViewModel: ObservableObject {
         }
     }
     
-    /// Execute the actual search - using TMDB API
+    /// Execute the actual search - using Supabase endpoint with filters
     @MainActor
     private func performSearch() async {
         error = nil
@@ -96,13 +96,56 @@ class SearchViewModel: ObservableObject {
         }
         
         do {
-            // Call TMDB API to search for movies
-            print("🌐 Calling TMDB API for query: '\(query)'")
-            let response = try await tmdbService.searchMovies(query: query, page: 1)
+            // Get filter state - use APPLIED filters (not staged)
+            let filterState = SearchFilterState.shared
             
-            // Convert TMDB movies to our Movie model
-            searchResults = response.results.map { tmdbMovie in
-                tmdbMovie.toMovie()
+            // Debug: Log current applied year range
+            print("🔍 [SEARCH] Current appliedYearRange: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
+            
+            // Determine year range (only apply if not default range)
+            let yearRange: ClosedRange<Int>? = (filterState.appliedYearRange.lowerBound == 1925 && filterState.appliedYearRange.upperBound == 2025)
+                ? nil
+                : filterState.appliedYearRange
+            
+            // Get genres (only apply if not empty)
+            let genres: Set<String>? = filterState.appliedSelectedGenres.isEmpty ? nil : filterState.appliedSelectedGenres
+            
+            // Call Supabase search-movies endpoint with filters
+            print("🌐 Calling Supabase search-movies for query: '\(query)'")
+            if let yearRange = yearRange {
+                print("   ✅ Year range: \(yearRange.lowerBound)-\(yearRange.upperBound) (will be sent to API)")
+            } else {
+                print("   ⚠️ Year range: NIL (default range detected, not sending to API)")
+            }
+            if let genres = genres {
+                print("   Genres: \(genres.joined(separator: ", "))")
+            }
+            
+            let movieSearchResults = try await SupabaseService.shared.searchMovies(
+                query: query,
+                yearRange: yearRange,
+                genres: genres
+            )
+            
+            // Convert MovieSearchResult to Movie
+            self.searchResults = movieSearchResults.map { result in
+                Movie(
+                    id: result.tmdbId,
+                    title: result.title,
+                    year: result.year ?? 0,
+                    trailerURL: nil,
+                    trailerDuration: nil,
+                    posterImageURL: result.posterUrl,
+                    tastyScore: nil,
+                    aiScore: result.voteAverage,
+                    genres: [],
+                    rating: nil,
+                    director: nil,
+                    runtime: nil,
+                    releaseDate: nil,
+                    language: nil,
+                    overview: result.overviewShort
+                )
             }
             
             // Mark as searched
@@ -111,21 +154,14 @@ class SearchViewModel: ObservableObject {
             // Add to search history
             historyManager.addToHistory(searchQuery)
             
-            print("✅ Found \(searchResults.count) movies from TMDB for '\(query)' (total: \(response.totalResults))")
+            print("✅ Found \(searchResults.count) movies from Supabase for '\(query)'")
             
-        } catch let searchError as TMDBError {
-            // Handle TMDB-specific errors
-            self.error = searchError
+        } catch let searchError {
+            // Handle errors
+            self.error = TMDBError.networkError(searchError)
             searchResults = []
             hasSearched = true
-            print("❌ TMDB API error: \(searchError.localizedDescription)")
-            
-        } catch let networkError {
-            // Handle other errors
-            self.error = TMDBError.networkError(networkError)
-            searchResults = []
-            hasSearched = true
-            print("❌ Search error: \(networkError.localizedDescription)")
+            print("❌ Search error: \(searchError.localizedDescription)")
         }
         
         isSearching = false
