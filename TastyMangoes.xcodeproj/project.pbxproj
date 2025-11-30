@@ -78,6 +78,8 @@
 		C5E27A532EC9979400065359 /* PlatformIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A542EC9979400065359 /* PlatformIconHelper.swift */; };
 		C5E27A552EC9979400065360 /* MovieCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A562EC9979400065360 /* MovieCard.swift */; };
 		C5E27A572EC9979400065361 /* MovieCard+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A582EC9979400065361 /* MovieCard+Extensions.swift */; };
+		C5EF8F332EDC19730012E597 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EF8F322EDC19730012E597 /* SpeechRecognizer.swift */; };
+		C5EF8F352EDC198C0012E597 /* ListeningIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -168,6 +170,8 @@
 		C5E27A542EC9979400065359 /* PlatformIconHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformIconHelper.swift; sourceTree = "<group>"; };
 		C5E27A562EC9979400065360 /* MovieCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieCard.swift; sourceTree = "<group>"; };
 		C5E27A582EC9979400065361 /* MovieCard+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MovieCard+Extensions.swift"; sourceTree = "<group>"; };
+		C5EF8F322EDC19730012E597 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
+		C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningIndicator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -229,6 +233,7 @@
 				C5B95D462ECB416200B47098 /* EditListBottomSheet.swift */,
 				C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */,
 				C5B95D322ECB32CD00B47098 /* IndividualListView.swift */,
+				C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */,
 				C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */,
 				C517CD0C2EC9806C00EAE1FE /* Movie.swift */,
 				C517CD0D2EC9806C00EAE1FE /* MovieDetail.swift */,
@@ -267,6 +272,7 @@
 				C517CD152EC9806C00EAE1FE /* SearchView.swift */,
 				C517CD162EC9806C00EAE1FE /* SearchViewModel.swift */,
 				C5B95D342ECB32E200B47098 /* SortByBottomSheet.swift */,
+				C5EF8F322EDC19730012E597 /* SpeechRecognizer.swift */,
 				C517CD172EC9806C00EAE1FE /* TabBarView.swift */,
 				C517CD182EC9806C00EAE1FE /* TastyMangoes.xcodeproj */,
 				C517CD192EC9806C00EAE1FE /* TastyMangoesApp.swift */,
@@ -459,6 +465,7 @@
 				C517CD262EC9806C00EAE1FE /* Tmdbmodels.swift in Sources */,
 				C5B95D292ECB270300B47098 /* SearchFilterState.swift in Sources */,
 				C5B95D432ECB3D5300B47098 /* AddToListView.swift in Sources */,
+				C5EF8F332EDC19730012E597 /* SpeechRecognizer.swift in Sources */,
 				C51B70512ED2D66500B76CF7 /* MovieDetailView.swift in Sources */,
 				C5B95D332ECB32CD00B47098 /* IndividualListView.swift in Sources */,
 				C5B95D372ECB32F200B47098 /* ManageListBottomSheet.swift in Sources */,
@@ -513,6 +520,7 @@
 				C517CD372EC9806C00EAE1FE /* MovieDetailService.swift in Sources */,
 				C5B95D4B2ECB59C500B47098 /* SearchFilterDetailSheet.swift in Sources */,
 				C517CD382EC9806C00EAE1FE /* HomeVew.swift in Sources */,
+				C5EF8F352EDC198C0012E597 /* ListeningIndicator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

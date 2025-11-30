@@ -10,6 +10,7 @@ struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()
     // Use @ObservedObject for singleton to avoid recreating state
     @ObservedObject private var filterState = SearchFilterState.shared
+    @StateObject private var speechRecognizer = SpeechRecognizer()
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
     @State private var showGenresSheet = false
@@ -131,6 +132,36 @@ struct SearchView: View {
                 // If they were applied, the onChange handlers above will trigger search
             }
         }
+        .onChange(of: speechRecognizer.transcript) { oldValue, newValue in
+            // Update search text when transcript changes
+            if !newValue.isEmpty {
+                viewModel.searchQuery = newValue
+                filterState.searchQuery = newValue
+                // Search will be triggered automatically by the onChange(of: viewModel.searchQuery) modifier
+            }
+        }
+        .overlay(alignment: .top) {
+            if case .listening = speechRecognizer.state {
+                ListeningIndicator(
+                    transcript: speechRecognizer.transcript,
+                    onStop: {
+                        Task {
+                            speechRecognizer.stopListening()
+                        }
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut, value: speechRecognizer.state)
+            }
+        }
+        .onDisappear {
+            // Stop microphone when navigating away
+            if case .listening = speechRecognizer.state {
+                Task {
+                    speechRecognizer.stopListening()
+                }
+            }
+        }
     }
     
     // MARK: - Actions
@@ -207,9 +238,22 @@ struct SearchView: View {
                         }
                     }
                     
-                    Image(systemName: "mic.fill")
-                        .foregroundColor(Color(hex: "#666666"))
-                        .frame(width: 20, height: 20)
+                    Button(action: {
+                        Task {
+                            switch speechRecognizer.state {
+                            case .listening:
+                                speechRecognizer.stopListening()
+                            case .idle, .error:
+                                await speechRecognizer.startListening()
+                            default:
+                                break
+                            }
+                        }
+                    }) {
+                        Image(systemName: speechRecognizer.state == .listening ? "stop.circle.fill" : "mic.fill")
+                            .foregroundColor(speechRecognizer.state == .listening ? .red : Color(hex: "#666666"))
+                            .frame(width: 20, height: 20)
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
@@ -511,6 +555,14 @@ struct SearchView: View {
                                 SearchMovieCard(movie: movie)
                             }
                             .buttonStyle(PlainButtonStyle())
+                            .simultaneousGesture(TapGesture().onEnded {
+                                // Stop speech recognizer when navigating to movie detail
+                                if case .listening = speechRecognizer.state {
+                                    Task {
+                                        speechRecognizer.stopListening()
+                                    }
+                                }
+                            })
                         }
                     }
                     .padding(.horizontal, 20)
@@ -557,6 +609,14 @@ struct SearchView: View {
                             SearchMovieCard(movie: movie)
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .simultaneousGesture(TapGesture().onEnded {
+                            // Stop speech recognizer when navigating to movie detail
+                            if case .listening = speechRecognizer.state {
+                                Task {
+                                    speechRecognizer.stopListening()
+                                }
+                            }
+                        })
                     }
                 }
                 .padding(.horizontal, 20)
