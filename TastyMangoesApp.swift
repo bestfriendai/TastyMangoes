@@ -9,17 +9,11 @@
 //  Notes: Updated to handle authentication state and wire up ProfileView
 
 import SwiftUI
-import AppIntents
 
 @main
 struct TastyMangoesApp: App {
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var profileManager = UserProfileManager.shared
-    
-    init() {
-        // Force update Siri shortcuts
-        TastyMangoesShortcuts.updateAppShortcutParameters()
-    }
     
     var body: some Scene {
         WindowGroup {

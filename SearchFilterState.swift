@@ -53,7 +53,6 @@ class SearchFilterState: ObservableObject {
     
     @Published var searchQuery: String = "" // Track search query for tab bar visibility
     @Published var detectedRecommender: String? = nil // Store recommender from voice command
-    @Published var pendingSiriSearch: String? = nil // Store search query from Siri App Intent
     
     // MARK: - Computed Properties (using applied filters)
     
