@@ -506,6 +506,7 @@ struct SmallListCard: View {
 
 struct MasterlistMovieCard: View {
     let movie: MasterlistMovie
+    @EnvironmentObject private var watchlistManager: WatchlistManager
     @State private var showMoviePage = false
     
     var body: some View {
@@ -571,6 +572,21 @@ struct MasterlistMovieCard: View {
                             .font(.custom("Inter-Regular", size: 12))
                             .foregroundColor(Color(hex: "#666666"))
                     }
+                }
+                
+                // Recommendation Indicator
+                if let recommendation = watchlistManager.getRecommendationData(movieId: movie.id),
+                   let recommender = recommendation.recommenderName {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#666666"))
+                        
+                        Text("Recommended by \(recommender)")
+                            .font(.custom("Inter-Regular", size: 12))
+                            .foregroundColor(Color(hex: "#666666"))
+                    }
+                    .padding(.top, 2)
                 }
             }
             

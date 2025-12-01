@@ -309,6 +309,7 @@ struct IndividualListView: View {
 
 struct WatchlistProductCard: View {
     let movie: MasterlistMovie
+    @EnvironmentObject private var watchlistManager: WatchlistManager
     @State private var showMoviePage = false
     
     var body: some View {
@@ -371,6 +372,21 @@ struct WatchlistProductCard: View {
                                 .foregroundColor(Color(hex: "#1a1a1a"))
                         }
                     }
+                }
+                
+                // Recommendation Indicator
+                if let recommendation = watchlistManager.getRecommendationData(movieId: movie.id),
+                   let recommender = recommendation.recommenderName {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#666666"))
+                        
+                        Text("Recommended by \(recommender)")
+                            .font(.custom("Inter-Regular", size: 12))
+                            .foregroundColor(Color(hex: "#666666"))
+                    }
+                    .padding(.top, 4)
                 }
                 
                 // Watch on and Liked by (placeholder avatars)
