@@ -52,6 +52,7 @@ class SearchFilterState: ObservableObject {
     // MARK: - Other Properties
     
     @Published var searchQuery: String = "" // Track search query for tab bar visibility
+    @Published var detectedRecommender: String? = nil // Store recommender from voice command
     
     // MARK: - Computed Properties (using applied filters)
     

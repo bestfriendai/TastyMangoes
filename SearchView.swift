@@ -135,8 +135,18 @@ struct SearchView: View {
         .onChange(of: speechRecognizer.transcript) { oldValue, newValue in
             // Update search text when transcript changes
             if !newValue.isEmpty {
-                viewModel.searchQuery = newValue
-                filterState.searchQuery = newValue
+                let parsed = parseVoiceCommand(newValue)
+                viewModel.searchQuery = parsed.query
+                filterState.searchQuery = parsed.query
+                
+                if let recommender = parsed.recommender {
+                    filterState.detectedRecommender = recommender
+                    print("🎤 Detected recommendation: '\(parsed.query)' from '\(recommender)'")
+                    print("🎤 Stored recommender in filterState: \(recommender)")
+                } else {
+                    // Clear recommender if no pattern detected
+                    filterState.detectedRecommender = nil
+                }
                 // Search will be triggered automatically by the onChange(of: viewModel.searchQuery) modifier
             }
         }
@@ -170,6 +180,46 @@ struct SearchView: View {
         // Wire up NAVIGATE connection: Search button → Category Results View
         // Navigate to results view with selected filters
         navigateToResults = true
+    }
+    
+    // MARK: - Voice Command Parsing
+    
+    private func parseVoiceCommand(_ transcript: String) -> (query: String, recommender: String?) {
+        let lowercased = transcript.lowercased()
+        
+        // Pattern: "[Name] recommends [Movie]"
+        if let range = lowercased.range(of: " recommends ") {
+            let recommender = String(transcript[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            let movie = String(transcript[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            if !recommender.isEmpty && !movie.isEmpty {
+                return (movie, recommender)
+            }
+        }
+        
+        // Pattern: "[Name] recommended [Movie]" (past tense, no "by")
+        if let range = lowercased.range(of: " recommended ") {
+            // Check if it's NOT "recommended by" pattern
+            let afterRecommended = String(transcript[range.upperBound...]).lowercased()
+            if !afterRecommended.hasPrefix("by ") {
+                let recommender = String(transcript[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                let movie = String(transcript[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                if !recommender.isEmpty && !movie.isEmpty {
+                    return (movie, recommender)
+                }
+            }
+        }
+        
+        // Pattern: "[Movie] recommended by [Name]"
+        if let range = lowercased.range(of: " recommended by ") {
+            let movie = String(transcript[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            let recommender = String(transcript[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            if !recommender.isEmpty && !movie.isEmpty {
+                return (movie, recommender)
+            }
+        }
+        
+        // No recommendation pattern found - just a regular search
+        return (transcript, nil)
     }
     
     // MARK: - Search Header

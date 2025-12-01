@@ -9,10 +9,12 @@ import SwiftUI
 struct AddToListView: View {
     let movieId: String
     let movieTitle: String
+    var prefilledRecommender: String? = nil
     var onNavigateToList: ((String, String) -> Void)? = nil // Callback: (listId, listName)
     
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var watchlistManager: WatchlistManager
+    @ObservedObject private var filterState = SearchFilterState.shared
     @State private var searchText: String = ""
     @State private var selectedListIds: Set<String> = []
     @State private var watchlists: [WatchlistItem] = []
@@ -101,11 +103,21 @@ struct AddToListView: View {
         .presentationDetents([.height(600)])
         .presentationDragIndicator(.hidden)
         .onAppear {
+            print("📋 AddToListView appeared, filterState.detectedRecommender: \(filterState.detectedRecommender ?? "nil")")
+            print("📋 AddToListView appeared, prefilledRecommender parameter: \(prefilledRecommender ?? "nil")")
+            
             loadWatchlists()
             filterWatchlists()
             // Pre-select lists that already contain this movie
             let existingLists = watchlistManager.getListsForMovie(movieId: movieId)
             selectedListIds = existingLists
+            
+            // Pre-fill recommender if provided (check both parameter and filterState)
+            if let prefilled = prefilledRecommender ?? filterState.detectedRecommender {
+                recommenderName = prefilled
+                print("📋 Pre-filled recommender: \(prefilled)")
+                // Do NOT clear filterState.detectedRecommender here
+            }
         }
         .onChange(of: searchText) { oldValue, newValue in
             filterWatchlists()
@@ -311,6 +323,9 @@ struct AddToListView: View {
             )
         }
         
+        // Clear detected recommender now that we've used it
+        filterState.detectedRecommender = nil
+        
         // Show toast for first selected list (or Masterlist if nothing selected)
         let firstListId = listsToAddTo.first ?? "masterlist"
         let listName: String
@@ -397,7 +412,7 @@ struct ListItemRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(list.name)
                         .font(.custom("Nunito-Bold", size: 16))
-                        .foregroundColor(Color(hex: "#1a1a1a"))
+                        .foregroundColor(Color.black)
                     
                     Text("\(list.filmCount) films")
                         .font(.custom("Inter-Regular", size: 12))

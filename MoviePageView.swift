@@ -28,6 +28,7 @@ struct MoviePageView: View {
     
     let movieId: String
     @StateObject private var viewModel: MovieDetailViewModel
+    @ObservedObject private var filterState = SearchFilterState.shared
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedSection: MovieSection = .overview
@@ -354,6 +355,7 @@ struct MoviePageView: View {
                     AddToListView(
                         movieId: movieId,
                         movieTitle: movie.title,
+                        prefilledRecommender: filterState.detectedRecommender,
                         onNavigateToList: { listId, listName in
                             navigateToListId = listId
                             navigateToListName = listName
