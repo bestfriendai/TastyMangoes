@@ -23,6 +23,9 @@ class WatchlistManager: ObservableObject {
     // Dictionary: [movieId: Bool] - tracks watched status
     @Published private var watchedMovies: [String: Bool] = [:]
     
+    // Dictionary: [movieId: (recommenderName: String?, recommendedAt: Date?, recommenderNotes: String?)] - tracks recommendation data
+    @Published private var movieRecommendations: [String: (recommenderName: String?, recommendedAt: Date?, recommenderNotes: String?)] = [:]
+    
     // Dictionary: [listId: WatchlistItem] - stores list metadata
     @Published private var watchlistMetadata: [String: WatchlistItem] = [:]
     
@@ -52,6 +55,16 @@ class WatchlistManager: ObservableObject {
     
     /// Add a movie to a list
     func addMovieToList(movieId: String, listId: String) -> Bool {
+        return addMovieToList(movieId: movieId, listId: listId, recommenderName: nil, recommenderNotes: nil)
+    }
+    
+    /// Add a movie to a list with optional recommendation info
+    func addMovieToList(
+        movieId: String,
+        listId: String,
+        recommenderName: String? = nil,
+        recommenderNotes: String? = nil
+    ) -> Bool {
         // Check if already in list
         if isMovieInList(movieId: movieId, listId: listId) {
             return false // Already added
@@ -68,6 +81,15 @@ class WatchlistManager: ObservableObject {
             movieLists[movieId] = Set<String>()
         }
         movieLists[movieId]?.insert(listId)
+        
+        // Store recommendation data if provided
+        if let recommenderName = recommenderName {
+            movieRecommendations[movieId] = (
+                recommenderName: recommenderName,
+                recommendedAt: Date(),
+                recommenderNotes: recommenderNotes
+            )
+        }
         
         // Update watchlist metadata with new film count
         if let metadata = watchlistMetadata[listId] {
@@ -149,6 +171,11 @@ class WatchlistManager: ObservableObject {
     /// Check if a movie is watched
     func isWatched(movieId: String) -> Bool {
         return watchedMovies[movieId] ?? false
+    }
+    
+    /// Get recommendation data for a movie
+    func getRecommendationData(movieId: String) -> (recommenderName: String?, recommendedAt: Date?, recommenderNotes: String?)? {
+        return movieRecommendations[movieId]
     }
     
     /// Get the count of movies in a list
