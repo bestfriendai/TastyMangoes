@@ -172,6 +172,24 @@ struct SearchView: View {
                 }
             }
         }
+        .onAppear {
+            // Handle Siri search request
+            if let siriSearch = filterState.pendingSiriSearch {
+                viewModel.searchQuery = siriSearch
+                filterState.searchQuery = siriSearch
+                filterState.pendingSiriSearch = nil // Clear after processing
+                viewModel.search() // Trigger search
+            }
+        }
+        .onChange(of: filterState.pendingSiriSearch) { oldValue, newValue in
+            // Handle Siri search request when it changes
+            if let siriSearch = newValue {
+                viewModel.searchQuery = siriSearch
+                filterState.searchQuery = siriSearch
+                filterState.pendingSiriSearch = nil // Clear after processing
+                viewModel.search() // Trigger search
+            }
+        }
     }
     
     // MARK: - Actions

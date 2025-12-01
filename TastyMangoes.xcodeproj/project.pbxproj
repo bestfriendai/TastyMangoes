@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C50911532EDD42BE005E38BA /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50911522EDD42BE005E38BA /* AppIntents.swift */; };
 		C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C517CD042EC9806C00EAE1FE /* Assets.xcassets */; };
 		C517CD212EC9806C00EAE1FE /* movies.json in Resources */ = {isa = PBXBuildFile; fileRef = C517CD122EC9806C00EAE1FE /* movies.json */; };
 		C517CD222EC9806C00EAE1FE /* CategoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD062EC9806C00EAE1FE /* CategoryItem.swift */; };
@@ -100,6 +101,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C50911522EDD42BE005E38BA /* AppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
 		C517CD042EC9806C00EAE1FE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C517CD052EC9806C00EAE1FE /* CastTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastTabView.swift; sourceTree = "<group>"; };
 		C517CD062EC9806C00EAE1FE /* CategoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryItem.swift; sourceTree = "<group>"; };
@@ -222,6 +224,8 @@
 				C517CD042EC9806C00EAE1FE /* Assets.xcassets */,
 				C5B95D442ECB3D9100B47098 /* AddMoviesToListView.swift */,
 				C5B95D422ECB3D5300B47098 /* AddToListView.swift */,
+				C50911522EDD42BE005E38BA /* AppIntents.swift */,
+				C5E27A442EC9979400065351 /* AuthManager.swift */,
 				C517CD052EC9806C00EAE1FE /* CastTabView.swift */,
 				C517CD062EC9806C00EAE1FE /* CategoryItem.swift */,
 				C517CD072EC9806C00EAE1FE /* CategoryResultsView.swift */,
@@ -231,11 +235,14 @@
 				C517CD0A2EC9806C00EAE1FE /* CustomIcons.swift */,
 				C5B95D382ECB330000B47098 /* DeleteListBottomSheet.swift */,
 				C5B95D462ECB416200B47098 /* EditListBottomSheet.swift */,
+				C5E27A422EC9979400065350 /* FriendsBottomSheet.swift */,
 				C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */,
 				C5B95D322ECB32CD00B47098 /* IndividualListView.swift */,
 				C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */,
 				C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */,
 				C517CD0C2EC9806C00EAE1FE /* Movie.swift */,
+				C5E27A562EC9979400065360 /* MovieCard.swift */,
+				C5E27A582EC9979400065361 /* MovieCard+Extensions.swift */,
 				C517CD0D2EC9806C00EAE1FE /* MovieDetail.swift */,
 				C517CD0E2EC9806C00EAE1FE /* MovieDetailService.swift */,
 				C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */,
@@ -245,21 +252,15 @@
 				C517CD112EC9806C00EAE1FE /* MoviePosterImage.swift */,
 				C517CD122EC9806C00EAE1FE /* movies.json */,
 				C5E27A392EC9979400065347 /* MoviePageHeader.swift */,
-				C5E27A3E2EC9979400065348 /* RateBottomSheet.swift */,
+				C5E27A542EC9979400065359 /* PlatformIconHelper.swift */,
 				C5E27A402EC9979400065349 /* PlatformBottomSheet.swift */,
-				C5E27A422EC9979400065350 /* FriendsBottomSheet.swift */,
-				C5E27A442EC9979400065351 /* AuthManager.swift */,
-				C5E27A462EC9979400065352 /* UserProfileManager.swift */,
+				C5E27A4C2EC9979400065355 /* ProfileView.swift */,
+				C5E27A3E2EC9979400065348 /* RateBottomSheet.swift */,
 				C5E27A482EC9979400065353 /* SignInView.swift */,
 				C5E27A4A2EC9979400065354 /* SignUpView.swift */,
-				C5E27A4C2EC9979400065355 /* ProfileView.swift */,
 				C5E27A4E2EC9979400065356 /* SupabaseService.swift */,
 				C5E27A502EC9979400065357 /* SupabaseModels.swift */,
 				C5E27A522EC9979400065358 /* SupabaseConfig.swift */,
-				C5E27A542EC9979400065359 /* PlatformIconHelper.swift */,
-				C5E27A562EC9979400065360 /* MovieCard.swift */,
-				C5E27A582EC9979400065361 /* MovieCard+Extensions.swift */,
-				C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */,
 				C517CD132EC9806C00EAE1FE /* SearchComponents.swift */,
 				C5B95D262ECB1D4000B47098 /* SearchCategoriesView.swift */,
 				C5B95D242ECB1D2800B47098 /* SearchFiltersBottomSheet.swift */,
@@ -280,8 +281,10 @@
 				C517CD1B2EC9806C00EAE1FE /* Tmdbmodels.swift */,
 				C517CD1C2EC9806C00EAE1FE /* Tmdbservice.swift */,
 				C517CD1D2EC9806C00EAE1FE /* TMIcons.swift */,
+				C5E27A462EC9979400065352 /* UserProfileManager.swift */,
 				C5B95D1C2ECB0B0800B47098 /* WatchlistView.swift */,
 				C5B95D1E2ECB0DBF00B47098 /* IndividualListView.swift */,
+				C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */,
 				C5B95D3A2ECB333000B47098 /* WatchlistFiltersBottomSheet.swift */,
 				C5B95D482ECB418100B47098 /* WatchlistFilterDetailSheet.swift */,
 				C5B95D402ECB383300B47098 /* WatchlistFilterState.swift */,
@@ -519,6 +522,7 @@
 				C517CD362EC9806C00EAE1FE /* CustomIcons.swift in Sources */,
 				C517CD372EC9806C00EAE1FE /* MovieDetailService.swift in Sources */,
 				C5B95D4B2ECB59C500B47098 /* SearchFilterDetailSheet.swift in Sources */,
+				C50911532EDD42BE005E38BA /* AppIntents.swift in Sources */,
 				C517CD382EC9806C00EAE1FE /* HomeVew.swift in Sources */,
 				C5EF8F352EDC198C0012E597 /* ListeningIndicator.swift in Sources */,
 			);

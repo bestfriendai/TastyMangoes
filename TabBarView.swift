@@ -58,6 +58,12 @@ struct TabBarView: View {
             }
         }
         .ignoresSafeArea(.keyboard)
+        .onChange(of: filterState.pendingSiriSearch) { oldValue, newValue in
+            if newValue != nil {
+                selectedTab = 1  // Switch to Search tab
+                print("🎤 Siri search detected, switching to Search tab")
+            }
+        }
     }
 }
 
