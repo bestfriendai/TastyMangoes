@@ -22,6 +22,7 @@ struct AddToListView: View {
     @State private var toastListName: String = ""
     @State private var toastListId: String = ""
     @State private var showCreateWatchlistSheet = false
+    @State private var recommenderName: String = ""
     
     // Count should show number of movies being added (always 1)
     var selectedCount: Int {
@@ -57,21 +58,37 @@ struct AddToListView: View {
                 Divider()
                     .background(Color(hex: "#f3f3f3"))
                 
+                // Recommender Name Field
+                HStack(spacing: 8) {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(Color(hex: "#666666"))
+                    
+                    TextField("Recommended by (optional)", text: $recommenderName)
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                .padding(12)
+                .background(Color(hex: "#f3f3f3"))
+                .cornerRadius(8)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                
                 Button(action: {
                     submitSelections()
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "list.bullet.rectangle")
                             .font(.system(size: 20))
-                            .foregroundColor(Color(hex: "#333333"))
+                            .foregroundColor(.white)
                         
                         Text("Add to Watchlist (\(selectedCount))")
                             .font(.custom("Nunito-Bold", size: 14))
-                            .foregroundColor(Color(hex: "#333333"))
+                            .foregroundColor(.white)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(Color(hex: "#f3f3f3"))
+                    .background(Color(hex: "#FEA500"))
                     .cornerRadius(8)
                 }
                 .padding(.horizontal, 16)
@@ -266,8 +283,12 @@ struct AddToListView: View {
             watchlistManager.removeMovieFromList(movieId: movieId, listId: listId)
             selectedListIds.remove(listId)
         } else {
-            // Add to list
-            let success = watchlistManager.addMovieToList(movieId: movieId, listId: listId)
+            // Add to list (with recommender name if provided)
+            let success = watchlistManager.addMovieToList(
+                movieId: movieId,
+                listId: listId,
+                recommenderName: recommenderName.isEmpty ? nil : recommenderName
+            )
             if success {
                 selectedListIds.insert(listId)
             }
@@ -283,7 +304,11 @@ struct AddToListView: View {
         
         // Add to all selected lists (including Masterlist if nothing selected)
         for listId in listsToAddTo {
-            _ = watchlistManager.addMovieToList(movieId: movieId, listId: listId)
+            _ = watchlistManager.addMovieToList(
+                movieId: movieId,
+                listId: listId,
+                recommenderName: recommenderName.isEmpty ? nil : recommenderName
+            )
         }
         
         // Show toast for first selected list (or Masterlist if nothing selected)
