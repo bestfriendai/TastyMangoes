@@ -2,8 +2,14 @@
 //  SearchViewModel.swift
 //  TastyMangoes
 //
-//  Created by Claude on 11/13/25 at 9:07 PM
+//  Originally created by Claude on 11/13/25 at 9:07 PM
+//  Modified by Claude on 2025-12-02 at 12:15 AM (Pacific Time)
 //
+//  Changes made by Claude (2025-12-02):
+//  - Fixed flashing "no movies found" issue during typing
+//  - Keep previous results visible while new search is in progress
+//  - Only show empty state after debounced search truly completes with no results
+//  - Fixed Task cancellation not resetting isSearching state
 
 import Foundation
 import SwiftUI
@@ -21,6 +27,9 @@ class SearchViewModel: ObservableObject {
     @Published var hasSearched = false
     @Published var searchSuggestions: [String] = []
     @Published var showSuggestions = false
+    
+    // Track the query that produced current results
+    private var lastSearchedQuery: String = ""
     
     // MARK: - Properties
     
@@ -45,22 +54,24 @@ class SearchViewModel: ObservableObject {
             showSuggestions = false
             isSearching = false
             error = nil
+            lastSearchedQuery = ""
             return
         }
         
-        // Show loading state immediately
+        // Show loading state - but keep previous results visible
         isSearching = true
         showSuggestions = false
         error = nil
         
         print("⏳ Starting debounced search for '\(searchQuery)'")
         
-        // Debounce - wait 0.3 seconds before searching (reduced for better responsiveness)
+        // Debounce - wait 0.4 seconds before searching (slightly longer for smoother UX)
         searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+            try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
             
             guard !Task.isCancelled else {
                 print("❌ Search task cancelled")
+                // Don't change isSearching here - a new search might be starting
                 return
             }
             
@@ -92,6 +103,7 @@ class SearchViewModel: ObservableObject {
             searchResults = []
             hasSearched = false
             isSearching = false
+            lastSearchedQuery = ""
             return
         }
         
@@ -126,6 +138,12 @@ class SearchViewModel: ObservableObject {
                 yearRange: yearRange,
                 genres: genres
             )
+            
+            // Check if this search is still relevant (user might have typed more)
+            guard query == searchQuery.trimmingCharacters(in: .whitespaces) else {
+                print("⚠️ Query changed during search, discarding results for '\(query)'")
+                return
+            }
             
             // Convert MovieSearchResult to Movie
             var convertedMovies = movieSearchResults.map { result in
@@ -186,6 +204,7 @@ class SearchViewModel: ObservableObject {
             }
             
             self.searchResults = convertedMovies
+            self.lastSearchedQuery = query
             
             // Mark as searched
             hasSearched = true
@@ -196,10 +215,16 @@ class SearchViewModel: ObservableObject {
             print("✅ Found \(searchResults.count) movies from Supabase for '\(query)'")
             
         } catch let searchError {
+            // Only show error if this search is still relevant
+            guard query == searchQuery.trimmingCharacters(in: .whitespaces) else {
+                return
+            }
+            
             // Handle errors
             self.error = TMDBError.networkError(searchError)
             searchResults = []
             hasSearched = true
+            lastSearchedQuery = query
             print("❌ Search error: \(searchError.localizedDescription)")
         }
         
@@ -262,6 +287,7 @@ class SearchViewModel: ObservableObject {
         searchSuggestions = []
         showSuggestions = false
         isSearching = false
+        lastSearchedQuery = ""
         searchTask?.cancel()
         // Also clear searchQuery in SearchFilterState for tab bar visibility
         SearchFilterState.shared.searchQuery = ""

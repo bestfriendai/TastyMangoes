@@ -2,14 +2,14 @@
 //  TastyMangoes
 //
 //  Originally created by Cursor Assistant on 2025-11-14
-//  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time)
+//  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
+//  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
 //
-//  Changes made by Claude:
-//  - Added @FocusState private var isSearchFocused: Bool for keyboard management
-//  - Added .focused($isSearchFocused) to TextField
-//  - Added isSearchFocused = false in startSearching() to dismiss keyboard
-//  - Added isSearchFocused = false in clear button action to dismiss keyboard
-//  These changes fix the keyboard staying extended when tapping the search box repeatedly.
+//  Changes made by Claude (2025-12-02):
+//  - Reordered content logic to keep previous results visible while searching
+//  - Only show loading view when there are no results to display
+//  - Only show empty state after search truly completes with no results
+//  - This prevents the distracting flash of "Oops! No movies found" while typing
 
 import SwiftUI
 
@@ -36,19 +36,40 @@ struct SearchView: View {
                 // Search Header
                 searchHeader
                 
-                // Content
+                // Content - Reordered to prevent flashing empty state
                 if viewModel.searchQuery.isEmpty && !viewModel.hasSearched {
                     // Default: Show categories view when no search query and haven't searched
                     categoriesView
-                } else if viewModel.isSearching {
-                    loadingView
                 } else if let error = viewModel.error {
+                    // Show error if there's one
                     errorView(error: error)
-                } else if !viewModel.searchQuery.isEmpty && !viewModel.searchResults.isEmpty {
-                    // Show real-time search results as user types (has query and has results)
-                    resultsListView
-                } else if !viewModel.searchQuery.isEmpty && viewModel.searchResults.isEmpty && viewModel.hasSearched {
-                    // Show empty state when query exists but no results found
+                } else if !viewModel.searchResults.isEmpty {
+                    // Show results - keep visible even while a new search is in progress
+                    ZStack {
+                        resultsListView
+                        
+                        // Subtle loading indicator overlay when searching with existing results
+                        if viewModel.isSearching {
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                        .padding(8)
+                                        .background(Color.white.opacity(0.9))
+                                        .cornerRadius(8)
+                                        .shadow(radius: 2)
+                                        .padding(.trailing, 20)
+                                        .padding(.top, 8)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                } else if viewModel.isSearching {
+                    // Only show full loading view when we have no results to display yet
+                    loadingView
+                } else if !viewModel.searchQuery.isEmpty && viewModel.hasSearched {
+                    // Only show empty state after search truly completes with no results
                     emptyStateView
                 } else {
                     // Fallback to categories
