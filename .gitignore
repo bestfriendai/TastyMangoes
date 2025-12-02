@@ -5,3 +5,4 @@
 *.xcuserdata
 *.xcuserstate
 DerivedData/
+ClaudeAPIKey.swift
