@@ -1,8 +1,15 @@
 //  SearchView.swift
-//  Created automatically by Cursor Assistant
-//  Created on: 2025-11-14 at 09:59 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 04:45 (America/Los_Angeles - Pacific Time)
-//  Notes: Search view with search bar, suggestions, results, and filter functionality. Updated to show yellow header with "Find Your Movie" title and description when empty (categories view), simpler white header when searching. Removed automatic popular movies loading. Changed to show real-time search results as user types instead of suggestions. Categories view shows by default when search query is empty.
+//  TastyMangoes
+//
+//  Originally created by Cursor Assistant on 2025-11-14
+//  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time)
+//
+//  Changes made by Claude:
+//  - Added @FocusState private var isSearchFocused: Bool for keyboard management
+//  - Added .focused($isSearchFocused) to TextField
+//  - Added isSearchFocused = false in startSearching() to dismiss keyboard
+//  - Added isSearchFocused = false in clear button action to dismiss keyboard
+//  These changes fix the keyboard staying extended when tapping the search box repeatedly.
 
 import SwiftUI
 
@@ -16,6 +23,7 @@ struct SearchView: View {
     @State private var showGenresSheet = false
     @State private var navigateToResults = false
     @State private var selectedFilterType: SearchFiltersBottomSheet.FilterType? = nil
+    @FocusState private var isSearchFocused: Bool  // Added by Claude for keyboard management
     
     // Computed property for selection count (use applied filters for display)
     private var totalSelections: Int {
@@ -56,7 +64,7 @@ struct SearchView: View {
                             startSearching()
                         }) {
                             // Show count if there are selections, otherwise just "Start Searching"
-                            let buttonText = totalSelections > 0 
+                            let buttonText = totalSelections > 0
                                 ? "Start Searching (\(totalSelections))"
                                 : "Start Searching"
                             Text(buttonText)
@@ -177,6 +185,7 @@ struct SearchView: View {
     // MARK: - Actions
     
     private func startSearching() {
+        isSearchFocused = false  // Added by Claude - dismiss keyboard
         // Wire up NAVIGATE connection: Search button → Category Results View
         // Navigate to results view with selected filters
         navigateToResults = true
@@ -271,6 +280,7 @@ struct SearchView: View {
                     TextField("Searching by name...", text: $viewModel.searchQuery)
                         .font(.custom("Inter-Regular", size: 16))
                         .foregroundColor(Color(hex: "#666666"))
+                        .focused($isSearchFocused)  // Added by Claude for keyboard management
                         .onChange(of: viewModel.searchQuery) { oldValue, newValue in
                             print("📝 [SEARCH VIEW] Search query changed: '\(oldValue)' -> '\(newValue)'")
                             print("   Current appliedYearRange: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
@@ -280,6 +290,7 @@ struct SearchView: View {
                     
                     if !viewModel.searchQuery.isEmpty {
                         Button(action: {
+                            isSearchFocused = false  // Added by Claude - dismiss keyboard
                             viewModel.clearSearch()
                         }) {
                             Image(systemName: "xmark.circle.fill")
@@ -564,7 +575,7 @@ struct SearchView: View {
                     if !viewModel.searchResults.isEmpty || filterState.hasActiveFilters {
                         HStack {
                             // Show count based on whether we have search results or just filters
-                            let resultsText = !viewModel.searchResults.isEmpty 
+                            let resultsText = !viewModel.searchResults.isEmpty
                                 ? "\(viewModel.searchResults.count) results found"
                                 : (filterState.hasActiveFilters ? "0 results found" : "")
                             
@@ -909,4 +920,3 @@ struct SearchSuggestionItem: View {
 #Preview {
     SearchView()
 }
-
