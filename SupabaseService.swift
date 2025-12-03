@@ -2,7 +2,8 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:45 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:20 (America/Los_Angeles - Pacific Time)
-//  Notes: Supabase service layer for database operations - updated to match revised schema with watch_history and user_ratings
+//  Last modified: 2025-12-03 at 09:09 PST by Cursor Assistant
+//  Notes: Supabase service layer for database operations - updated to match revised schema with watch_history and user_ratings. Added recommendation fields support to addMovieToWatchlist.
 
 import Foundation
 import Supabase
@@ -333,14 +334,22 @@ class SupabaseService: ObservableObject {
         return response
     }
     
-    func addMovieToWatchlist(watchlistId: UUID, movieId: String) async throws -> WatchlistMovie {
+    func addMovieToWatchlist(
+        watchlistId: UUID,
+        movieId: String,
+        recommenderName: String? = nil,
+        recommenderNotes: String? = nil
+    ) async throws -> WatchlistMovie {
         guard let client = client else {
             throw SupabaseError.notConfigured
         }
         
         let watchlistMovie = WatchlistMovie(
             watchlistId: watchlistId,
-            movieId: movieId
+            movieId: movieId,
+            recommenderName: recommenderName,
+            recommendedAt: recommenderName != nil ? Date() : nil,
+            recommenderNotes: recommenderNotes
         )
         
         let response: WatchlistMovie = try await client

@@ -374,8 +374,9 @@ struct WatchlistView: View {
 }
 
 // MARK: - Data Models
+// Last modified: 2025-12-03 at 09:09 PST by Cursor Assistant
 
-struct WatchlistItem: Identifiable {
+struct WatchlistItem: Identifiable, Codable {
     let id: String
     let name: String
     let filmCount: Int

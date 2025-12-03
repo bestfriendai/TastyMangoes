@@ -2,7 +2,8 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:50 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:15 (America/Los_Angeles - Pacific Time)
-//  Notes: Data models for Supabase database tables - updated to match revised schema
+//  Last modified: 2025-12-03 at 09:09 PST by Cursor Assistant
+//  Notes: Data models for Supabase database tables - updated to match revised schema. Added recommendation fields to WatchlistMovie.
 
 import Foundation
 
@@ -94,17 +95,26 @@ struct WatchlistMovie: Codable, Identifiable {
     let watchlistId: UUID
     let movieId: String
     let addedAt: Date
+    let recommenderName: String?
+    let recommendedAt: Date?
+    let recommenderNotes: String?
     
     init(
         id: UUID = UUID(),
         watchlistId: UUID,
         movieId: String,
-        addedAt: Date = Date()
+        addedAt: Date = Date(),
+        recommenderName: String? = nil,
+        recommendedAt: Date? = nil,
+        recommenderNotes: String? = nil
     ) {
         self.id = id
         self.watchlistId = watchlistId
         self.movieId = movieId
         self.addedAt = addedAt
+        self.recommenderName = recommenderName
+        self.recommendedAt = recommendedAt
+        self.recommenderNotes = recommenderNotes
     }
     
     enum CodingKeys: String, CodingKey {
@@ -112,6 +122,9 @@ struct WatchlistMovie: Codable, Identifiable {
         case watchlistId = "watchlist_id"
         case movieId = "movie_id"
         case addedAt = "added_at"
+        case recommenderName = "recommender_name"
+        case recommendedAt = "recommended_at"
+        case recommenderNotes = "recommender_notes"
     }
 }
 
