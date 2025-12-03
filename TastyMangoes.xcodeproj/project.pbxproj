@@ -49,6 +49,8 @@
 		C5B95D2F2ECB274E00B47098 /* SearchGenresBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D2E2ECB274E00B47098 /* SearchGenresBottomSheet.swift */; };
 		C5B95D312ECB32B600B47098 /* WatchlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D302ECB32B600B47098 /* WatchlistView.swift */; };
 		C5B95D332ECB32CD00B47098 /* IndividualListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D322ECB32CD00B47098 /* IndividualListView.swift */; };
+		B5B058782ECB14A7455AA373 /* MangoListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B058792ECB14A7455AA373 /* MangoListeningView.swift */; };
+		B5B0587A2ECB14A7455AA373 /* VoiceIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */; };
 		C5B95D352ECB32E200B47098 /* SortByBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D342ECB32E200B47098 /* SortByBottomSheet.swift */; };
 		C5B95D372ECB32F200B47098 /* ManageListBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */; };
 		C5B95D392ECB330000B47098 /* DeleteListBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D382ECB330000B47098 /* DeleteListBottomSheet.swift */; };
@@ -138,6 +140,8 @@
 		C5B95D2E2ECB274E00B47098 /* SearchGenresBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchGenresBottomSheet.swift; sourceTree = "<group>"; };
 		C5B95D302ECB32B600B47098 /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
 		C5B95D322ECB32CD00B47098 /* IndividualListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndividualListView.swift; sourceTree = "<group>"; };
+		B5B058792ECB14A7455AA373 /* MangoListeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoListeningView.swift; sourceTree = "<group>"; };
+		B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentRouter.swift; sourceTree = "<group>"; };
 		C5B95D342ECB32E200B47098 /* SortByBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SortByBottomSheet.swift; sourceTree = "<group>"; };
 		C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageListBottomSheet.swift; sourceTree = "<group>"; };
 		C5B95D382ECB330000B47098 /* DeleteListBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteListBottomSheet.swift; sourceTree = "<group>"; };
@@ -234,6 +238,7 @@
 				C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */,
 				C5B95D322ECB32CD00B47098 /* IndividualListView.swift */,
 				C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */,
+				B5B058792ECB14A7455AA373 /* MangoListeningView.swift */,
 				C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */,
 				C517CD0C2EC9806C00EAE1FE /* Movie.swift */,
 				C517CD0D2EC9806C00EAE1FE /* MovieDetail.swift */,
@@ -270,6 +275,7 @@
 				C5B95D2E2ECB274E00B47098 /* SearchGenresBottomSheet.swift */,
 				C5B95D2A2ECB271700B47098 /* SearchHistoryManager.swift */,
 				C5B95D2C2ECB272B00B47098 /* SearchPlatformsBottomSheet.swift */,
+				B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */,
 				C517CD152EC9806C00EAE1FE /* SearchView.swift */,
 				C517CD162EC9806C00EAE1FE /* SearchViewModel.swift */,
 				C5B95D342ECB32E200B47098 /* SortByBottomSheet.swift */,
@@ -484,6 +490,8 @@
 				C517CD2D2EC9806C00EAE1FE /* TMIcons.swift in Sources */,
 				C517CD2E2EC9806C00EAE1FE /* SearchComponents.swift in Sources */,
 				C5B95D332ECB32CD00B47098 /* IndividualListView.swift in Sources */,
+				B5B058782ECB14A7455AA373 /* MangoListeningView.swift in Sources */,
+				B5B0587A2ECB14A7455AA373 /* VoiceIntentRouter.swift in Sources */,
 				C5B95D312ECB32B600B47098 /* WatchlistView.swift in Sources */,
 				C517CD2F2EC9806C00EAE1FE /* CategoryResultsView.swift in Sources */,
 				C517CD302EC9806C00EAE1FE /* SearchViewModel.swift in Sources */,

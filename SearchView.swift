@@ -25,7 +25,6 @@ struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()
     // Use @ObservedObject for singleton to avoid recreating state
     @ObservedObject private var filterState = SearchFilterState.shared
-    @StateObject private var speechRecognizer = SpeechRecognizer()
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
     @State private var showGenresSheet = false
@@ -169,72 +168,7 @@ struct SearchView: View {
                 // If they were applied, the onChange handlers above will trigger search
             }
         }
-        .onChange(of: speechRecognizer.transcript) { oldValue, newValue in
-            // Update search text when transcript changes
-            if !newValue.isEmpty {
-                let parsed = parseVoiceCommand(newValue)
-                print("🎤 Transcript changed: '\(oldValue)' -> '\(newValue)'")
-                print("🎤 Parsed query: '\(parsed.query)', recommender: \(parsed.recommender ?? "nil")")
-                
-                // Update search query - this will trigger search via onChange(of: viewModel.searchQuery)
-                viewModel.searchQuery = parsed.query
-                filterState.searchQuery = parsed.query
-                
-                if let recommender = parsed.recommender {
-                    filterState.detectedRecommender = recommender
-                    print("🎤 Detected recommendation: '\(parsed.query)' from '\(recommender)'")
-                    print("🎤 Stored recommender in filterState: \(recommender)")
-                } else {
-                    // Clear recommender if no pattern detected
-                    filterState.detectedRecommender = nil
-                }
-            }
-        }
-        .onChange(of: speechRecognizer.state) { oldState, newState in
-            // When recording finishes, ensure we trigger search with final transcript
-            if case .processing = newState, case .listening = oldState {
-                let finalTranscript = speechRecognizer.transcript
-                if !finalTranscript.isEmpty {
-                    print("🎤 Recording finished, final transcript: '\(finalTranscript)'")
-                    let parsed = parseVoiceCommand(finalTranscript)
-                    if !parsed.query.isEmpty {
-                        print("🎤 Triggering search with final transcript: '\(parsed.query)'")
-                        viewModel.searchQuery = parsed.query
-                        filterState.searchQuery = parsed.query
-                        viewModel.search() // Explicitly trigger search
-                    }
-                }
-            }
-        }
-        .overlay(alignment: .top) {
-            // Show indicator for both .requesting and .listening states
-            switch speechRecognizer.state {
-            case .listening, .requesting:
-                ListeningIndicator(
-                    transcript: speechRecognizer.transcript,
-                    onStop: {
-                        Task {
-                            speechRecognizer.stopListening(reason: "userTappedStop")
-                        }
-                    }
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .animation(.easeInOut, value: speechRecognizer.state)
-            default:
-                EmptyView()
-            }
-        }
-        .onDisappear {
-            // Stop microphone when navigating away
-            switch speechRecognizer.state {
-            case .listening, .requesting:
-                Task {
-                    speechRecognizer.stopListening(reason: "viewDisappeared")
-                }
-            default:
-                break
-            }
-        }
+        // Voice recognition removed - use TalkToMango center button for voice input
     }
     
     // MARK: - Actions
@@ -354,41 +288,7 @@ struct SearchView: View {
                         }
                     }
                     
-                    Button(action: {
-                        // Instant UI feedback - start async work in background
-                        Task {
-                            switch speechRecognizer.state {
-                            case .listening:
-                                speechRecognizer.stopListening(reason: "userTappedStop")
-                            case .idle, .error:
-                                // UI will update immediately via state = .requesting
-                                await speechRecognizer.startListening()
-                            case .requesting:
-                                // If already requesting, cancel and go back to idle
-                                speechRecognizer.stopListening(reason: "userCancelled")
-                            default:
-                                break
-                            }
-                        }
-                    }) {
-                        Image(systemName: {
-                            switch speechRecognizer.state {
-                            case .listening, .requesting:
-                                return "stop.circle.fill"
-                            default:
-                                return "mic.fill"
-                            }
-                        }())
-                        .foregroundColor({
-                            switch speechRecognizer.state {
-                            case .listening, .requesting:
-                                return .red
-                            default:
-                                return Color(hex: "#666666")
-                            }
-                        }())
-                        .frame(width: 20, height: 20)
-                    }
+                    // Mic button removed - use TalkToMango center button for voice input
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
@@ -690,14 +590,6 @@ struct SearchView: View {
                                 SearchMovieCard(movie: movie)
                             }
                             .buttonStyle(PlainButtonStyle())
-                            .simultaneousGesture(TapGesture().onEnded {
-                                // Stop speech recognizer when navigating to movie detail
-                                if case .listening = speechRecognizer.state {
-                                    Task {
-                                        speechRecognizer.stopListening()
-                                    }
-                                }
-                            })
                         }
                     }
                     .padding(.horizontal, 20)
@@ -744,14 +636,6 @@ struct SearchView: View {
                             SearchMovieCard(movie: movie)
                         }
                         .buttonStyle(PlainButtonStyle())
-                        .simultaneousGesture(TapGesture().onEnded {
-                            // Stop speech recognizer when navigating to movie detail
-                            if case .listening = speechRecognizer.state {
-                                Task {
-                                    speechRecognizer.stopListening()
-                                }
-                            }
-                        })
                     }
                 }
                 .padding(.horizontal, 20)
