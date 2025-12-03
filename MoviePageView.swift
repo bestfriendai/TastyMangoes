@@ -28,7 +28,6 @@ struct MoviePageView: View {
     
     let movieId: String
     @StateObject private var viewModel: MovieDetailViewModel
-    @ObservedObject private var filterState = SearchFilterState.shared
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedSection: MovieSection = .overview
@@ -37,6 +36,7 @@ struct MoviePageView: View {
     @State private var showRateBottomSheet = false
     @State private var showPlatformBottomSheet = false
     @State private var showFriendsBottomSheet = false
+    @State private var showTrailerPlayer = false
     @State private var scrollProxy: ScrollViewProxy?
     @State private var tabBarMinY: CGFloat = 1000 // Start with large value so pinned bar doesn't show initially
     @State private var showIndividualList = false
@@ -355,7 +355,6 @@ struct MoviePageView: View {
                     AddToListView(
                         movieId: movieId,
                         movieTitle: movie.title,
-                        prefilledRecommender: filterState.detectedRecommender,
                         onNavigateToList: { listId, listName in
                             navigateToListId = listId
                             navigateToListName = listName
@@ -383,6 +382,12 @@ struct MoviePageView: View {
             }
             .sheet(isPresented: $showFriendsBottomSheet) {
                 FriendsBottomSheet(isPresented: $showFriendsBottomSheet)
+            }
+            .sheet(isPresented: $showTrailerPlayer) {
+                if let movie = viewModel.movie {
+                    let videoId = movie.trailerYoutubeId ?? ""
+                    TrailerPlayerSheet(videoId: videoId, movieTitle: movie.title)
+                }
             }
             .fullScreenCover(isPresented: $showIndividualList) {
                 if let listId = navigateToListId, let listName = navigateToListName {
@@ -564,19 +569,16 @@ struct MoviePageView: View {
                     }
                 }
                 
-                // Open the URL if we found one
-                if let url = youtubeURLToOpen {
-                    print("🎬 [Trailer] Opening URL: \(url)")
-                    UIApplication.shared.open(url, options: [:], completionHandler: { success in
-                        if success {
-                            print("✅ [Trailer] Successfully opened YouTube URL")
-                        } else {
-                            print("❌ [Trailer] Failed to open YouTube URL - completion handler returned false")
-                        }
-                    })
-                } else {
-                    print("❌ [Trailer] No valid trailer URL found from any source")
-                }
+                // Open embedded player if we have a YouTube ID, otherwise fall back to external
+                                if let trailerYouTubeId = movie.trailerYoutubeId, !trailerYouTubeId.isEmpty {
+                                    print("🎬 [Trailer] Opening embedded player for: \(trailerYouTubeId)")
+                                    showTrailerPlayer = true
+                                } else if let url = youtubeURLToOpen {
+                                    print("🎬 [Trailer] Opening URL externally: \(url)")
+                                    UIApplication.shared.open(url)
+                                } else {
+                                    print("❌ [Trailer] No valid trailer URL found")
+                                }
             }) {
                 HStack(spacing: 8) {
                     Image(systemName: "play.fill")
