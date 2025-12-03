@@ -4,12 +4,20 @@
 //  Originally created by Cursor Assistant on 2025-11-14
 //  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
 //  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
+//  Last modified: 2025-12-03 at 09:39 PST by Cursor Assistant
 //
 //  Changes made by Claude (2025-12-02):
 //  - Reordered content logic to keep previous results visible while searching
 //  - Only show loading view when there are no results to display
 //  - Only show empty state after search truly completes with no results
 //  - This prevents the distracting flash of "Oops! No movies found" while typing
+//
+//  Changes made by Cursor Assistant (2025-12-03):
+//  - Fixed mic button to show instant UI feedback (shows .requesting state immediately)
+//  - Updated overlay to show ListeningIndicator for both .requesting and .listening states
+//  - Added proper stopListening reason tracking
+//  - Added explicit search trigger when recording finishes (onChange of state to .processing)
+//  - Added debug logging for transcript changes and search queries
 
 import SwiftUI
 
@@ -165,6 +173,10 @@ struct SearchView: View {
             // Update search text when transcript changes
             if !newValue.isEmpty {
                 let parsed = parseVoiceCommand(newValue)
+                print("🎤 Transcript changed: '\(oldValue)' -> '\(newValue)'")
+                print("🎤 Parsed query: '\(parsed.query)', recommender: \(parsed.recommender ?? "nil")")
+                
+                // Update search query - this will trigger search via onChange(of: viewModel.searchQuery)
                 viewModel.searchQuery = parsed.query
                 filterState.searchQuery = parsed.query
                 
@@ -176,29 +188,51 @@ struct SearchView: View {
                     // Clear recommender if no pattern detected
                     filterState.detectedRecommender = nil
                 }
-                // Search will be triggered automatically by the onChange(of: viewModel.searchQuery) modifier
+            }
+        }
+        .onChange(of: speechRecognizer.state) { oldState, newState in
+            // When recording finishes, ensure we trigger search with final transcript
+            if case .processing = newState, case .listening = oldState {
+                let finalTranscript = speechRecognizer.transcript
+                if !finalTranscript.isEmpty {
+                    print("🎤 Recording finished, final transcript: '\(finalTranscript)'")
+                    let parsed = parseVoiceCommand(finalTranscript)
+                    if !parsed.query.isEmpty {
+                        print("🎤 Triggering search with final transcript: '\(parsed.query)'")
+                        viewModel.searchQuery = parsed.query
+                        filterState.searchQuery = parsed.query
+                        viewModel.search() // Explicitly trigger search
+                    }
+                }
             }
         }
         .overlay(alignment: .top) {
-            if case .listening = speechRecognizer.state {
+            // Show indicator for both .requesting and .listening states
+            switch speechRecognizer.state {
+            case .listening, .requesting:
                 ListeningIndicator(
                     transcript: speechRecognizer.transcript,
                     onStop: {
                         Task {
-                            speechRecognizer.stopListening()
+                            speechRecognizer.stopListening(reason: "userTappedStop")
                         }
                     }
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .animation(.easeInOut, value: speechRecognizer.state)
+            default:
+                EmptyView()
             }
         }
         .onDisappear {
             // Stop microphone when navigating away
-            if case .listening = speechRecognizer.state {
+            switch speechRecognizer.state {
+            case .listening, .requesting:
                 Task {
-                    speechRecognizer.stopListening()
+                    speechRecognizer.stopListening(reason: "viewDisappeared")
                 }
+            default:
+                break
             }
         }
     }
@@ -321,20 +355,39 @@ struct SearchView: View {
                     }
                     
                     Button(action: {
+                        // Instant UI feedback - start async work in background
                         Task {
                             switch speechRecognizer.state {
                             case .listening:
-                                speechRecognizer.stopListening()
+                                speechRecognizer.stopListening(reason: "userTappedStop")
                             case .idle, .error:
+                                // UI will update immediately via state = .requesting
                                 await speechRecognizer.startListening()
+                            case .requesting:
+                                // If already requesting, cancel and go back to idle
+                                speechRecognizer.stopListening(reason: "userCancelled")
                             default:
                                 break
                             }
                         }
                     }) {
-                        Image(systemName: speechRecognizer.state == .listening ? "stop.circle.fill" : "mic.fill")
-                            .foregroundColor(speechRecognizer.state == .listening ? .red : Color(hex: "#666666"))
-                            .frame(width: 20, height: 20)
+                        Image(systemName: {
+                            switch speechRecognizer.state {
+                            case .listening, .requesting:
+                                return "stop.circle.fill"
+                            default:
+                                return "mic.fill"
+                            }
+                        }())
+                        .foregroundColor({
+                            switch speechRecognizer.state {
+                            case .listening, .requesting:
+                                return .red
+                            default:
+                                return Color(hex: "#666666")
+                            }
+                        }())
+                        .frame(width: 20, height: 20)
                     }
                 }
                 .padding(.horizontal, 12)

@@ -1,7 +1,8 @@
 //  ListeningIndicator.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 22:30 (America/Los_Angeles - Pacific Time)
-//  Notes: Visual indicator component for speech recognition listening state
+//  Last modified: 2025-12-03 at 09:26 PST by Cursor Assistant
+//  Notes: Visual indicator component for speech recognition listening state. Now shows immediately when recording starts.
 
 import SwiftUI
 
@@ -31,6 +32,9 @@ struct ListeningIndicator: View {
                     .font(.body)
                     .foregroundColor(.secondary)
             }
+            
+            // Show "Preparing microphone..." if transcript is empty and we just started
+            // This helps users understand the brief setup delay
             
             // Stop button
             Button(action: onStop) {
