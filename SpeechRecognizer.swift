@@ -22,14 +22,14 @@ struct SpeechConfig {
     var silenceTimeout: TimeInterval
     var maxDuration: TimeInterval
     
-    static let talkToMango = SpeechConfig(
+    nonisolated static let talkToMango = SpeechConfig(
         mode: .talkToMango,
         gracePeriod: 1.5,      // Reduced from 3.0s - faster initial response
         silenceTimeout: 7.0,   // Reduced from 15.0s - shorter wait when nothing heard
         maxDuration: 60.0      // Hard upper bound to avoid infinite sessions
     )
     
-    static let quickSearch = SpeechConfig(
+    nonisolated static let quickSearch = SpeechConfig(
         mode: .quickSearch,
         gracePeriod: 3.0,
         silenceTimeout: 8.0,   // Shorter timeout for quick searches

@@ -250,30 +250,65 @@ struct IndividualListView: View {
     // MARK: - Helper Methods
     
     private func loadMovies() {
-        // Load movies for this list from watchlist manager
+        let startTime = Date()
+        print("[WATCHLIST PERF] IndividualListView.loadMovies - starting for listId=\(listId)")
+        
+        // Step 1: Load from cache immediately (instant display)
+        let cachedMovies = watchlistManager.getCachedMovieCardsForList(listId: listId)
+        if !cachedMovies.isEmpty {
+            let cacheTime = Date().timeIntervalSince(startTime) * 1000
+            print("[WATCHLIST PERF] IndividualListView.loadMovies - using cached items: \(cachedMovies.count) (took \(Int(cacheTime))ms)")
+            movies = cachedMovies
+        }
+        
+        // Step 2: Refresh from Supabase in background
         let movieIds = watchlistManager.getMoviesInList(listId: listId)
         
+        guard !movieIds.isEmpty else {
+            print("[WATCHLIST PERF] IndividualListView.loadMovies - no movies in list")
+            return
+        }
+        
         Task {
-            // Fetch movie cards from Supabase
-            var fetchedMovies: [MasterlistMovie] = []
+            let refreshStartTime = Date()
+            print("[WATCHLIST PERF] IndividualListView.loadMovies - fetching from Supabase...")
             
-            for movieId in movieIds {
-                // movieId is stored as TMDB ID string
-                do {
-                    let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            do {
+                // Use batch fetch - single Supabase query, no TMDB calls
+                let movieIdsArray = Array(movieIds)
+                let movieCards = try await SupabaseService.shared.fetchWatchlistMovieCardsBatch(movieIds: movieIdsArray)
+                
+                // Convert to MasterlistMovie and cache them
+                var fetchedMovies: [MasterlistMovie] = []
+                for movieCard in movieCards {
                     let masterlistMovie = movieCard.toMasterlistMovie(
-                        isWatched: watchlistManager.isWatched(movieId: movieId),
+                        isWatched: watchlistManager.isWatched(movieId: movieCard.tmdbId),
                         friendsCount: 0 // TODO: Implement friends count when available
                     )
                     fetchedMovies.append(masterlistMovie)
-                } catch {
-                    print("⚠️ Failed to fetch movie card for ID \(movieId): \(error)")
-                    // Continue with other movies even if one fails
+                    // Cache it for next time
+                    watchlistManager.cacheMovieCard(masterlistMovie)
                 }
-            }
-            
-            await MainActor.run {
-                self.movies = fetchedMovies
+                
+                let refreshTime = Date().timeIntervalSince(refreshStartTime) * 1000
+                print("[WATCHLIST PERF] IndividualListView.loadMovies - Supabase response received (\(Int(refreshTime))ms)")
+                
+                await MainActor.run {
+                    // Merge with existing (don't clear if refresh has fewer items)
+                    var moviesById: [String: MasterlistMovie] = [:]
+                    for movie in self.movies {
+                        moviesById[movie.id] = movie
+                    }
+                    for movie in fetchedMovies {
+                        moviesById[movie.id] = movie
+                    }
+                    self.movies = Array(moviesById.values).sorted { $0.title < $1.title }
+                    
+                    let totalTime = Date().timeIntervalSince(startTime) * 1000
+                    print("[WATCHLIST PERF] IndividualListView.loadMovies - finished (total: \(Int(totalTime))ms, final count: \(self.movies.count))")
+                }
+            } catch {
+                print("❌ [WATCHLIST PERF] IndividualListView.loadMovies - error: \(error)")
             }
         }
     }

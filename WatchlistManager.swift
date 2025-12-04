@@ -1,8 +1,8 @@
 //  WatchlistManager.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-17 at 00:47 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 09:14 PST by Cursor Assistant
-//  Notes: Production-ready watchlist state manager with Supabase sync and local disk cache. Fixed persistence debugging - added init debug print, removed syncFromSupabase from app task, improved cache logging with file paths.
+//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
+//  Notes: Added movie card caching for instant watchlist display, batch fetch support, performance optimizations.
 
 import Foundation
 import SwiftUI
@@ -49,6 +49,9 @@ class WatchlistManager: ObservableObject {
     // Dictionary: [listId: WatchlistItem] - stores list metadata
     @Published private var watchlistMetadata: [String: WatchlistItem] = [:]
     
+    // Dictionary: [movieId: MasterlistMovie] - cached movie cards for instant display
+    @Published private var cachedMovieCards: [String: MasterlistMovie] = [:]
+    
     // Loading state for master list count
     @Published var isMasterListCountLoading: Bool = true
     
@@ -91,6 +94,35 @@ class WatchlistManager: ObservableObject {
     /// Get all movies in a list
     func getMoviesInList(listId: String) -> Set<String> {
         return listMovies[listId] ?? []
+    }
+    
+    /// Get cached movie card for a movie ID (for instant display)
+    func getCachedMovieCard(movieId: String) -> MasterlistMovie? {
+        return cachedMovieCards[movieId]
+    }
+    
+    /// Get all cached movie cards for a list
+    func getCachedMovieCardsForList(listId: String) -> [MasterlistMovie] {
+        let movieIds = getMoviesInList(listId: listId)
+        return movieIds.compactMap { cachedMovieCards[$0] }
+            .sorted { $0.title < $1.title } // Sort by title for consistent ordering
+    }
+    
+    /// Cache a movie card
+    func cacheMovieCard(_ movie: MasterlistMovie) {
+        cachedMovieCards[movie.id] = movie
+    }
+    
+    /// Cache multiple movie cards
+    func cacheMovieCards(_ movies: [MasterlistMovie]) {
+        for movie in movies {
+            cachedMovieCards[movie.id] = movie
+        }
+    }
+    
+    /// Clear cached movie cards (call when list changes significantly)
+    func clearMovieCardCache() {
+        cachedMovieCards.removeAll()
     }
     
     /// Add a movie to a list
@@ -229,13 +261,18 @@ class WatchlistManager: ObservableObject {
     
     /// Mark a movie as watched
     func markAsWatched(movieId: String) {
+        print("✅ WatchlistManager.markAsWatched: movieId=\(movieId)")
         watchedMovies[movieId] = true
         saveToCache()
+        
+        // Notify observers that watched state changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
         
         // Write-through to Supabase (via watch_history)
         Task {
             do {
                 guard let userId = try await SupabaseService.shared.getCurrentUser()?.id else {
+                    print("⚠️ WatchlistManager.markAsWatched: No user ID available")
                     return
                 }
                 _ = try await SupabaseService.shared.addToWatchHistory(
@@ -243,6 +280,7 @@ class WatchlistManager: ObservableObject {
                     movieId: movieId,
                     platform: nil
                 )
+                print("✅ WatchlistManager.markAsWatched: Successfully synced to Supabase")
             } catch {
                 print("❌ Failed to sync markAsWatched to Supabase:", error)
             }
@@ -251,19 +289,25 @@ class WatchlistManager: ObservableObject {
     
     /// Mark a movie as not watched
     func markAsNotWatched(movieId: String) {
+        print("❌ WatchlistManager.markAsNotWatched: movieId=\(movieId)")
         watchedMovies[movieId] = false
         saveToCache()
+        
+        // Notify observers that watched state changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
         
         // Write-through to Supabase (remove from watch_history)
         Task {
             do {
                 guard let userId = try await SupabaseService.shared.getCurrentUser()?.id else {
+                    print("⚠️ WatchlistManager.markAsNotWatched: No user ID available")
                     return
                 }
                 try await SupabaseService.shared.removeFromWatchHistory(
                     userId: userId,
                     movieId: movieId
                 )
+                print("✅ WatchlistManager.markAsNotWatched: Successfully synced to Supabase")
             } catch {
                 print("❌ Failed to sync markAsNotWatched to Supabase:", error)
             }
@@ -273,11 +317,13 @@ class WatchlistManager: ObservableObject {
     /// Toggle watched status
     func toggleWatched(movieId: String) {
         let currentStatus = isWatched(movieId: movieId)
+        print("🎬 WatchlistManager.toggleWatched: movieId=\(movieId), currentStatus=\(currentStatus)")
         if currentStatus {
             markAsNotWatched(movieId: movieId)
         } else {
             markAsWatched(movieId: movieId)
         }
+        print("   New watched status: \(isWatched(movieId: movieId))")
     }
     
     /// Check if a movie is watched

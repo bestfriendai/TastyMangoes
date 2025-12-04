@@ -2,8 +2,8 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:45 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:20 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 09:09 PST by Cursor Assistant
-//  Notes: Supabase service layer for database operations - updated to match revised schema with watch_history and user_ratings. Added recommendation fields support to addMovieToWatchlist.
+//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
+//  Notes: Added batch watchlist movie cards fetch (no TMDB calls), TMDB call logging, performance optimizations.
 
 import Foundation
 import Supabase
@@ -549,6 +549,9 @@ class SupabaseService: ObservableObject {
     /// If the movie doesn't exist, it will trigger ingestion automatically
     /// Accepts tmdbId as String or Int
     func fetchMovieCard(tmdbId: String) async throws -> MovieCard {
+        // Log TMDB calls for debugging watchlist performance
+        print("[TMDB CALL] fetchMovieCard called for tmdbId=\(tmdbId)")
+        
         guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-movie-card") else {
             throw SupabaseError.invalidResponse
         }
@@ -598,6 +601,118 @@ class SupabaseService: ObservableObject {
     /// Fetches a pre-built movie card using Int tmdbId
     func fetchMovieCard(tmdbId: Int) async throws -> MovieCard {
         return try await fetchMovieCard(tmdbId: String(tmdbId))
+    }
+    
+    // MARK: - Direct Cache Reads (Performance Optimized, No TMDB Calls)
+    
+    /// Fetches a movie card directly from work_cards_cache (no TMDB calls, no function calls)
+    /// This reads pre-built cards directly from the cache table, never triggers ingestion
+    func fetchMovieCardFromCache(tmdbId: String) async throws -> MovieCard? {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        // Get work_id for this tmdb_id
+        struct WorkLookup: Codable {
+            let workId: Int
+            enum CodingKeys: String, CodingKey {
+                case workId = "work_id"
+            }
+        }
+        
+        let workLookups: [WorkLookup] = try await client
+            .from("works")
+            .select("work_id")
+            .eq("tmdb_id", value: tmdbId)
+            .execute()
+            .value
+        
+        guard let work = workLookups.first else {
+            return nil // Movie not in database
+        }
+        
+        // Read from work_cards_cache directly (no function call, no TMDB)
+        struct CachedCardRow: Codable {
+            let payload: MovieCard
+        }
+        
+        let cachedCard: CachedCardRow? = try? await client
+            .from("work_cards_cache")
+            .select("payload")
+            .eq("work_id", value: work.workId)
+            .single()
+            .execute()
+            .value
+        
+        return cachedCard?.payload
+    }
+    
+    // MARK: - Batch Watchlist Movie Cards (Performance Optimized)
+    
+    /// Fetches all movie cards for watchlist in a single query (no TMDB calls, reads from work_cards_cache)
+    /// This is optimized for watchlist display - reads pre-built cards directly, never triggers ingestion
+    func fetchWatchlistMovieCardsBatch(movieIds: [String]) async throws -> [MovieCard] {
+        let startTime = Date()
+        print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - starting batch fetch for \(movieIds.count) movies")
+        
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        guard !movieIds.isEmpty else {
+            print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - no movies to fetch, returning empty array")
+            return []
+        }
+        
+        // Query works table to get work_ids (tmdb_id is stored as TEXT)
+        struct WorkIdLookup: Codable {
+            let workId: Int
+            let tmdbId: String
+            
+            enum CodingKeys: String, CodingKey {
+                case workId = "work_id"
+                case tmdbId = "tmdb_id"
+            }
+        }
+        
+        let workLookups: [WorkIdLookup] = try await client
+            .from("works")
+            .select("work_id, tmdb_id")
+            .in("tmdb_id", values: movieIds) // tmdb_id is TEXT, so use strings directly
+            .execute()
+            .value
+        
+        guard !workLookups.isEmpty else {
+            print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - no works found for tmdb_ids")
+            return []
+        }
+        
+        let workIds = workLookups.map { $0.workId }
+        
+        // Query work_cards_cache table directly (pre-built cards, no TMDB calls)
+        // The payload field is JSONB and should decode directly to MovieCard
+        struct CachedCardRow: Codable {
+            let workId: Int
+            let payload: MovieCard
+            
+            enum CodingKeys: String, CodingKey {
+                case workId = "work_id"
+                case payload
+            }
+        }
+        
+        let cachedCardRows: [CachedCardRow] = try await client
+            .from("work_cards_cache")
+            .select("work_id, payload")
+            .in("work_id", values: workIds)
+            .execute()
+            .value
+        
+        let fetchTime = Date().timeIntervalSince(startTime) * 1000
+        print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - Supabase query completed in \(Int(fetchTime))ms, returned \(cachedCardRows.count) movies")
+        
+        // Extract MovieCard from payload (JSONB decodes automatically)
+        return cachedCardRows.map { $0.payload }
     }
     
     // MARK: - Similar Movies

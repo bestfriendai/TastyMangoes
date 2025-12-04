@@ -53,8 +53,26 @@ class MovieDetailService {
             return cached.movieDetail
         }
         
-        // Try Supabase get-movie-card endpoint first (auto-ingests if not in DB)
+        // Try reading directly from work_cards_cache first (no TMDB calls, instant)
+        // Use the SupabaseService method that reads from cache directly
         do {
+            if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(id)) {
+                let movieDetail = movieCard.toMovieDetail()
+                
+                // Cache the result
+                movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: id))
+                
+                print("[MOVIE DETAIL] Loaded movie \(id) from work_cards_cache (no TMDB call)")
+                return movieDetail
+            }
+        } catch {
+            print("⚠️ [MOVIE DETAIL] work_cards_cache read failed for ID \(id), trying get-movie-card: \(error)")
+        }
+        
+        // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
+        // This should rarely happen if movies are already ingested
+        do {
+            print("[MOVIE DETAIL] Falling back to get-movie-card for ID \(id) (may trigger TMDB)")
             let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: id)
             let movieDetail = movieCard.toMovieDetail()
             
@@ -94,10 +112,27 @@ class MovieDetailService {
             return cached.movieDetail
         }
         
-        // Try to convert string ID to Int for Supabase get-movie-card
+        // Try to convert string ID to Int for Supabase
         if let movieId = Int(stringId) {
-            // Try Supabase get-movie-card endpoint first (auto-ingests if not in DB)
+            // Try reading directly from work_cards_cache first (no TMDB calls)
             do {
+                if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: stringId) {
+                    let movieDetail = movieCard.toMovieDetail()
+                    
+                    // Cache the result
+                    stringIdCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: stringId as NSString)
+                    movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: movieId))
+                    
+                    print("[MOVIE DETAIL] Loaded movie \(stringId) from work_cards_cache (no TMDB call)")
+                    return movieDetail
+                }
+            } catch {
+                print("⚠️ [MOVIE DETAIL] work_cards_cache read failed for string ID \(stringId): \(error)")
+            }
+            
+            // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
+            do {
+                print("[MOVIE DETAIL] Falling back to get-movie-card for string ID \(stringId) (may trigger TMDB)")
                 let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
                 let movieDetail = movieCard.toMovieDetail()
                 
