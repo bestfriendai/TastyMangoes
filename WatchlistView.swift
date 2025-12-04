@@ -271,9 +271,21 @@ struct WatchlistView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("\(masterlistName) (\(masterlistMovies.count))")
-                        .font(.custom("Nunito-Bold", size: 20))
-                        .foregroundColor(Color(hex: "#1a1a1a"))
+                    HStack(spacing: 4) {
+                        Text(masterlistName)
+                            .font(.custom("Nunito-Bold", size: 20))
+                            .foregroundColor(Color(hex: "#1a1a1a"))
+                        
+                        if watchlistManager.isMasterListCountLoading {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 16, height: 16)
+                        } else {
+                            Text("(\(watchlistManager.getWatchlist(listId: "masterlist")?.filmCount ?? 0))")
+                                .font(.custom("Nunito-Bold", size: 20))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
+                        }
+                    }
                 }
                 
                 Spacer()

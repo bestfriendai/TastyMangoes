@@ -49,6 +49,9 @@ class WatchlistManager: ObservableObject {
     // Dictionary: [listId: WatchlistItem] - stores list metadata
     @Published private var watchlistMetadata: [String: WatchlistItem] = [:]
     
+    // Loading state for master list count
+    @Published var isMasterListCountLoading: Bool = true
+    
     private var nextListId: Int = 100
     
     private init() {
@@ -62,8 +65,12 @@ class WatchlistManager: ObservableObject {
             print("ℹ️ WatchlistManager.init: No cached data, creating masterlist")
             loadMockData() // Only to seed masterlist
             saveToCache()
+            // Keep loading flag as true since we'll need to sync from Supabase
+            isMasterListCountLoading = true
         } else {
             print("✅ WatchlistManager.init: Successfully initialized with cached data")
+            // We have cached data, so count is available - set loading to false
+            isMasterListCountLoading = false
         }
         
         // Note: Supabase sync will be added later after persistence is confirmed working
@@ -501,6 +508,11 @@ class WatchlistManager: ObservableObject {
     
     /// Sync watchlist data from Supabase
     func syncFromSupabase() async {
+        // Set loading flag to true before starting sync
+        await MainActor.run {
+            self.isMasterListCountLoading = true
+        }
+        
         do {
             let remoteData = try await SupabaseWatchlistAdapter.fetchAllWatchlistDataForCurrentUser()
             
@@ -514,6 +526,9 @@ class WatchlistManager: ObservableObject {
                 
                 self.saveToCache()
                 
+                // Set loading flag to false after data is updated
+                self.isMasterListCountLoading = false
+                
                 NotificationCenter.default.post(
                     name: Notification.Name("WatchlistManagerDidUpdate"),
                     object: nil
@@ -522,6 +537,10 @@ class WatchlistManager: ObservableObject {
         } catch {
             print("❌ WatchlistManager.syncFromSupabase error:", error)
             // On error, we keep using the cached/local state.
+            // Still set loading flag to false so spinner doesn't spin forever
+            await MainActor.run {
+                self.isMasterListCountLoading = false
+            }
         }
     }
     
