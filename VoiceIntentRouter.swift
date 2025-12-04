@@ -62,34 +62,37 @@ enum VoiceIntentRouter {
     
     /// Handle TalkToMango transcript - parse command and trigger search
     static func handleTalkToMangoTranscript(_ text: String) {
-        let command = MangoCommandParser.shared.parse(text)
+        let parsed = MangoCommandParser.shared.parse(text)
 
-        guard command.isValid, let moviePhrase = command.movieTitle else {
+        guard parsed.isValid, let moviePhrase = parsed.movieTitle else {
             print("❌ Mango command invalid: \(text)")
+            MangoSpeaker.shared.speak("Sorry, I didn't quite catch that.")
             return
         }
         
         print("🍋 Mango parsed movie search: \(moviePhrase)")
-        if let recommender = command.recommender {
+        if let recommender = parsed.recommender {
             print("   Recommender: \(recommender)")
         }
         
-        // Trigger global search
-        Task { @MainActor in
-            SearchViewModel.shared.search(query: moviePhrase)
-
-            // Tell UI to open Search tab
-            NotificationCenter.default.post(
-                name: .mangoNavigateToSearch,
-                object: moviePhrase
-            )
-        }
+        // Store recommender in FilterState for AddToListView
+        SearchFilterState.shared.detectedRecommender = parsed.recommender
+        
+        // Mango speaks acknowledgment
+        MangoSpeaker.shared.speak("Let me check on that for you.")
+        
+        // Post notification to trigger search (SearchViewModel will handle it)
+        NotificationCenter.default.post(
+            name: .mangoPerformMovieQuery,
+            object: moviePhrase
+        )
     }
 }
 
 extension Notification.Name {
     static let mangoNavigateToSearch = Notification.Name("mangoNavigateToSearch")
     static let mangoOpenMoviePage = Notification.Name("mangoOpenMoviePage")
+    static let mangoPerformMovieQuery = Notification.Name("mangoPerformMovieQuery")
 }
 
 

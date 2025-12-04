@@ -37,6 +37,7 @@
 		C51B70512ED2D66500B76CF7 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */; };
 		C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */; };
 		C595491E2EE1266F0065A8CD /* MangoCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = C595491D2EE1266F0065A8CD /* MangoCommand.swift */; };
+		C595491F2EE1266F0065A8CD /* MangoSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59549202EE1266F0065A8CD /* MangoSpeaker.swift */; };
 		C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */; };
 		C5ADA3582ED5578700440F8D /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3572ED5578700440F8D /* Auth */; };
 		C5ADA35A2ED5578700440F8D /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3592ED5578700440F8D /* PostgREST */; };
@@ -134,6 +135,7 @@
 		C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieDetailView.swift; sourceTree = "<group>"; };
 		C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayerView.swift; sourceTree = "<group>"; };
 		C595491D2EE1266F0065A8CD /* MangoCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoCommand.swift; sourceTree = "<group>"; };
+		C59549202EE1266F0065A8CD /* MangoSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoSpeaker.swift; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
 		C5B95D222ECB15DE00B47098 /* WatchlistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistManager.swift; sourceTree = "<group>"; };
 		C5B95D242ECB1D2800B47098 /* SearchFiltersBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersBottomSheet.swift; sourceTree = "<group>"; };
@@ -241,6 +243,7 @@
 				C5B95D322ECB32CD00B47098 /* IndividualListView.swift */,
 				C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */,
 				C595491D2EE1266F0065A8CD /* MangoCommand.swift */,
+				C59549202EE1266F0065A8CD /* MangoSpeaker.swift */,
 				B5B058792ECB14A7455AA373 /* MangoListeningView.swift */,
 				C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */,
 				C517CD0C2EC9806C00EAE1FE /* Movie.swift */,
@@ -508,6 +511,7 @@
 				C5B95D472ECB416200B47098 /* EditListBottomSheet.swift in Sources */,
 				C517CD342EC9806C00EAE1FE /* CrewTabView.swift in Sources */,
 				C595491E2EE1266F0065A8CD /* MangoCommand.swift in Sources */,
+				C595491F2EE1266F0065A8CD /* MangoSpeaker.swift in Sources */,
 				C517CD352EC9806C00EAE1FE /* SearchFiltersView.swift in Sources */,
 				C5E27A3B2EC9979400065347 /* MoviePageHeader.swift in Sources */,
 				C5B95D412ECB383300B47098 /* WatchlistFilterState.swift in Sources */,

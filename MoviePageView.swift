@@ -355,6 +355,7 @@ struct MoviePageView: View {
                     AddToListView(
                         movieId: movieId,
                         movieTitle: movie.title,
+                        prefilledRecommender: SearchFilterState.shared.detectedRecommender,
                         onNavigateToList: { listId, listName in
                             navigateToListId = listId
                             navigateToListName = listName

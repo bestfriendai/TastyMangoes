@@ -25,41 +25,50 @@ final class MangoCommandParser {
         
         // COMMON PATTERNS
         // "<name> recommends <movie>"
-        // "<name> liked <movie>"
+        // "<name> suggested <movie>"
+        // "<name> said to watch <movie>"
+        // "<name> likes/liked <movie>"
+        // "The New York Times recommends <movie>"
         // "add <movie> to my watchlist"
-        
-        let recommenderRegex = try! NSRegularExpression(
-            pattern: #"^([A-Z][a-z]+)\s+(recommends|likes|liked)\b"#,
-            options: []
-        )
         
         var recommender: String?
         var movieTitle: String?
         
-        // Extract recommender
-        if let match = recommenderRegex.firstMatch(
-            in: text,
-            options: [],
-            range: NSRange(location: 0, length: text.count)
-        ) {
-            if let r = Range(match.range(at: 1), in: text) {
-                recommender = String(text[r])
+        // Enhanced recommender extraction - handles:
+        // - Simple names: "Sally recommends"
+        // - Multi-word names: "The New York Times recommends"
+        // - Patterns: "recommends", "suggested", "said to watch", "likes", "liked"
+        
+        let patterns = [
+            (pattern: #"^(.+?)\s+recommends\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
+            (pattern: #"^(.+?)\s+suggested\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
+            (pattern: #"^(.+?)\s+said\s+to\s+watch\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
+            (pattern: #"^(.+?)\s+likes\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
+            (pattern: #"^(.+?)\s+liked\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2)
+        ]
+        
+        for (pattern, recommenderIdx, movieIdx) in patterns {
+            let regex = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+            if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
+                if let recommenderRange = Range(match.range(at: recommenderIdx), in: text),
+                   let movieRange = Range(match.range(at: movieIdx), in: text) {
+                    recommender = String(text[recommenderRange]).trimmingCharacters(in: .whitespaces)
+                    movieTitle = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
+                    break
+                }
             }
         }
         
-        // Movie title extraction:
-        if let range = text.range(of: "recommends") {
-            movieTitle = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-        } else if let range = text.range(of: "likes") {
-            movieTitle = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-        } else if let range = text.range(of: "liked") {
-            movieTitle = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-        } else if let range = text.range(of: "add") {
-            movieTitle = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+        // Fallback: if no recommender pattern matched, try simple "add" pattern
+        if movieTitle == nil {
+            if let range = text.range(of: "add", options: .caseInsensitive) {
+                movieTitle = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            }
         }
 
         // Cleanup trailing filler words
         movieTitle = movieTitle?.replacingOccurrences(of: "the movie", with: "", options: .caseInsensitive)
+        movieTitle = movieTitle?.replacingOccurrences(of: "to my watchlist", with: "", options: .caseInsensitive)
         movieTitle = movieTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         
         return MangoCommand(raw: text, recommender: recommender, movieTitle: movieTitle)

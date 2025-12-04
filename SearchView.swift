@@ -93,6 +93,18 @@ struct SearchView: View {
                     showAutoOpenMovie = true
                 }
             }
+            .onChange(of: viewModel.searchResults) { oldResults, newResults in
+                // Mango speaks when search results update (only when search is complete)
+                guard let query = viewModel.lastQuery, !viewModel.isSearching else { return }
+                
+                if newResults.isEmpty {
+                    MangoSpeaker.shared.speak("I couldn't find anything for \(query).")
+                } else if newResults.count == 1 {
+                    MangoSpeaker.shared.speak("I found one movie for \(query).")
+                } else {
+                    MangoSpeaker.shared.speak("I found \(newResults.count) matches for \(query).")
+                }
+            }
             .fullScreenCover(isPresented: $showAutoOpenMovie) {
                 if let movieId = autoOpenMovieId {
                     NavigationStack {

@@ -103,8 +103,7 @@ struct AddToListView: View {
         .presentationDetents([.height(600)])
         .presentationDragIndicator(.hidden)
         .onAppear {
-            print("📋 AddToListView appeared, filterState.detectedRecommender: \(filterState.detectedRecommender ?? "nil")")
-            print("📋 AddToListView appeared, prefilledRecommender parameter: \(prefilledRecommender ?? "nil")")
+            print("📋 AddToListView appeared, prefilledRecommender: \(prefilledRecommender ?? "nil")")
             
             loadWatchlists()
             filterWatchlists()
@@ -116,8 +115,12 @@ struct AddToListView: View {
             if let prefilled = prefilledRecommender ?? filterState.detectedRecommender {
                 recommenderName = prefilled
                 print("📋 Pre-filled recommender: \(prefilled)")
-                // Do NOT clear filterState.detectedRecommender here
             }
+        }
+        .onDisappear {
+            // Reset the recommender after dismissing to prevent it from persisting
+            filterState.detectedRecommender = nil
+            print("📋 AddToListView dismissed - cleared detectedRecommender")
         }
         .onChange(of: searchText) { oldValue, newValue in
             filterWatchlists()

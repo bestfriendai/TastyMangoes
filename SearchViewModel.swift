@@ -32,11 +32,34 @@ class SearchViewModel: ObservableObject {
     // Track the query that produced current results
     private var lastSearchedQuery: String = ""
     
+    // Track if current search was initiated by Mango (for speech responses)
+    private var isMangoInitiatedSearch: Bool = false
+    
+    // Track last query for Mango speech responses
+    var lastQuery: String? {
+        return lastSearchedQuery.isEmpty ? nil : lastSearchedQuery
+    }
+    
     // MARK: - Properties
     
     private let tmdbService = TMDBService.shared
     private var searchTask: Task<Void, Never>?
     private let historyManager = SearchHistoryManager.shared
+    
+    // MARK: - Initialization
+    
+    init() {
+        // Listen for Mango-initiated queries
+        NotificationCenter.default.addObserver(
+            forName: .mangoPerformMovieQuery,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let query = note.object as? String else { return }
+            self?.isMangoInitiatedSearch = true
+            self?.search(query: query)
+        }
+    }
     
     // MARK: - Search Methods
     
@@ -220,6 +243,9 @@ class SearchViewModel: ObservableObject {
             historyManager.addToHistory(searchQuery)
             
             print("✅ Found \(searchResults.count) movies from Supabase for '\(query)'")
+            
+            // Reset Mango flag after search completes (speech will be handled by SearchView onChange)
+            isMangoInitiatedSearch = false
             
             // Optional: Auto-open movie page if exactly one result (for TalkToMango)
             if searchResults.count == 1, let singleMovie = searchResults.first {

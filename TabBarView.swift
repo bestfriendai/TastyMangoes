@@ -89,6 +89,11 @@ struct TabBarView: View {
             selectedTab = 1 // Search tab
             print("🍋 Navigating to Search tab from Mango command")
         }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoPerformMovieQuery)) { _ in
+            // Navigate to Search tab when Mango performs a movie query
+            selectedTab = 1 // Search tab
+            print("🍋 Navigating to Search tab for Mango movie query")
+        }
         .onAppear {
             // Ensure listening view is not shown on app launch
             // Reset to false in case it was stuck from previous session
