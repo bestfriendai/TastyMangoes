@@ -72,11 +72,14 @@ enum VoiceIntentRouter {
         
         print("🍋 Mango parsed movie search: \(moviePhrase)")
         if let recommender = parsed.recommender {
-            print("   Recommender: \(recommender)")
+            print("🍋 Mango parsed recommender: \(recommender)")
         }
         
         // Store recommender in FilterState for AddToListView
         SearchFilterState.shared.detectedRecommender = parsed.recommender
+        if let recommender = parsed.recommender {
+            print("🍋 Stored recommender '\(recommender)' in SearchFilterState for AddToListView")
+        }
         
         // Mango speaks acknowledgment
         MangoSpeaker.shared.speak("Let me check on that for you.")

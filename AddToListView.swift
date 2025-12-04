@@ -104,6 +104,7 @@ struct AddToListView: View {
         .presentationDragIndicator(.hidden)
         .onAppear {
             print("📋 AddToListView appeared, prefilledRecommender: \(prefilledRecommender ?? "nil")")
+            print("📋 AddToListView appeared, filterState.detectedRecommender: \(filterState.detectedRecommender ?? "nil")")
             
             loadWatchlists()
             filterWatchlists()
@@ -114,7 +115,7 @@ struct AddToListView: View {
             // Pre-fill recommender if provided (check both parameter and filterState)
             if let prefilled = prefilledRecommender ?? filterState.detectedRecommender {
                 recommenderName = prefilled
-                print("📋 Pre-filled recommender: \(prefilled)")
+                print("📋 Pre-filled recommender field with: '\(prefilled)'")
             }
         }
         .onDisappear {
@@ -318,16 +319,22 @@ struct AddToListView: View {
         }
         
         // Add to all selected lists (including Masterlist if nothing selected)
+        let trimmedRecommender = recommenderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalRecommender = trimmedRecommender.isEmpty ? nil : trimmedRecommender
+        
+        print("💾 AddToListView: Saving movie '\(movieTitle)' to \(listsToAddTo.count) list(s) with recommender: \(finalRecommender ?? "nil")")
+        
         for listId in listsToAddTo {
             _ = watchlistManager.addMovieToList(
                 movieId: movieId,
                 listId: listId,
-                recommenderName: recommenderName.isEmpty ? nil : recommenderName
+                recommenderName: finalRecommender
             )
         }
         
         // Clear detected recommender now that we've used it
         filterState.detectedRecommender = nil
+        print("📋 AddToListView: Cleared detectedRecommender after saving")
         
         // Show toast for first selected list (or Masterlist if nothing selected)
         let firstListId = listsToAddTo.first ?? "masterlist"

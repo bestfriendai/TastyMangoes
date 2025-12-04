@@ -129,6 +129,7 @@ class WatchlistManager: ObservableObject {
                 recommendedAt: Date(),
                 recommenderNotes: recommenderNotes
             )
+            print("✅ WatchlistManager: Stored recommendation data for movie \(movieId) - recommender: '\(recommenderName)'")
         }
         
         // Update watchlist metadata with new film count
@@ -151,12 +152,14 @@ class WatchlistManager: ObservableObject {
         // Write-through to Supabase
         Task {
             do {
+                print("💾 WatchlistManager: Syncing movie \(movieId) to Supabase (listId: \(listId), recommender: \(recommenderName ?? "nil"))")
                 try await SupabaseWatchlistAdapter.addMovie(
                     movieId: movieId,
                     toListId: listId,
                     recommenderName: recommenderName,
                     recommenderNotes: recommenderNotes
                 )
+                print("✅ WatchlistManager: Successfully synced movie \(movieId) to Supabase with recommender: \(recommenderName ?? "nil")")
             } catch {
                 print("❌ Failed to sync addMovieToList to Supabase:", error)
             }

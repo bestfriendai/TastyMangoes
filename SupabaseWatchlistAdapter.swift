@@ -77,6 +77,7 @@ struct SupabaseWatchlistAdapter {
                         recommendedAt: watchlistMovie.recommendedAt,
                         recommenderNotes: watchlistMovie.recommenderNotes
                     )
+                    print("✅ SupabaseWatchlistAdapter: Loaded watchlist item for movie \(movieId) with recommendedBy = \(recommenderName)")
                 }
             }
             

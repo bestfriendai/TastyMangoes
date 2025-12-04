@@ -352,6 +352,8 @@ class SupabaseService: ObservableObject {
             recommenderNotes: recommenderNotes
         )
         
+        print("💾 SupabaseService: Saving watchlist item with recommended_by = \(recommenderName ?? "nil")")
+        
         let response: WatchlistMovie = try await client
             .from("watchlist_movies")
             .insert(watchlistMovie)
@@ -359,6 +361,8 @@ class SupabaseService: ObservableObject {
             .single()
             .execute()
             .value
+        
+        print("✅ SupabaseService: Saved watchlist item - movieId: \(movieId), recommenderName: \(response.recommenderName ?? "nil")")
         
         return response
     }
