@@ -346,6 +346,11 @@ class SpeechRecognizer: ObservableObject {
                         userInfo: ["transcript": self.transcript]
                     )
                     
+                    // Handle TalkToMango transcript through VoiceIntentRouter
+                    if self.currentConfig.mode == .talkToMango {
+                        VoiceIntentRouter.handleTalkToMangoTranscript(self.transcript)
+                    }
+                    
                     // Stop listening - Apple has determined the utterance is complete
                     self.stopListening(reason: "finalFromApple")
                     return
@@ -556,6 +561,13 @@ class SpeechRecognizer: ObservableObject {
         }
         
         print("🎤 Stopping... (current transcript: '\(transcript)', reason: \(reason))")
+        
+        // Handle TalkToMango transcript if we have one and haven't already handled it
+        // (This covers the silence timeout case where isFinal might not have fired yet)
+        if currentConfig.mode == .talkToMango && !transcript.isEmpty && reason != "finalFromApple" {
+            // Only handle if we have a transcript and it wasn't already handled via isFinal
+            VoiceIntentRouter.handleTalkToMangoTranscript(transcript)
+        }
         
         // IMMEDIATELY stop audio engine and remove tap
         if let audioEngine = audioEngine {

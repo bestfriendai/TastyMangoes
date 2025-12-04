@@ -17,6 +17,7 @@ import Combine
 
 @MainActor
 class SearchViewModel: ObservableObject {
+    static let shared = SearchViewModel()
     
     // MARK: - Published Properties
     
@@ -38,6 +39,12 @@ class SearchViewModel: ObservableObject {
     private let historyManager = SearchHistoryManager.shared
     
     // MARK: - Search Methods
+    
+    /// Public method to trigger search with a query string (for programmatic access)
+    func search(query: String) {
+        searchQuery = query
+        search()
+    }
     
     /// Perform search with debouncing - shows real-time results as user types
     func search() {
@@ -213,6 +220,16 @@ class SearchViewModel: ObservableObject {
             historyManager.addToHistory(searchQuery)
             
             print("✅ Found \(searchResults.count) movies from Supabase for '\(query)'")
+            
+            // Optional: Auto-open movie page if exactly one result (for TalkToMango)
+            if searchResults.count == 1, let singleMovie = searchResults.first {
+                print("🍋 Single result found - posting notification to open movie page")
+                NotificationCenter.default.post(
+                    name: .mangoOpenMoviePage,
+                    object: nil,
+                    userInfo: ["movieId": singleMovie.id]
+                )
+            }
             
         } catch let searchError {
             // Only show error if this search is still relevant

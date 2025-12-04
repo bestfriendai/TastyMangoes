@@ -84,6 +84,11 @@ struct TabBarView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToSearch)) { note in
+            // Navigate to Search tab when Mango triggers a search
+            selectedTab = 1 // Search tab
+            print("🍋 Navigating to Search tab from Mango command")
+        }
         .onAppear {
             // Ensure listening view is not shown on app launch
             // Reset to false in case it was stuck from previous session

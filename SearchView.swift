@@ -22,7 +22,7 @@
 import SwiftUI
 
 struct SearchView: View {
-    @StateObject private var viewModel = SearchViewModel()
+    @ObservedObject private var viewModel = SearchViewModel.shared
     // Use @ObservedObject for singleton to avoid recreating state
     @ObservedObject private var filterState = SearchFilterState.shared
     @State private var showFilters = false
@@ -31,6 +31,8 @@ struct SearchView: View {
     @State private var navigateToResults = false
     @State private var selectedFilterType: SearchFiltersBottomSheet.FilterType? = nil
     @FocusState private var isSearchFocused: Bool  // Added by Claude for keyboard management
+    @State private var autoOpenMovieId: String? = nil  // For auto-opening single result from Mango
+    @State private var showAutoOpenMovie = false  // Controls fullScreenCover for auto-open
     
     // Computed property for selection count (use applied filters for display)
     private var totalSelections: Int {
@@ -84,6 +86,20 @@ struct SearchView: View {
                 }
             }
             .background(Color(hex: "#fdfdfd"))
+            .onReceive(NotificationCenter.default.publisher(for: .mangoOpenMoviePage)) { notification in
+                // Auto-open movie page when Mango finds a single result
+                if let movieId = notification.userInfo?["movieId"] as? String {
+                    autoOpenMovieId = movieId
+                    showAutoOpenMovie = true
+                }
+            }
+            .fullScreenCover(isPresented: $showAutoOpenMovie) {
+                if let movieId = autoOpenMovieId {
+                    NavigationStack {
+                        MoviePageView(movieId: movieId)
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // Start Searching Button - show when selections > 0 OR search query is not empty
                 if totalSelections > 0 || !viewModel.searchQuery.isEmpty {

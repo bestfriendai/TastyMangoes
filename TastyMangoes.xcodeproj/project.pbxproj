@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B5B058782ECB14A7455AA373 /* MangoListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B058792ECB14A7455AA373 /* MangoListeningView.swift */; };
+		B5B0587A2ECB14A7455AA373 /* VoiceIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */; };
 		C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C517CD042EC9806C00EAE1FE /* Assets.xcassets */; };
 		C517CD212EC9806C00EAE1FE /* movies.json in Resources */ = {isa = PBXBuildFile; fileRef = C517CD122EC9806C00EAE1FE /* movies.json */; };
 		C517CD222EC9806C00EAE1FE /* CategoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD062EC9806C00EAE1FE /* CategoryItem.swift */; };
@@ -34,6 +36,7 @@
 		C517CD382EC9806C00EAE1FE /* HomeVew.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */; };
 		C51B70512ED2D66500B76CF7 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */; };
 		C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */; };
+		C595491E2EE1266F0065A8CD /* MangoCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = C595491D2EE1266F0065A8CD /* MangoCommand.swift */; };
 		C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */; };
 		C5ADA3582ED5578700440F8D /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3572ED5578700440F8D /* Auth */; };
 		C5ADA35A2ED5578700440F8D /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3592ED5578700440F8D /* PostgREST */; };
@@ -49,8 +52,6 @@
 		C5B95D2F2ECB274E00B47098 /* SearchGenresBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D2E2ECB274E00B47098 /* SearchGenresBottomSheet.swift */; };
 		C5B95D312ECB32B600B47098 /* WatchlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D302ECB32B600B47098 /* WatchlistView.swift */; };
 		C5B95D332ECB32CD00B47098 /* IndividualListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D322ECB32CD00B47098 /* IndividualListView.swift */; };
-		B5B058782ECB14A7455AA373 /* MangoListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B058792ECB14A7455AA373 /* MangoListeningView.swift */; };
-		B5B0587A2ECB14A7455AA373 /* VoiceIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */; };
 		C5B95D352ECB32E200B47098 /* SortByBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D342ECB32E200B47098 /* SortByBottomSheet.swift */; };
 		C5B95D372ECB32F200B47098 /* ManageListBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */; };
 		C5B95D392ECB330000B47098 /* DeleteListBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D382ECB330000B47098 /* DeleteListBottomSheet.swift */; };
@@ -75,11 +76,11 @@
 		C5E27A4B2EC9979400065355 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A4C2EC9979400065355 /* ProfileView.swift */; };
 		C5E27A4D2EC9979400065356 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A4E2EC9979400065356 /* SupabaseService.swift */; };
 		C5E27A4F2EC9979400065357 /* SupabaseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A502EC9979400065357 /* SupabaseModels.swift */; };
-		C5E27A572EC9979400065362 /* SupabaseWatchlistAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A582EC9979400065362 /* SupabaseWatchlistAdapter.swift */; };
 		C5E27A512EC9979400065358 /* SupabaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A522EC9979400065358 /* SupabaseConfig.swift */; };
 		C5E27A532EC9979400065359 /* PlatformIconHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A542EC9979400065359 /* PlatformIconHelper.swift */; };
 		C5E27A552EC9979400065360 /* MovieCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A562EC9979400065360 /* MovieCard.swift */; };
 		C5E27A572EC9979400065361 /* MovieCard+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A582EC9979400065361 /* MovieCard+Extensions.swift */; };
+		C5E27A572EC9979400065362 /* SupabaseWatchlistAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A582EC9979400065362 /* SupabaseWatchlistAdapter.swift */; };
 		C5EF8F332EDC19730012E597 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EF8F322EDC19730012E597 /* SpeechRecognizer.swift */; };
 		C5EF8F352EDC198C0012E597 /* ListeningIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */; };
 /* End PBXBuildFile section */
@@ -102,6 +103,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B5B058792ECB14A7455AA373 /* MangoListeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoListeningView.swift; sourceTree = "<group>"; };
+		B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentRouter.swift; sourceTree = "<group>"; };
 		C517CD042EC9806C00EAE1FE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C517CD052EC9806C00EAE1FE /* CastTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastTabView.swift; sourceTree = "<group>"; };
 		C517CD062EC9806C00EAE1FE /* CategoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryItem.swift; sourceTree = "<group>"; };
@@ -130,6 +133,7 @@
 		C517CD1D2EC9806C00EAE1FE /* TMIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMIcons.swift; sourceTree = "<group>"; };
 		C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieDetailView.swift; sourceTree = "<group>"; };
 		C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayerView.swift; sourceTree = "<group>"; };
+		C595491D2EE1266F0065A8CD /* MangoCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoCommand.swift; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
 		C5B95D222ECB15DE00B47098 /* WatchlistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistManager.swift; sourceTree = "<group>"; };
 		C5B95D242ECB1D2800B47098 /* SearchFiltersBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersBottomSheet.swift; sourceTree = "<group>"; };
@@ -140,8 +144,6 @@
 		C5B95D2E2ECB274E00B47098 /* SearchGenresBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchGenresBottomSheet.swift; sourceTree = "<group>"; };
 		C5B95D302ECB32B600B47098 /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
 		C5B95D322ECB32CD00B47098 /* IndividualListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndividualListView.swift; sourceTree = "<group>"; };
-		B5B058792ECB14A7455AA373 /* MangoListeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoListeningView.swift; sourceTree = "<group>"; };
-		B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentRouter.swift; sourceTree = "<group>"; };
 		C5B95D342ECB32E200B47098 /* SortByBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SortByBottomSheet.swift; sourceTree = "<group>"; };
 		C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageListBottomSheet.swift; sourceTree = "<group>"; };
 		C5B95D382ECB330000B47098 /* DeleteListBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteListBottomSheet.swift; sourceTree = "<group>"; };
@@ -169,11 +171,11 @@
 		C5E27A4C2EC9979400065355 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		C5E27A4E2EC9979400065356 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		C5E27A502EC9979400065357 /* SupabaseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseModels.swift; sourceTree = "<group>"; };
-		C5E27A582EC9979400065362 /* SupabaseWatchlistAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseWatchlistAdapter.swift; sourceTree = "<group>"; };
 		C5E27A522EC9979400065358 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
 		C5E27A542EC9979400065359 /* PlatformIconHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformIconHelper.swift; sourceTree = "<group>"; };
 		C5E27A562EC9979400065360 /* MovieCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieCard.swift; sourceTree = "<group>"; };
 		C5E27A582EC9979400065361 /* MovieCard+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MovieCard+Extensions.swift"; sourceTree = "<group>"; };
+		C5E27A582EC9979400065362 /* SupabaseWatchlistAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseWatchlistAdapter.swift; sourceTree = "<group>"; };
 		C5EF8F322EDC19730012E597 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
 		C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningIndicator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -238,6 +240,7 @@
 				C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */,
 				C5B95D322ECB32CD00B47098 /* IndividualListView.swift */,
 				C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */,
+				C595491D2EE1266F0065A8CD /* MangoCommand.swift */,
 				B5B058792ECB14A7455AA373 /* MangoListeningView.swift */,
 				C5B95D362ECB32F200B47098 /* ManageListBottomSheet.swift */,
 				C517CD0C2EC9806C00EAE1FE /* Movie.swift */,
@@ -504,6 +507,7 @@
 				C5B95D232ECB15DE00B47098 /* WatchlistManager.swift in Sources */,
 				C5B95D472ECB416200B47098 /* EditListBottomSheet.swift in Sources */,
 				C517CD342EC9806C00EAE1FE /* CrewTabView.swift in Sources */,
+				C595491E2EE1266F0065A8CD /* MangoCommand.swift in Sources */,
 				C517CD352EC9806C00EAE1FE /* SearchFiltersView.swift in Sources */,
 				C5E27A3B2EC9979400065347 /* MoviePageHeader.swift in Sources */,
 				C5B95D412ECB383300B47098 /* WatchlistFilterState.swift in Sources */,

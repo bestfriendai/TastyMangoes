@@ -6,7 +6,7 @@
 import Foundation
 
 /// Source of the voice input
-enum VoiceSource {
+enum VoiceSource: Equatable {
     case talkToMango
     case searchBar
     case other(String)
@@ -33,6 +33,12 @@ enum VoiceIntentRouter {
     static func handle(utterance: String, source: VoiceSource) {
         print("🎙 Voice utterance from \(source): \(utterance)")
         
+        // Route TalkToMango utterances to specialized handler
+        if source == .talkToMango {
+            handleTalkToMangoTranscript(utterance)
+            return
+        }
+        
         // TODO: In next phase, this will:
         // 1. Send utterance to OpenAI/LLM for classification
         // 2. Route to appropriate handler based on intent
@@ -53,6 +59,37 @@ enum VoiceIntentRouter {
             ]
         )
     }
+    
+    /// Handle TalkToMango transcript - parse command and trigger search
+    static func handleTalkToMangoTranscript(_ text: String) {
+        let command = MangoCommandParser.shared.parse(text)
+
+        guard command.isValid, let moviePhrase = command.movieTitle else {
+            print("❌ Mango command invalid: \(text)")
+            return
+        }
+        
+        print("🍋 Mango parsed movie search: \(moviePhrase)")
+        if let recommender = command.recommender {
+            print("   Recommender: \(recommender)")
+        }
+        
+        // Trigger global search
+        Task { @MainActor in
+            SearchViewModel.shared.search(query: moviePhrase)
+
+            // Tell UI to open Search tab
+            NotificationCenter.default.post(
+                name: .mangoNavigateToSearch,
+                object: moviePhrase
+            )
+        }
+    }
+}
+
+extension Notification.Name {
+    static let mangoNavigateToSearch = Notification.Name("mangoNavigateToSearch")
+    static let mangoOpenMoviePage = Notification.Name("mangoOpenMoviePage")
 }
 
 
