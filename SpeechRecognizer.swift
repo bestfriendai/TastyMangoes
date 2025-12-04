@@ -15,6 +15,31 @@ enum VoiceSessionMode {
     case quickSearch    // Quick input, shorter timeouts
 }
 
+/// Mode for TalkToMango sessions - determines silence timeout after speech
+enum TalkToMangoMode {
+    case oneShot        // First tap experience - shorter silence timeout (~5s)
+    case interactive    // Back-and-forth sessions - longer silence timeout (~10s)
+}
+
+/// Configuration for TalkToMango sessions
+struct TalkToMangoConfig {
+    var gracePeriod: TimeInterval
+    var silenceTimeoutAfterSpeech: TimeInterval  // Timeout after user stops speaking
+    var maxDuration: TimeInterval
+    
+    nonisolated static let oneShot = TalkToMangoConfig(
+        gracePeriod: 1.5,
+        silenceTimeoutAfterSpeech: 5.0,  // 5 seconds of silence after speech stops
+        maxDuration: 60.0
+    )
+    
+    nonisolated static let interactive = TalkToMangoConfig(
+        gracePeriod: 1.5,
+        silenceTimeoutAfterSpeech: 10.0, // 10 seconds of silence for back-and-forth
+        maxDuration: 60.0
+    )
+}
+
 /// Configuration for voice recognition session
 struct SpeechConfig {
     var mode: VoiceSessionMode
@@ -25,7 +50,7 @@ struct SpeechConfig {
     nonisolated static let talkToMango = SpeechConfig(
         mode: .talkToMango,
         gracePeriod: 1.5,      // Reduced from 3.0s - faster initial response
-        silenceTimeout: 7.0,   // Reduced from 15.0s - shorter wait when nothing heard
+        silenceTimeout: 7.0,   // Reduced from 15.0s - shorter wait when nothing heard (legacy, will be replaced by TalkToMangoConfig)
         maxDuration: 60.0      // Hard upper bound to avoid infinite sessions
     )
     
@@ -62,6 +87,7 @@ class SpeechRecognizer: ObservableObject {
     private var firstResultTime: Date? // Track when first recognition result arrives
     private let minRecordingDuration: TimeInterval = 2.0 // Minimum 2 seconds before auto-stop
     private var currentConfig: SpeechConfig = .quickSearch // Default config
+    private var currentTalkToMangoConfig: TalkToMangoConfig? // TalkToMango-specific config (nil for non-TalkToMango modes)
     private var silenceTimer: Task<Void, Never>? // Pre-speech timer: detects "no speech at all"
     private var postSpeechSilenceTimer: Task<Void, Never>? // Post-speech timer: detects silence after user stops talking
     private var maxDurationTimer: Task<Void, Never>?
@@ -105,7 +131,7 @@ class SpeechRecognizer: ObservableObject {
         return true
     }
     
-    func startListening(config: SpeechConfig = SpeechConfig.quickSearch) async {
+    func startListening(config: SpeechConfig = SpeechConfig.quickSearch, talkToMangoMode: TalkToMangoMode = .oneShot) async {
         sessionStartTime = Date()
         isFirstResult = true
         isReadyToListen = false
@@ -118,9 +144,16 @@ class SpeechRecognizer: ObservableObject {
         // Store config for this session
         currentConfig = config
         
-        // Log config details for TalkToMango mode
+        // For TalkToMango mode, store the TalkToMango-specific config
         if config.mode == .talkToMango {
-            print("🎤 TalkToMango session: grace=\(config.gracePeriod)s, silenceTimeout=\(config.silenceTimeout)s, maxDuration=\(config.maxDuration)s")
+            currentTalkToMangoConfig = talkToMangoMode == .oneShot ? .oneShot : .interactive
+        } else {
+            currentTalkToMangoConfig = nil
+        }
+        
+        // Log config details for TalkToMango mode
+        if config.mode == .talkToMango, let talkToMangoConfig = currentTalkToMangoConfig {
+            print("🎤 TalkToMango session: grace=\(talkToMangoConfig.gracePeriod)s, silenceTimeout=\(talkToMangoConfig.silenceTimeoutAfterSpeech)s, maxDuration=\(talkToMangoConfig.maxDuration)s")
         }
         
         // If already listening, don't restart
@@ -348,7 +381,9 @@ class SpeechRecognizer: ObservableObject {
                     
                     // Handle TalkToMango transcript through VoiceIntentRouter
                     if self.currentConfig.mode == .talkToMango {
-                        VoiceIntentRouter.handleTalkToMangoTranscript(self.transcript)
+                        Task {
+                            await VoiceIntentRouter.handleTalkToMangoTranscript(self.transcript)
+                        }
                     }
                     
                     // Stop listening - Apple has determined the utterance is complete
@@ -487,8 +522,14 @@ class SpeechRecognizer: ObservableObject {
         postSpeechSilenceTimer?.cancel()
         
         postSpeechSilenceTimer = Task {
+            // Get silence timeout from TalkToMango config (not SpeechConfig)
+            guard let talkToMangoConfig = currentTalkToMangoConfig else {
+                print("⚠️ [TalkToMango] No TalkToMango config available for post-speech timer")
+                return
+            }
+            
             // Wait for silence timeout from config (seconds since last transcript update)
-            let timeoutNanoseconds = UInt64(currentConfig.silenceTimeout * 1_000_000_000)
+            let timeoutNanoseconds = UInt64(talkToMangoConfig.silenceTimeoutAfterSpeech * 1_000_000_000)
             try? await Task.sleep(nanoseconds: timeoutNanoseconds)
             
             // Check if we're still listening and if silence has actually occurred
@@ -499,7 +540,7 @@ class SpeechRecognizer: ObservableObject {
                 
                 // Check if Apple already sent isFinal (shouldn't happen, but defensive)
                 // If isFinal came, we would have already stopped, so this is just a safety check
-                print("🎤 [TalkToMango] auto-stopping after \(currentConfig.silenceTimeout)s of silence since last transcript")
+                print("🎤 [TalkToMango] Post-speech timer fired - auto-stopping after \(talkToMangoConfig.silenceTimeoutAfterSpeech)s of silence since last transcript")
                 await MainActor.run {
                     stopListening(reason: "TalkToMangoSilenceAfterSpeech")
                 }
@@ -566,7 +607,9 @@ class SpeechRecognizer: ObservableObject {
         // (This covers the silence timeout case where isFinal might not have fired yet)
         if currentConfig.mode == .talkToMango && !transcript.isEmpty && reason != "finalFromApple" {
             // Only handle if we have a transcript and it wasn't already handled via isFinal
-            VoiceIntentRouter.handleTalkToMangoTranscript(transcript)
+            Task {
+                await VoiceIntentRouter.handleTalkToMangoTranscript(transcript)
+            }
         }
         
         // IMMEDIATELY stop audio engine and remove tap

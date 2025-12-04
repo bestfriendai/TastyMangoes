@@ -1,8 +1,11 @@
 //  IndividualListView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:57 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 03:22 (America/Los_Angeles - Pacific Time)
-//  Notes: Built individual list view (Manage List) with movie selection, drag handles, and management actions. Updated to match Figma design with hero section, search, filters, and Product Card format. Added filter state tracking and active filter badges. Added "Add movies to list" functionality for empty lists.
+//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
+//  Notes: Optimized loading: cache-first display, single batch Supabase query, no TMDB calls.
+//
+//  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
+//  directly from work_cards_cache. All movie data comes from Supabase cache tables.
 
 import SwiftUI
 
@@ -281,6 +284,9 @@ struct IndividualListView: View {
                 // Convert to MasterlistMovie and cache them
                 var fetchedMovies: [MasterlistMovie] = []
                 for movieCard in movieCards {
+                    // Log that we're using cached data (no TMDB call)
+                    print("[WATCHLIST CARD] Using work_cards_cache for tmdbId=\(movieCard.tmdbId) (no TMDB call)")
+                    
                     let masterlistMovie = movieCard.toMasterlistMovie(
                         isWatched: watchlistManager.isWatched(movieId: movieCard.tmdbId),
                         friendsCount: 0 // TODO: Implement friends count when available

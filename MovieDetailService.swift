@@ -70,9 +70,11 @@ class MovieDetailService {
         }
         
         // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
-        // This should rarely happen if movies are already ingested
+        // NOTE: This should rarely happen if movies are already ingested.
+        // Watchlist movies should always have cache entries - if we reach here from watchlist,
+        // it indicates a data inconsistency that should be investigated.
         do {
-            print("[MOVIE DETAIL] Falling back to get-movie-card for ID \(id) (may trigger TMDB)")
+            print("[TMDB CALL] MovieDetailService falling back to get-movie-card for ID \(id) (may trigger TMDB)")
             let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: id)
             let movieDetail = movieCard.toMovieDetail()
             
@@ -85,7 +87,10 @@ class MovieDetailService {
         }
         
         // Fallback to TMDB API
+        // NOTE: This is a true fallback - movie not in Supabase cache or get-movie-card failed.
+        // Should be rare for movies that are already in watchlist/database.
         do {
+            print("[TMDB CALL] MovieDetailService fetching fresh details from TMDB for tmdbId=\(id)")
             let movieDetail = try await fetchFromTMDB(movieId: id)
             
             // Cache the result
@@ -131,8 +136,11 @@ class MovieDetailService {
             }
             
             // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
+            // NOTE: This should rarely happen if movies are already ingested.
+            // Watchlist movies should always have cache entries - if we reach here from watchlist,
+            // it indicates a data inconsistency that should be investigated.
             do {
-                print("[MOVIE DETAIL] Falling back to get-movie-card for string ID \(stringId) (may trigger TMDB)")
+                print("[TMDB CALL] MovieDetailService falling back to get-movie-card for string ID \(stringId) (may trigger TMDB)")
                 let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
                 let movieDetail = movieCard.toMovieDetail()
                 
@@ -146,7 +154,10 @@ class MovieDetailService {
             }
             
             // Fallback to TMDB API
+            // NOTE: This is a true fallback - movie not in Supabase cache or get-movie-card failed.
+            // Should be rare for movies that are already in watchlist/database.
             do {
+                print("[TMDB CALL] MovieDetailService fetching fresh details from TMDB for stringId=\(stringId)")
                 let movieDetail = try await fetchFromTMDB(movieId: movieId)
                 
                 // Cache the result

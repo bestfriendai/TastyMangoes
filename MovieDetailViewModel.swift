@@ -163,7 +163,8 @@ class MovieDetailViewModel: ObservableObject {
             }
             
             // Fallback to get-movie-card function (may trigger TMDB)
-            print("⚠️ No still_images in cache, trying get-movie-card (may trigger TMDB)")
+            // NOTE: This should rarely happen - movies in watchlist should have cache entries
+            print("[TMDB CALL] MovieDetailViewModel fetching still images via get-movie-card for tmdbId=\(movieId) (may trigger TMDB)")
             let movieCardFromFunction = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
             
             if let stillImageUrls = movieCardFromFunction.stillImages, !stillImageUrls.isEmpty {
@@ -182,13 +183,16 @@ class MovieDetailViewModel: ObservableObject {
             }
             
             // Final fallback to TMDB API if no still images in database
-            print("⚠️ No still_images found, falling back to TMDB API")
+            // NOTE: This should be rare - movies should have still images in cache
+            print("[TMDB CALL] MovieDetailViewModel fetching fresh images from TMDB for tmdbId=\(movieId)")
             let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
             self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
         } catch {
             print("⚠️ Failed to load movie images: \(error)")
             // Fallback to TMDB API on error
+            // NOTE: Error fallback - should be rare
             do {
+                print("[TMDB CALL] MovieDetailViewModel error fallback - fetching images from TMDB for tmdbId=\(movieId)")
                 let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
                 self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
             } catch {
@@ -224,7 +228,8 @@ class MovieDetailViewModel: ObservableObject {
             }
             
             // Fallback to get-movie-card function (may trigger TMDB)
-            print("⚠️ No trailers in cache, trying get-movie-card (may trigger TMDB)")
+            // NOTE: This should rarely happen - movies in watchlist should have cache entries
+            print("[TMDB CALL] MovieDetailViewModel fetching trailers via get-movie-card for tmdbId=\(movieId) (may trigger TMDB)")
             let movieCardFromFunction = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
             
             if let trailers = movieCardFromFunction.trailers, !trailers.isEmpty {
@@ -246,7 +251,8 @@ class MovieDetailViewModel: ObservableObject {
             }
             
             // Final fallback to TMDB API if no trailers in database
-            print("⚠️ No trailers found, falling back to TMDB API")
+            // NOTE: This should be rare - movies should have trailers in cache
+            print("[TMDB CALL] MovieDetailViewModel fetching fresh videos from TMDB for tmdbId=\(movieId)")
             let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
             self.movieVideos = response.results.filter { 
                 $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 
@@ -254,7 +260,9 @@ class MovieDetailViewModel: ObservableObject {
         } catch {
             print("⚠️ Failed to load movie videos: \(error)")
             // Fallback to TMDB API on error
+            // NOTE: Error fallback - should be rare
             do {
+                print("[TMDB CALL] MovieDetailViewModel error fallback - fetching videos from TMDB for tmdbId=\(movieId)")
                 let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
                 self.movieVideos = response.results.filter { 
                     $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 

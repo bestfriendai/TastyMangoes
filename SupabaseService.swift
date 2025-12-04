@@ -549,8 +549,11 @@ class SupabaseService: ObservableObject {
     /// If the movie doesn't exist, it will trigger ingestion automatically
     /// Accepts tmdbId as String or Int
     func fetchMovieCard(tmdbId: String) async throws -> MovieCard {
-        // Log TMDB calls for debugging watchlist performance
-        print("[TMDB CALL] fetchMovieCard called for tmdbId=\(tmdbId)")
+        // NOTE: This calls the Supabase get-movie-card function, which may trigger TMDB ingestion
+        // if the movie is not in work_cards_cache. This should only be used as a fallback when
+        // fetchMovieCardFromCache() returns nil. Watchlist/Masterlist should never call this.
+        // Search results may use this for movies not yet ingested.
+        print("[TMDB CALL] fetchMovieCard called for tmdbId=\(tmdbId) - may trigger TMDB ingestion if not cached")
         
         guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-movie-card") else {
             throw SupabaseError.invalidResponse
@@ -606,7 +609,9 @@ class SupabaseService: ObservableObject {
     // MARK: - Direct Cache Reads (Performance Optimized, No TMDB Calls)
     
     /// Fetches a movie card directly from work_cards_cache (no TMDB calls, no function calls)
-    /// This reads pre-built cards directly from the cache table, never triggers ingestion
+    /// This reads pre-built cards directly from the cache table, never triggers ingestion.
+    /// Use this for watchlist and movie detail views when the movie should already be in cache.
+    /// Returns nil if movie is not in cache - caller should handle fallback appropriately.
     func fetchMovieCardFromCache(tmdbId: String) async throws -> MovieCard? {
         guard let client = client else {
             throw SupabaseError.notConfigured
@@ -647,10 +652,43 @@ class SupabaseService: ObservableObject {
         return cachedCard?.payload
     }
     
+    // MARK: - Voice Analytics Logging
+    
+    /// Log a voice interaction event to Supabase
+    func logVoiceEvent(_ event: VoiceEventLog) async throws {
+        guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/log-voice-event") else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let encoder = JSONEncoder()
+        request.httpBody = try encoder.encode(event)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SupabaseError.invalidResponse
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
+               let errorMessage = errorData["error"] {
+                throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
+            }
+            throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
+        }
+    }
+    
     // MARK: - Batch Watchlist Movie Cards (Performance Optimized)
     
     /// Fetches all movie cards for watchlist in a single query (no TMDB calls, reads from work_cards_cache)
-    /// This is optimized for watchlist display - reads pre-built cards directly, never triggers ingestion
+    /// This is optimized for watchlist display - reads pre-built cards directly, never triggers ingestion.
+    /// This is the ONLY method watchlist views should use - it guarantees no TMDB calls.
+    /// Returns empty array if no movies found in cache (should not happen for valid watchlist movies).
     func fetchWatchlistMovieCardsBatch(movieIds: [String]) async throws -> [MovieCard] {
         let startTime = Date()
         print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - starting batch fetch for \(movieIds.count) movies")

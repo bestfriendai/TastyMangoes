@@ -337,11 +337,15 @@ class SearchViewModel: ObservableObject {
     }
     
     /// Load popular movies (for when search is empty)
+    /// Load popular movies from TMDB
+    /// NOTE: This is allowed because it's for search/discovery, not watchlist.
+    /// Watchlist should never call TMDB - it uses work_cards_cache only.
     func loadPopularMovies() async {
         isSearching = true
         error = nil
         
         do {
+            print("[TMDB CALL] SearchViewModel fetching popular movies from TMDB (search/discovery path)")
             let response = try await tmdbService.getPopularMovies()
             searchResults = response.results.map { $0.toMovie() }
             print("✅ Loaded \(searchResults.count) popular movies")
@@ -355,12 +359,15 @@ class SearchViewModel: ObservableObject {
         isSearching = false
     }
     
-    /// Load trending movies
+    /// Load trending movies from TMDB
+    /// NOTE: This is allowed because it's for search/discovery, not watchlist.
+    /// Watchlist should never call TMDB - it uses work_cards_cache only.
     func loadTrendingMovies() async {
         isSearching = true
         error = nil
         
         do {
+            print("[TMDB CALL] SearchViewModel fetching trending movies from TMDB (search/discovery path)")
             let response = try await tmdbService.getTrendingMovies()
             searchResults = response.results.map { $0.toMovie() }
             print("✅ Loaded \(searchResults.count) trending movies")

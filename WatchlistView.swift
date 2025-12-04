@@ -3,6 +3,9 @@
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
 //  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
 //  Notes: Fixed trailing action buttons layout, watched toggle, scores alignment. Optimized loading: cache-first display, single batch Supabase query, no TMDB calls.
+//
+//  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
+//  directly from work_cards_cache. All movie data comes from Supabase cache tables.
 
 import SwiftUI
 import Combine
@@ -407,6 +410,9 @@ struct WatchlistView: View {
                 // Convert to MasterlistMovie and cache them
                 var fetchedMovies: [MasterlistMovie] = []
                 for movieCard in movieCards {
+                    // Log that we're using cached data (no TMDB call)
+                    print("[WATCHLIST CARD] Using work_cards_cache for tmdbId=\(movieCard.tmdbId) (no TMDB call)")
+                    
                     let masterlistMovie = movieCard.toMasterlistMovie(
                         isWatched: watchlistManager.isWatched(movieId: movieCard.tmdbId),
                         friendsCount: 0 // TODO: Implement friends count when available

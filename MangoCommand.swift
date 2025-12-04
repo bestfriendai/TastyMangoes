@@ -1,17 +1,50 @@
 //  MangoCommand.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 18:12 (America/Los_Angeles - Pacific Time)
-//  Notes: Parser for TalkToMango voice commands - extracts recommender name and movie title from natural language input
+//  Last modified: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
+//  Notes: Parser for TalkToMango voice commands - extracts recommender name and movie title from natural language input. Added unknown case for LLM fallback.
 
 import Foundation
 
-struct MangoCommand {
-    let raw: String
-    let recommender: String?
-    let movieTitle: String?
+enum MangoCommand {
+    case recommenderSearch(recommender: String, movie: String, raw: String)
+    case movieSearch(query: String, raw: String)
+    case unknown(raw: String)
+    
+    var raw: String {
+        switch self {
+        case .recommenderSearch(_, _, let raw), .movieSearch(_, let raw), .unknown(let raw):
+            return raw
+        }
+    }
+    
+    var recommender: String? {
+        switch self {
+        case .recommenderSearch(let recommender, _, _):
+            return recommender
+        default:
+            return nil
+        }
+    }
+    
+    var movieTitle: String? {
+        switch self {
+        case .recommenderSearch(_, let movie, _):
+            return movie
+        case .movieSearch(let query, _):
+            return query
+        case .unknown:
+            return nil
+        }
+    }
     
     var isValid: Bool {
-        movieTitle != nil
+        switch self {
+        case .recommenderSearch, .movieSearch:
+            return true
+        case .unknown:
+            return false
+        }
     }
 }
 
@@ -71,7 +104,15 @@ final class MangoCommandParser {
         movieTitle = movieTitle?.replacingOccurrences(of: "to my watchlist", with: "", options: .caseInsensitive)
         movieTitle = movieTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        return MangoCommand(raw: text, recommender: recommender, movieTitle: movieTitle)
+        // Return appropriate command type
+        if let recommender = recommender, let movie = movieTitle, !movie.isEmpty {
+            return .recommenderSearch(recommender: recommender, movie: movie, raw: text)
+        } else if let movie = movieTitle, !movie.isEmpty {
+            return .movieSearch(query: movie, raw: text)
+        } else {
+            // No pattern matched - return unknown for LLM fallback
+            return .unknown(raw: text)
+        }
     }
 }
 

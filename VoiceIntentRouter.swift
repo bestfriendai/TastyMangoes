@@ -1,7 +1,8 @@
 //  VoiceIntentRouter.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 09:45 PST (America/Los_Angeles - Pacific Time)
-//  Notes: Central router for handling voice utterances. Ready for OpenAI/LLM integration in next phase.
+//  Last modified: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
+//  Notes: Central router for handling voice utterances. Integrated OpenAI LLM fallback for unknown commands.
 
 import Foundation
 
@@ -26,6 +27,9 @@ enum VoiceIntentResult {
 /// This is the single entry point for processing voice utterances
 enum VoiceIntentRouter {
     
+    // Dependency injection for OpenAI client (allows testing)
+    static var openAIClient: OpenAIClient = .shared
+    
     /// Handle a voice utterance from any source
     /// - Parameters:
     ///   - utterance: The transcribed text from the user
@@ -35,7 +39,9 @@ enum VoiceIntentRouter {
         
         // Route TalkToMango utterances to specialized handler
         if source == .talkToMango {
-            handleTalkToMangoTranscript(utterance)
+            Task {
+                await handleTalkToMangoTranscript(utterance)
+            }
             return
         }
         
@@ -60,34 +66,104 @@ enum VoiceIntentRouter {
         )
     }
     
-    /// Handle TalkToMango transcript - parse command and trigger search
-    static func handleTalkToMangoTranscript(_ text: String) {
-        let parsed = MangoCommandParser.shared.parse(text)
-
-        guard parsed.isValid, let moviePhrase = parsed.movieTitle else {
-            print("❌ Mango command invalid: \(text)")
-            MangoSpeaker.shared.speak("Sorry, I didn't quite catch that.")
+    /// Handle TalkToMango transcript - parse command and trigger search with LLM fallback
+    static func handleTalkToMangoTranscript(_ text: String) async {
+        // Step 1: Try MangoCommand parser first
+        let mangoCommand = MangoCommandParser.shared.parse(text)
+        var finalCommand: MangoCommand = mangoCommand
+        var llmUsed = false
+        var llmIntent: LLMIntent? = nil
+        var llmError: Error? = nil
+        
+        // Step 2: If parser returned unknown, try LLM fallback
+        if case .unknown = mangoCommand {
+            print("🤖 [LLM] Mango parser returned unknown, trying OpenAI fallback...")
+            
+            do {
+                let intent = try await openAIClient.classifyUtterance(text)
+                llmUsed = true
+                llmIntent = intent
+                
+                // Map LLM intent to MangoCommand
+                switch intent.intent {
+                case "recommender_search":
+                    if let movie = intent.movieTitle, !movie.isEmpty,
+                       let recommender = intent.recommender, !recommender.isEmpty {
+                        finalCommand = .recommenderSearch(recommender: recommender, movie: movie, raw: text)
+                        print("🤖 [LLM] Mapped to recommenderSearch: \(recommender) recommends \(movie)")
+                    } else {
+                        // Fallback to movie search if missing fields
+                        finalCommand = .movieSearch(query: intent.movieTitle ?? text, raw: text)
+                        print("🤖 [LLM] Missing fields, falling back to movieSearch")
+                    }
+                    
+                case "movie_search":
+                    finalCommand = .movieSearch(query: intent.movieTitle ?? text, raw: text)
+                    print("🤖 [LLM] Mapped to movieSearch: \(intent.movieTitle ?? text)")
+                    
+                default: // "unknown"
+                    // Last resort: treat as movie search
+                    finalCommand = .movieSearch(query: text, raw: text)
+                    print("🤖 [LLM] LLM returned unknown, falling back to movieSearch with raw text")
+                }
+            } catch {
+                llmError = error
+                print("❌ [LLM] OpenAI call failed: \(error.localizedDescription)")
+                // Fallback to movie search on error
+                finalCommand = .movieSearch(query: text, raw: text)
+                print("🤖 [LLM] Falling back to movieSearch due to error")
+            }
+        }
+        
+        // Step 3: Execute the final command
+        guard finalCommand.isValid, let moviePhrase = finalCommand.movieTitle else {
+            print("❌ Final command invalid after LLM fallback: \(text)")
+            await MainActor.run {
+                MangoSpeaker.shared.speak("Sorry, I didn't quite catch that.")
+            }
+            
+            // Log failed attempt
+            await VoiceAnalyticsLogger.shared.log(
+                utterance: text,
+                mangoCommand: mangoCommand,
+                llmUsed: llmUsed,
+                finalCommand: finalCommand,
+                llmIntent: llmIntent,
+                llmError: llmError
+            )
             return
         }
         
-        print("🍋 Mango parsed movie search: \(moviePhrase)")
-        if let recommender = parsed.recommender {
-            print("🍋 Mango parsed recommender: \(recommender)")
+        print("🍋 Final command - movie search: \(moviePhrase)")
+        if let recommender = finalCommand.recommender {
+            print("🍋 Final command - recommender: \(recommender)")
         }
         
         // Store recommender in FilterState for AddToListView
-        SearchFilterState.shared.detectedRecommender = parsed.recommender
-        if let recommender = parsed.recommender {
-            print("🍋 Stored recommender '\(recommender)' in SearchFilterState for AddToListView")
+        await MainActor.run {
+            SearchFilterState.shared.detectedRecommender = finalCommand.recommender
+            if let recommender = finalCommand.recommender {
+                print("🍋 Stored recommender '\(recommender)' in SearchFilterState for AddToListView")
+            }
+            
+            // Mango speaks acknowledgment
+            MangoSpeaker.shared.speak("Let me check on that for you.")
+            
+            // Post notification to trigger search (SearchViewModel will handle it)
+            NotificationCenter.default.post(
+                name: .mangoPerformMovieQuery,
+                object: moviePhrase
+            )
         }
         
-        // Mango speaks acknowledgment
-        MangoSpeaker.shared.speak("Let me check on that for you.")
-        
-        // Post notification to trigger search (SearchViewModel will handle it)
-        NotificationCenter.default.post(
-            name: .mangoPerformMovieQuery,
-            object: moviePhrase
+        // Step 4: Log the interaction
+        await VoiceAnalyticsLogger.shared.log(
+            utterance: text,
+            mangoCommand: mangoCommand,
+            llmUsed: llmUsed,
+            finalCommand: finalCommand,
+            llmIntent: llmIntent,
+            llmError: llmError
         )
     }
 }

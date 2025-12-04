@@ -3,6 +3,9 @@
 //  Created on: 2025-11-17 at 00:47 (America/Los_Angeles - Pacific Time)
 //  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
 //  Notes: Added movie card caching for instant watchlist display, batch fetch support, performance optimizations.
+//
+//  TMDB USAGE: This manager NEVER calls TMDB. It only manages watchlist state and caches MovieCard
+//  data that was fetched via batch queries from work_cards_cache. All data comes from Supabase.
 
 import Foundation
 import SwiftUI
