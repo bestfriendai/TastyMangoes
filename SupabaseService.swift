@@ -578,6 +578,11 @@ class SupabaseService: ObservableObject {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
+            // Handle 404 gracefully (function not deployed yet)
+            if httpResponse.statusCode == 404 {
+                throw SupabaseError.functionNotFound
+            }
+            
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
@@ -675,6 +680,11 @@ class SupabaseService: ObservableObject {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
+            // Handle 404 gracefully (function not deployed yet)
+            if httpResponse.statusCode == 404 {
+                throw SupabaseError.functionNotFound
+            }
+            
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
@@ -803,6 +813,11 @@ class SupabaseService: ObservableObject {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
+            // Handle 404 gracefully (function not deployed yet)
+            if httpResponse.statusCode == 404 {
+                throw SupabaseError.functionNotFound
+            }
+            
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
@@ -981,6 +996,11 @@ class SupabaseService: ObservableObject {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
+            // Handle 404 gracefully (function not deployed yet)
+            if httpResponse.statusCode == 404 {
+                throw SupabaseError.functionNotFound
+            }
+            
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
@@ -1065,6 +1085,7 @@ enum SupabaseError: LocalizedError {
     case invalidResponse
     case networkError(Error)
     case profileNotFound
+    case functionNotFound
     
     var errorDescription: String? {
         switch self {
@@ -1074,6 +1095,8 @@ enum SupabaseError: LocalizedError {
             return "User profile not found. Please try signing up again."
         case .noSession:
             return "No active session found."
+        case .functionNotFound:
+            return "Supabase function not found (404). Function may not be deployed."
         case .invalidResponse:
             return "Invalid response from server."
         case .networkError(let error):

@@ -67,11 +67,16 @@ class OpenAIClient {
     
     private init() {}
     
+    /// Check if OpenAI is configured (API key is available)
+    static var isConfigured: Bool {
+        !OpenAIConfig.apiKey.isEmpty
+    }
+    
     /// Classify a voice utterance using OpenAI
     /// Returns an LLMIntent with parsed intent, movie title, and recommender
     func classifyUtterance(_ utterance: String) async throws -> LLMIntent {
         guard !OpenAIConfig.apiKey.isEmpty else {
-            throw OpenAIError.apiKeyMissing
+            throw OpenAIError.notConfigured
         }
         
         guard let url = URL(string: "\(OpenAIConfig.baseURL)/chat/completions") else {
@@ -182,7 +187,7 @@ class OpenAIClient {
 // MARK: - OpenAI Errors
 
 enum OpenAIError: LocalizedError {
-    case apiKeyMissing
+    case notConfigured
     case invalidURL
     case invalidResponse
     case apiError(String)
@@ -190,7 +195,7 @@ enum OpenAIError: LocalizedError {
     
     var errorDescription: String? {
         switch self {
-        case .apiKeyMissing:
+        case .notConfigured:
             return "OpenAI API key not configured"
         case .invalidURL:
             return "Invalid OpenAI API URL"

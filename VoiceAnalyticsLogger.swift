@@ -11,6 +11,9 @@ class VoiceAnalyticsLogger {
     
     private init() {}
     
+    // Track if we've seen a 404 (function not deployed) to avoid spam
+    private var hasSeen404 = false
+    
     /// Log a voice interaction event
     /// - Parameters:
     ///   - utterance: The original user utterance
@@ -49,6 +52,13 @@ class VoiceAnalyticsLogger {
                 
                 try await SupabaseService.shared.logVoiceEvent(event)
                 print("📊 [VoiceAnalytics] Logged voice event to Supabase")
+            } catch SupabaseError.functionNotFound {
+                // Function not deployed - log once, then skip future attempts
+                if !hasSeen404 {
+                    print("⚠️ [VoiceAnalytics] log-voice-event function not found (404). Skipping analytics logging for this session.")
+                    hasSeen404 = true
+                }
+                // Silently skip logging - don't spam logs
             } catch {
                 // Don't fail the user flow if logging fails
                 print("⚠️ [VoiceAnalytics] Failed to log voice event: \(error.localizedDescription)")

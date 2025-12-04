@@ -30,6 +30,9 @@ enum VoiceIntentRouter {
     // Dependency injection for OpenAI client (allows testing)
     static var openAIClient: OpenAIClient = .shared
     
+    // Track if we've already logged the "not configured" message this session
+    private static var hasLoggedNotConfigured = false
+    
     /// Handle a voice utterance from any source
     /// - Parameters:
     ///   - utterance: The transcribed text from the user
@@ -77,41 +80,61 @@ enum VoiceIntentRouter {
         
         // Step 2: If parser returned unknown, try LLM fallback
         if case .unknown = mangoCommand {
-            print("🤖 [LLM] Mango parser returned unknown, trying OpenAI fallback...")
-            
-            do {
-                let intent = try await openAIClient.classifyUtterance(text)
-                llmUsed = true
-                llmIntent = intent
-                
-                // Map LLM intent to MangoCommand
-                switch intent.intent {
-                case "recommender_search":
-                    if let movie = intent.movieTitle, !movie.isEmpty,
-                       let recommender = intent.recommender, !recommender.isEmpty {
-                        finalCommand = .recommenderSearch(recommender: recommender, movie: movie, raw: text)
-                        print("🤖 [LLM] Mapped to recommenderSearch: \(recommender) recommends \(movie)")
-                    } else {
-                        // Fallback to movie search if missing fields
-                        finalCommand = .movieSearch(query: intent.movieTitle ?? text, raw: text)
-                        print("🤖 [LLM] Missing fields, falling back to movieSearch")
-                    }
-                    
-                case "movie_search":
-                    finalCommand = .movieSearch(query: intent.movieTitle ?? text, raw: text)
-                    print("🤖 [LLM] Mapped to movieSearch: \(intent.movieTitle ?? text)")
-                    
-                default: // "unknown"
-                    // Last resort: treat as movie search
-                    finalCommand = .movieSearch(query: text, raw: text)
-                    print("🤖 [LLM] LLM returned unknown, falling back to movieSearch with raw text")
+            // Check if OpenAI is configured before attempting call
+            if !OpenAIClient.isConfigured {
+                // Log once per session, then silently fall back
+                if !hasLoggedNotConfigured {
+                    print("🤖 [LLM] OpenAI not configured, skipping LLM classification")
+                    hasLoggedNotConfigured = true
                 }
-            } catch {
-                llmError = error
-                print("❌ [LLM] OpenAI call failed: \(error.localizedDescription)")
-                // Fallback to movie search on error
+                // Fall back to movie search
                 finalCommand = .movieSearch(query: text, raw: text)
-                print("🤖 [LLM] Falling back to movieSearch due to error")
+            } else {
+                print("🤖 [LLM] Mango parser returned unknown, trying OpenAI fallback...")
+                
+                do {
+                    let intent = try await openAIClient.classifyUtterance(text)
+                    llmUsed = true
+                    llmIntent = intent
+                    
+                    // Map LLM intent to MangoCommand
+                    switch intent.intent {
+                    case "recommender_search":
+                        if let movie = intent.movieTitle, !movie.isEmpty,
+                           let recommender = intent.recommender, !recommender.isEmpty {
+                            finalCommand = .recommenderSearch(recommender: recommender, movie: movie, raw: text)
+                            print("🤖 [LLM] Mapped to recommenderSearch: \(recommender) recommends \(movie)")
+                        } else {
+                            // Fallback to movie search if missing fields
+                            finalCommand = .movieSearch(query: intent.movieTitle ?? text, raw: text)
+                            print("🤖 [LLM] Missing fields, falling back to movieSearch")
+                        }
+                        
+                    case "movie_search":
+                        finalCommand = .movieSearch(query: intent.movieTitle ?? text, raw: text)
+                        print("🤖 [LLM] Mapped to movieSearch: \(intent.movieTitle ?? text)")
+                        
+                    default: // "unknown"
+                        // Last resort: treat as movie search
+                        finalCommand = .movieSearch(query: text, raw: text)
+                        print("🤖 [LLM] LLM returned unknown, falling back to movieSearch with raw text")
+                    }
+                } catch OpenAIError.notConfigured {
+                    // Handle notConfigured error quietly (shouldn't happen if isConfigured check passed, but defensive)
+                    if !hasLoggedNotConfigured {
+                        print("🤖 [LLM] OpenAI not configured, skipping LLM classification")
+                        hasLoggedNotConfigured = true
+                    }
+                    llmError = OpenAIError.notConfigured
+                    // Fallback to movie search
+                    finalCommand = .movieSearch(query: text, raw: text)
+                } catch {
+                    llmError = error
+                    print("❌ [LLM] OpenAI call failed: \(error.localizedDescription)")
+                    // Fallback to movie search on error
+                    finalCommand = .movieSearch(query: text, raw: text)
+                    print("🤖 [LLM] Falling back to movieSearch due to error")
+                }
             }
         }
         
