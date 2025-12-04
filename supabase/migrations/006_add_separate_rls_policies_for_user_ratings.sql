@@ -31,3 +31,4 @@ CREATE POLICY "Users can delete their own ratings"
 -- Note: The SELECT policy "Ratings are viewable by everyone" remains unchanged
 -- as it allows all users to view ratings for displaying on movie pages
 
+

@@ -15,3 +15,4 @@ COMMENT ON COLUMN public.user_ratings.feedback_source IS 'Source of the rating: 
 -- Create index for filtering by feedback source (useful for analytics)
 CREATE INDEX IF NOT EXISTS idx_user_ratings_feedback_source ON public.user_ratings(feedback_source);
 
+
