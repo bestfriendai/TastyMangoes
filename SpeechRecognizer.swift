@@ -105,7 +105,7 @@ class SpeechRecognizer: ObservableObject {
         return true
     }
     
-    func startListening(config: SpeechConfig = .quickSearch) async {
+    func startListening(config: SpeechConfig = SpeechConfig.quickSearch) async {
         sessionStartTime = Date()
         isFirstResult = true
         isReadyToListen = false
