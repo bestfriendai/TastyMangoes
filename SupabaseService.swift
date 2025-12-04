@@ -449,27 +449,43 @@ class SupabaseService: ObservableObject {
     
     // MARK: - User Rating Operations
     
-    func addOrUpdateRating(userId: UUID, movieId: String, rating: Int, reviewText: String?) async throws -> UserRating {
+    func addOrUpdateRating(userId: UUID, movieId: String, rating: Int, reviewText: String?, feedbackSource: String = "quick_star") async throws -> UserRating {
         guard let client = client else {
             throw SupabaseError.notConfigured
         }
         
-        let userRating = UserRating(
-            userId: userId,
-            movieId: movieId,
-            rating: rating,
-            reviewText: reviewText
-        )
+        // Build payload dictionary matching the schema exactly
+        // Table: user_ratings with columns: user_id (UUID), movie_id (TEXT), rating (INTEGER), 
+        // review_text (TEXT nullable), feedback_source (TEXT nullable)
+        var payload: [String: Any] = [
+            "user_id": userId.uuidString,
+            "movie_id": movieId,
+            "rating": rating
+        ]
         
-        // Use upsert to handle duplicates (UNIQUE constraint)
+        // Add optional fields only if they have values (nil values are omitted)
+        if let reviewText = reviewText, !reviewText.isEmpty {
+            payload["review_text"] = reviewText
+        }
+        
+        if !feedbackSource.isEmpty {
+            payload["feedback_source"] = feedbackSource
+        }
+        
+        // Use upsert - the Supabase Swift client automatically handles conflicts based on
+        // the UNIQUE constraint on (user_id, movie_id). If a row exists, it updates;
+        // if not, it inserts. The database trigger will handle updated_at automatically.
+        print("💾 Upserting rating to user_ratings: user_id=\(userId.uuidString), movie_id=\(movieId), rating=\(rating), feedback_source=\(feedbackSource)")
+        
         let response: UserRating = try await client
             .from("user_ratings")
-            .upsert(userRating)
+            .upsert(payload)
             .select()
             .single()
             .execute()
             .value
         
+        print("✅ Successfully upserted rating: id=\(response.id), rating=\(response.rating)")
         return response
     }
     

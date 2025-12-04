@@ -170,10 +170,11 @@ struct UserRating: Codable, Identifiable {
     let id: UUID
     let userId: UUID
     let movieId: String
-    let rating: Int // 0-5 stars
-    let reviewText: String?
+    var rating: Int // 0-5 stars (0 = no rating, 1-5 = star rating)
+    var reviewText: String?
+    var feedbackSource: String? // "quick_star", "talk_to_mango", "imported", "other"
     let createdAt: Date
-    let updatedAt: Date
+    var updatedAt: Date
     
     init(
         id: UUID = UUID(),
@@ -181,6 +182,7 @@ struct UserRating: Codable, Identifiable {
         movieId: String,
         rating: Int,
         reviewText: String? = nil,
+        feedbackSource: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -189,6 +191,7 @@ struct UserRating: Codable, Identifiable {
         self.movieId = movieId
         self.rating = rating
         self.reviewText = reviewText
+        self.feedbackSource = feedbackSource
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -199,6 +202,7 @@ struct UserRating: Codable, Identifiable {
         case movieId = "movie_id"
         case rating
         case reviewText = "review_text"
+        case feedbackSource = "feedback_source"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
