@@ -6,3 +6,5 @@
 *.xcuserstate
 DerivedData/
 ClaudeAPIKey.swift
+Config/Secrets.xcconfig
+Secrets.xcconfig

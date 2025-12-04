@@ -65,7 +65,15 @@ private struct ChatCompletionResponse: Codable {
 class OpenAIClient {
     static let shared = OpenAIClient()
     
-    private init() {}
+    private init() {
+        #if DEBUG
+        print("🔧 [OpenAI] Client initialized")
+        print("🔧 [OpenAI] Key available: \(OpenAIConfig.apiKey.isEmpty ? "NO" : "YES")")
+        print("🔧 [OpenAI] Model: \(OpenAIConfig.defaultModel)")
+        print("🔧 [OpenAI] Base URL: \(OpenAIConfig.baseURL)")
+        #endif
+    }
+
     
     /// Check if OpenAI is configured (API key is available)
     static var isConfigured: Bool {
