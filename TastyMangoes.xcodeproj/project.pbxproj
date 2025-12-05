@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		B5B058782ECB14A7455AA373 /* MangoListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B058792ECB14A7455AA373 /* MangoListeningView.swift */; };
 		B5B0587A2ECB14A7455AA373 /* VoiceIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */; };
-		C50B1E7E2EE17E35003C8DC5 /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = C50B1E7D2EE17E35003C8DC5 /* Secrets.xcconfig */; };
+		
 		C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C517CD042EC9806C00EAE1FE /* Assets.xcassets */; };
 		C517CD212EC9806C00EAE1FE /* movies.json in Resources */ = {isa = PBXBuildFile; fileRef = C517CD122EC9806C00EAE1FE /* movies.json */; };
 		C517CD222EC9806C00EAE1FE /* CategoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD062EC9806C00EAE1FE /* CategoryItem.swift */; };
@@ -110,7 +110,7 @@
 /* Begin PBXFileReference section */
 		B5B058792ECB14A7455AA373 /* MangoListeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoListeningView.swift; sourceTree = "<group>"; };
 		B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentRouter.swift; sourceTree = "<group>"; };
-		C50B1E7D2EE17E35003C8DC5 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+
 		C517CD042EC9806C00EAE1FE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C517CD052EC9806C00EAE1FE /* CastTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastTabView.swift; sourceTree = "<group>"; };
 		C517CD062EC9806C00EAE1FE /* CategoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryItem.swift; sourceTree = "<group>"; };
@@ -313,7 +313,7 @@
 				C5B95D3C2ECB334600B47098 /* YourListsView.swift */,
 				C5ADA3642ED5601500440F8D /* Frameworks */,
 				C5D017342E989F7800164472 /* Products */,
-				C50B1E7D2EE17E35003C8DC5 /* Secrets.xcconfig */,
+				
 			);
 			sourceTree = "<group>";
 		};
@@ -455,7 +455,7 @@
 			files = (
 				C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */,
 				C517CD212EC9806C00EAE1FE /* movies.json in Resources */,
-				C50B1E7E2EE17E35003C8DC5 /* Secrets.xcconfig in Resources */,
+				
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -588,7 +588,7 @@
 /* Begin XCBuildConfiguration section */
 		C5D017522E989F7900164472 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C50B1E7D2EE17E35003C8DC5 /* Secrets.xcconfig */;
+			
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -653,7 +653,7 @@
 		};
 		C5D017532E989F7900164472 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C50B1E7D2EE17E35003C8DC5 /* Secrets.xcconfig */;
+			
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
