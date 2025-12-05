@@ -9,10 +9,12 @@ import SwiftUI
 struct AddToListView: View {
     let movieId: String
     let movieTitle: String
+    var prefilledRecommender: String? = nil
     var onNavigateToList: ((String, String) -> Void)? = nil // Callback: (listId, listName)
     
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var watchlistManager: WatchlistManager
+    @ObservedObject private var filterState = SearchFilterState.shared
     @State private var searchText: String = ""
     @State private var selectedListIds: Set<String> = []
     @State private var watchlists: [WatchlistItem] = []
@@ -22,9 +24,11 @@ struct AddToListView: View {
     @State private var toastListName: String = ""
     @State private var toastListId: String = ""
     @State private var showCreateWatchlistSheet = false
+    @State private var recommenderName: String = ""
     
+    // Count should show number of movies being added (always 1)
     var selectedCount: Int {
-        selectedListIds.count
+        return 1 // Always 1 movie being added
     }
     
     var body: some View {
@@ -56,21 +60,37 @@ struct AddToListView: View {
                 Divider()
                     .background(Color(hex: "#f3f3f3"))
                 
+                // Recommender Name Field
+                HStack(spacing: 8) {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(Color(hex: "#666666"))
+                    
+                    TextField("Recommended by (optional)", text: $recommenderName)
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                .padding(12)
+                .background(Color(hex: "#f3f3f3"))
+                .cornerRadius(8)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                
                 Button(action: {
                     submitSelections()
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "list.bullet.rectangle")
                             .font(.system(size: 20))
-                            .foregroundColor(Color(hex: "#333333"))
+                            .foregroundColor(.white)
                         
                         Text("Add to Watchlist (\(selectedCount))")
                             .font(.custom("Nunito-Bold", size: 14))
-                            .foregroundColor(Color(hex: "#333333"))
+                            .foregroundColor(.white)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(Color(hex: "#f3f3f3"))
+                    .background(Color(hex: "#FEA500"))
                     .cornerRadius(8)
                 }
                 .padding(.horizontal, 16)
@@ -83,11 +103,25 @@ struct AddToListView: View {
         .presentationDetents([.height(600)])
         .presentationDragIndicator(.hidden)
         .onAppear {
+            print("📋 AddToListView appeared, prefilledRecommender: \(prefilledRecommender ?? "nil")")
+            print("📋 AddToListView appeared, filterState.detectedRecommender: \(filterState.detectedRecommender ?? "nil")")
+            
             loadWatchlists()
             filterWatchlists()
             // Pre-select lists that already contain this movie
             let existingLists = watchlistManager.getListsForMovie(movieId: movieId)
             selectedListIds = existingLists
+            
+            // Pre-fill recommender if provided (check both parameter and filterState)
+            if let prefilled = prefilledRecommender ?? filterState.detectedRecommender {
+                recommenderName = prefilled
+                print("📋 Pre-filled recommender field with: '\(prefilled)'")
+            }
+        }
+        .onDisappear {
+            // Reset the recommender after dismissing to prevent it from persisting
+            filterState.detectedRecommender = nil
+            print("📋 AddToListView dismissed - cleared detectedRecommender")
         }
         .onChange(of: searchText) { oldValue, newValue in
             filterWatchlists()
@@ -129,13 +163,26 @@ struct AddToListView: View {
     
     private var masterlistSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ListItemRow(
-                list: WatchlistItem(id: "masterlist", name: "Masterlist", filmCount: 8, thumbnailURL: nil),
-                movieId: movieId,
-                watchlistManager: watchlistManager,
-                isMasterlist: true
-            ) {
-                // Masterlist is always selected and disabled
+            // Get masterlist with actual film count
+            if let masterlist = watchlistManager.getWatchlist(listId: "masterlist") {
+                ListItemRow(
+                    list: masterlist,
+                    movieId: movieId,
+                    watchlistManager: watchlistManager,
+                    isMasterlist: true
+                ) {
+                    // Masterlist is always selected and disabled
+                }
+            } else {
+                // Fallback if masterlist doesn't exist
+                ListItemRow(
+                    list: WatchlistItem(id: "masterlist", name: "Masterlist", filmCount: 0, thumbnailURL: nil),
+                    movieId: movieId,
+                    watchlistManager: watchlistManager,
+                    isMasterlist: true
+                ) {
+                    // Masterlist is always selected and disabled
+                }
             }
         }
     }
@@ -252,8 +299,12 @@ struct AddToListView: View {
             watchlistManager.removeMovieFromList(movieId: movieId, listId: listId)
             selectedListIds.remove(listId)
         } else {
-            // Add to list
-            let success = watchlistManager.addMovieToList(movieId: movieId, listId: listId)
+            // Add to list (with recommender name if provided)
+            let success = watchlistManager.addMovieToList(
+                movieId: movieId,
+                listId: listId,
+                recommenderName: recommenderName.isEmpty ? nil : recommenderName
+            )
             if success {
                 selectedListIds.insert(listId)
             }
@@ -261,24 +312,50 @@ struct AddToListView: View {
     }
     
     private func submitSelections() {
-        // Add to all selected lists
-        for listId in selectedListIds {
-            _ = watchlistManager.addMovieToList(movieId: movieId, listId: listId)
+        // If no lists selected, default to Masterlist
+        var listsToAddTo = selectedListIds
+        if listsToAddTo.isEmpty {
+            listsToAddTo.insert("masterlist")
         }
         
-        // Show toast for first selected list
-        if let firstListId = selectedListIds.first,
-           let list = watchlists.first(where: { $0.id == firstListId }) {
-            toastMessage = "\(movieTitle) added to \(list.name)."
-            toastListName = list.name
-            toastListId = firstListId
-            showToast = true
-            
-            // Hide toast after 3 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation {
-                    showToast = false
-                }
+        // Add to all selected lists (including Masterlist if nothing selected)
+        let trimmedRecommender = recommenderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalRecommender = trimmedRecommender.isEmpty ? nil : trimmedRecommender
+        
+        print("💾 AddToListView: Saving movie '\(movieTitle)' to \(listsToAddTo.count) list(s) with recommender: \(finalRecommender ?? "nil")")
+        
+        for listId in listsToAddTo {
+            _ = watchlistManager.addMovieToList(
+                movieId: movieId,
+                listId: listId,
+                recommenderName: finalRecommender
+            )
+        }
+        
+        // Clear detected recommender now that we've used it
+        filterState.detectedRecommender = nil
+        print("📋 AddToListView: Cleared detectedRecommender after saving")
+        
+        // Show toast for first selected list (or Masterlist if nothing selected)
+        let firstListId = listsToAddTo.first ?? "masterlist"
+        let listName: String
+        if firstListId == "masterlist" {
+            listName = "Masterlist"
+        } else if let list = watchlists.first(where: { $0.id == firstListId }) {
+            listName = list.name
+        } else {
+            listName = "Watchlist"
+        }
+        
+        toastMessage = "\(movieTitle) added to \(listName)."
+        toastListName = listName
+        toastListId = firstListId
+        showToast = true
+        
+        // Hide toast after 3 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            withAnimation {
+                showToast = false
             }
         }
         
@@ -345,7 +422,7 @@ struct ListItemRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(list.name)
                         .font(.custom("Nunito-Bold", size: 16))
-                        .foregroundColor(Color(hex: "#1a1a1a"))
+                        .foregroundColor(Color.black)
                     
                     Text("\(list.filmCount) films")
                         .font(.custom("Inter-Regular", size: 12))

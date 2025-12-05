@@ -20,6 +20,9 @@ class MovieDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: MovieDetailError?
     @Published var selectedTab: MovieTab = .overview
+    @Published var similarMovies: [Movie] = []
+    @Published var movieImages: [TMDBImage] = []
+    @Published var movieVideos: [TMDBVideo] = []
     
     // MARK: - Properties
     
@@ -52,8 +55,22 @@ class MovieDetailViewModel: ObservableObject {
             
             if let movieId = movieId {
                 movieDetail = try await service.fetchMovieDetail(id: movieId)
+                
+                // Load additional data in parallel
+                // TODO: Re-enable similar movies once recommendation logic is improved
+                // _ = await loadSimilarMovies(movieId: movieId)
+                _ = await loadMovieImages(movieId: movieId)
+                _ = await loadMovieVideos(movieId: movieId)
             } else if let movieStringId = movieStringId {
                 movieDetail = try await service.fetchMovieDetail(stringId: movieStringId)
+                
+                // If we can convert string ID to Int, load additional data
+                if let movieId = Int(movieStringId) {
+                    // TODO: Re-enable similar movies once recommendation logic is improved
+                    // _ = await loadSimilarMovies(movieId: movieId)
+                    _ = await loadMovieImages(movieId: movieId)
+                    _ = await loadMovieVideos(movieId: movieId)
+                }
             } else {
                 throw MovieDetailError.invalidData
             }
@@ -68,6 +85,192 @@ class MovieDetailViewModel: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    // MARK: - Private Methods
+    
+    // TODO: Re-enable similar movies once recommendation logic is improved
+    // Similar movies feature is completely disabled - no API calls, no UI display
+    /*
+    private func loadSimilarMovies(movieId: Int) async {
+        do {
+            // First, get the MovieCard to retrieve similar_movie_ids
+            let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            
+            // If we have similar movie IDs, use our endpoint
+            if let similarIds = movieCard.similarMovieIds, !similarIds.isEmpty {
+                let similarResults = try await SupabaseService.shared.fetchSimilarMovies(tmdbIds: similarIds)
+                
+                // Convert SimilarMovieResult to Movie objects
+                self.similarMovies = similarResults.prefix(6).map { result in
+                    Movie(
+                        id: String(result.tmdbId),
+                        title: result.title,
+                        year: result.year ?? 0,
+                        trailerURL: nil,
+                        trailerDuration: nil,
+                        posterImageURL: result.posterUrl, // Already full URL from Supabase storage
+                        tastyScore: nil,
+                        aiScore: result.rating, // Convert from 0-100 scale to 0-10
+                        genres: [],
+                        rating: nil,
+                        director: nil,
+                        runtime: nil,
+                        releaseDate: result.year != nil ? String(result.year!) : nil,
+                        language: nil,
+                        overview: nil
+                    )
+                }
+            } else {
+                // Fallback to TMDB API if no similar IDs in database
+                print("⚠️ No similar_movie_ids found, falling back to TMDB API")
+                let response = try await TMDBService.shared.getSimilarMovies(movieId: movieId)
+                self.similarMovies = response.results.prefix(6).map { $0.toMovie() }
+            }
+        } catch {
+            print("⚠️ Failed to load similar movies: \(error)")
+            // Fallback to TMDB API on error
+            do {
+                let response = try await TMDBService.shared.getSimilarMovies(movieId: movieId)
+                self.similarMovies = response.results.prefix(6).map { $0.toMovie() }
+            } catch {
+                print("⚠️ TMDB fallback also failed: \(error)")
+            }
+        }
+    }
+    */
+    
+    private func loadMovieImages(movieId: Int) async {
+        do {
+            // Try reading from cache first (no TMDB calls)
+            let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(movieId))
+            
+            // If we have still images from the database, use them
+            if let stillImageUrls = movieCard?.stillImages, !stillImageUrls.isEmpty {
+                // Convert still image URLs to TMDBImage format
+                self.movieImages = stillImageUrls.map { url in
+                    TMDBImage(
+                        filePath: url, // Full URL from Supabase storage
+                        width: nil,
+                        height: nil,
+                        aspectRatio: nil,
+                        voteAverage: nil,
+                        voteCount: nil
+                    )
+                }
+                print("✅ Loaded \(self.movieImages.count) still images from database cache (no TMDB call)")
+                return
+            }
+            
+            // Fallback to get-movie-card function (may trigger TMDB)
+            // NOTE: This should rarely happen - movies in watchlist should have cache entries
+            print("[TMDB CALL] MovieDetailViewModel fetching still images via get-movie-card for tmdbId=\(movieId) (may trigger TMDB)")
+            let movieCardFromFunction = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            
+            if let stillImageUrls = movieCardFromFunction.stillImages, !stillImageUrls.isEmpty {
+                self.movieImages = stillImageUrls.map { url in
+                    TMDBImage(
+                        filePath: url,
+                        width: nil,
+                        height: nil,
+                        aspectRatio: nil,
+                        voteAverage: nil,
+                        voteCount: nil
+                    )
+                }
+                print("✅ Loaded \(self.movieImages.count) still images from get-movie-card")
+                return
+            }
+            
+            // Final fallback to TMDB API if no still images in database
+            // NOTE: This should be rare - movies should have still images in cache
+            print("[TMDB CALL] MovieDetailViewModel fetching fresh images from TMDB for tmdbId=\(movieId)")
+            let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
+            self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
+        } catch {
+            print("⚠️ Failed to load movie images: \(error)")
+            // Fallback to TMDB API on error
+            // NOTE: Error fallback - should be rare
+            do {
+                print("[TMDB CALL] MovieDetailViewModel error fallback - fetching images from TMDB for tmdbId=\(movieId)")
+                let response = try await TMDBService.shared.getMovieImages(movieId: movieId)
+                self.movieImages = Array(response.backdrops.prefix(6)) + Array(response.posters.prefix(6))
+            } catch {
+                print("⚠️ TMDB fallback also failed: \(error)")
+            }
+        }
+    }
+    
+    private func loadMovieVideos(movieId: Int) async {
+        do {
+            // Try reading from cache first (no TMDB calls)
+            let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(movieId))
+            
+            // If we have trailers from the database, use them
+            if let trailers = movieCard?.trailers, !trailers.isEmpty {
+                // Convert MovieClip array to TMDBVideo format for existing UI
+                // Use custom thumbnail URL from Supabase storage if available
+                self.movieVideos = trailers.map { clip in
+                    TMDBVideo(
+                        id: clip.key, // Use key as ID
+                        key: clip.key,
+                        name: clip.name,
+                        site: "YouTube",
+                        size: 1080, // Default size
+                        type: clip.type,
+                        official: true,
+                        publishedAt: "", // Empty string as placeholder
+                        customThumbnailURL: clip.thumbnailUrl // Use Supabase storage URL
+                    )
+                }
+                print("✅ Loaded \(self.movieVideos.count) videos from database cache (no TMDB call)")
+                return
+            }
+            
+            // Fallback to get-movie-card function (may trigger TMDB)
+            // NOTE: This should rarely happen - movies in watchlist should have cache entries
+            print("[TMDB CALL] MovieDetailViewModel fetching trailers via get-movie-card for tmdbId=\(movieId) (may trigger TMDB)")
+            let movieCardFromFunction = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            
+            if let trailers = movieCardFromFunction.trailers, !trailers.isEmpty {
+                self.movieVideos = trailers.map { clip in
+                    TMDBVideo(
+                        id: clip.key,
+                        key: clip.key,
+                        name: clip.name,
+                        site: "YouTube",
+                        size: 1080,
+                        type: clip.type,
+                        official: true,
+                        publishedAt: "",
+                        customThumbnailURL: clip.thumbnailUrl
+                    )
+                }
+                print("✅ Loaded \(self.movieVideos.count) videos from get-movie-card")
+                return
+            }
+            
+            // Final fallback to TMDB API if no trailers in database
+            // NOTE: This should be rare - movies should have trailers in cache
+            print("[TMDB CALL] MovieDetailViewModel fetching fresh videos from TMDB for tmdbId=\(movieId)")
+            let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
+            self.movieVideos = response.results.filter { 
+                $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 
+            }.prefix(5).map { $0 }
+        } catch {
+            print("⚠️ Failed to load movie videos: \(error)")
+            // Fallback to TMDB API on error
+            // NOTE: Error fallback - should be rare
+            do {
+                print("[TMDB CALL] MovieDetailViewModel error fallback - fetching videos from TMDB for tmdbId=\(movieId)")
+                let response = try await TMDBService.shared.getMovieVideos(movieId: movieId)
+                self.movieVideos = response.results.filter { 
+                    $0.type == "Clip" || $0.type == "Teaser" || $0.type == "Behind the Scenes" 
+                }.prefix(5).map { $0 }
+            } catch {
+                print("⚠️ TMDB fallback also failed: \(error)")
+            }
+        }
     }
     
     func retry() {

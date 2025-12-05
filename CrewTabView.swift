@@ -135,8 +135,8 @@ struct CrewMemberRow: View {
                         profilePlaceholder
                     }
                 }
-                .frame(width: 50, height: 50)
-                .clipShape(Circle())
+                .frame(width: 50, height: 75)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 profilePlaceholder
                     .overlay(
@@ -172,9 +172,9 @@ struct CrewMemberRow: View {
     }
     
     private var profilePlaceholder: some View {
-        Circle()
+        RoundedRectangle(cornerRadius: 8)
             .fill(Color(red: 240/255, green: 240/255, blue: 240/255))
-            .frame(width: 50, height: 50)
+            .frame(width: 50, height: 75)
     }
 }
 

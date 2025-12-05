@@ -4,50 +4,164 @@
 //
 //  Rewritten to fix scroll-gesture conflicts with MoviePageView
 //  Last updated on 2025-11-16 at 02:10 (California time)
+//  Last modified: 2025-12-03 at 11:28 PST by Cursor Assistant
+//  Notes: Added TalkToMango voice interaction with listening view and glow animation. Fixed stuck listening state: resets showListeningView on app launch, ensures recognizer stops on launch if active, prevents auto-restart after dismissal.
 //
 
 import SwiftUI
 
 struct TabBarView: View {
     @State private var selectedTab = 0   // Default to Home
+    @ObservedObject private var filterState = SearchFilterState.shared
+    @StateObject private var speechRecognizer = SpeechRecognizer()
+    @State private var showListeningView = false
+    @State private var isListening = false
+    @State private var animatePulse = false
+    
+    // Computed property for selection count
+    private var totalSelections: Int {
+        filterState.selectedPlatforms.count + filterState.selectedGenres.count
+    }
+    
+    // Show tab bar only when no selections are made AND no search query
+    private var shouldShowTabBar: Bool {
+        totalSelections == 0 && filterState.searchQuery.isEmpty
+    }
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            
-            // MARK: - Tab Content (NO TabView – manual switcher)
-            Group {
-                switch selectedTab {
-                case 0:
-                    HomeView()
-                case 1:
-                    SearchView()
-                case 2:
-                    // Placeholder for AI chat / Talk to Mango
-                    Color(.systemBackground)
-                        .overlay(
-                            Text("Talk to Mango (Coming Soon)")
-                                .font(.title3)
-                                .foregroundColor(.gray)
-                        )
-                case 3:
-                    WatchlistView()
-                case 4:
-                    MoreView()
-                default:
-                    SearchView()
-                }
+        // MARK: - Tab Content (NO TabView – manual switcher)
+        Group {
+            switch selectedTab {
+            case 0:
+                HomeView()
+            case 1:
+                SearchView()
+            case 2:
+                // Placeholder for AI chat / Talk to Mango
+                Color(.systemBackground)
+                    .overlay(
+                        Text("Talk to Mango (Coming Soon)")
+                            .font(.title3)
+                            .foregroundColor(.gray)
+                    )
+            case 3:
+                WatchlistView()
+            case 4:
+                ProfileView(selectedTab: $selectedTab)
+                    .environmentObject(AuthManager.shared)
+                    .environmentObject(UserProfileManager.shared)
+            default:
+                SearchView()
             }
-            .ignoresSafeArea(.container, edges: .bottom)
-            
-            // MARK: - Custom Tab Bar
-            CustomTabBar(selectedTab: $selectedTab)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // MARK: - Custom Tab Bar - anchored to bottom safe area
+            // Only show when no selections are made
+            if shouldShowTabBar {
+                CustomTabBar(
+                    selectedTab: $selectedTab,
+                    showListeningView: $showListeningView,
+                    isListening: $isListening,
+                    animatePulse: $animatePulse,
+                    speechRecognizer: speechRecognizer
+                )
+            } else {
+                Color.clear.frame(height: 0)
+            }
         }
         .ignoresSafeArea(.keyboard)
+        .fullScreenCover(isPresented: $showListeningView) {
+            MangoListeningView(
+                speechRecognizer: speechRecognizer,
+                isPresented: $showListeningView
+            )
+            .onDisappear {
+                // Ensure showListeningView is false when view disappears
+                // This prevents stuck state after app restart
+                if showListeningView {
+                    print("🎤 fullScreenCover onDisappear - ensuring showListeningView is false")
+                    showListeningView = false
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToSearch)) { note in
+            // Navigate to Search tab when Mango triggers a search
+            selectedTab = 1 // Search tab
+            print("🍋 Navigating to Search tab from Mango command")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoPerformMovieQuery)) { _ in
+            // Navigate to Search tab when Mango performs a movie query
+            selectedTab = 1 // Search tab
+            print("🍋 Navigating to Search tab for Mango movie query")
+        }
+        .onAppear {
+            // Ensure listening view is not shown on app launch
+            // Reset to false in case it was stuck from previous session
+            if showListeningView {
+                print("⚠️ App launched with showListeningView=true - resetting to false")
+                showListeningView = false
+            }
+            // Also ensure recognizer is in idle state
+            let isActive: Bool
+            switch speechRecognizer.state {
+            case .listening, .requesting:
+                isActive = true
+            default:
+                isActive = false
+            }
+            if isActive {
+                print("⚠️ App launched with recognizer active - stopping")
+                Task {
+                    speechRecognizer.stopListening(reason: "appLaunch")
+                }
+            }
+        }
+        .onChange(of: speechRecognizer.state) { oldState, newState in
+            print("🎤 TabBarView: speechRecognizer state changed from \(oldState) to \(newState)")
+            // Update listening state for glow animation
+            switch newState {
+            case .listening, .requesting:
+                isListening = true
+                withAnimation {
+                    animatePulse = true
+                }
+            case .idle, .processing, .error:
+                isListening = false
+                withAnimation {
+                    animatePulse = false
+                }
+            }
+        }
+        .onChange(of: showListeningView) { oldValue, newValue in
+            print("🎤 TabBarView: showListeningView changed from \(oldValue) to \(newValue)")
+            
+            // When listening view is dismissed, ensure we stop recording
+            // But only if it was actually dismissed (not just initialized)
+            if !newValue && oldValue {
+                print("🎤 Listening view was dismissed")
+                // Stop recording if still active
+                if isListening || animatePulse {
+                    print("🎤 Listening view dismissed while recording active, stopping recording")
+                    Task {
+                        speechRecognizer.stopListening(reason: "viewDismissed")
+                    }
+                }
+                // IMPORTANT: Do NOT automatically restart or set showListeningView back to true
+                // Only user tap should set it to true
+            }
+            
+            // Prevent auto-restart: Never set showListeningView = true automatically
+            // It should only be set by user tap on the button
+        }
     }
 }
 
 struct CustomTabBar: View {
     @Binding var selectedTab: Int
+    @Binding var showListeningView: Bool
+    @Binding var isListening: Bool
+    @Binding var animatePulse: Bool
+    @ObservedObject var speechRecognizer: SpeechRecognizer
     
     var body: some View {
         ZStack {
@@ -116,7 +230,14 @@ struct CustomTabBar: View {
                 Spacer()
                 
                 Button {
-                    selectedTab = 2
+                    // Present listening view instead of switching tabs
+                    // Only set to true if not already true (prevent double-tap issues)
+                    if !showListeningView {
+                        print("🎤 User tapped TalkToMango button")
+                        showListeningView = true
+                    } else {
+                        print("⚠️ TalkToMango button tapped but view already showing - ignoring")
+                    }
                 } label: {
                     ZStack {
                         // Prominent filled orange circular background with gradient
@@ -158,7 +279,17 @@ struct CustomTabBar: View {
                         // White mango logo icon inside the circle (matches Figma)
                         MangoLogoIcon(size: 28, color: .white)
                     }
-                    .shadow(color: Color(hex: "#FFA500").opacity(0.4), radius: 12, x: 0, y: 4)
+                    .scaleEffect(animatePulse ? 1.06 : 1.0)
+                    .shadow(
+                        color: Color(hex: "#FFA500").opacity(animatePulse ? 0.6 : 0.4),
+                        radius: animatePulse ? 16 : 12,
+                        x: 0,
+                        y: 4
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                        value: animatePulse
+                    )
                 }
                 .offset(y: -34)
                 
@@ -170,6 +301,7 @@ struct CustomTabBar: View {
             }
         }
         .frame(height: 60)
+        .background(Color.white)
     }
 }
 
@@ -179,26 +311,49 @@ struct TabBarItem: View {
     let isSelected: Bool
     let action: () -> Void
     
-    // Computed property for icon name based on selection state
-    private var iconName: String {
-        if isSelected {
-            if icon == "magnifyingglass" { return "magnifyingglass.fill" }
-            if icon == "house.fill" { return "house.fill" }
-            if icon == "list.bullet" { return "list.bullet" }
-            return icon
+    // Gray color for tab bar icons
+    private let grayColor = Color(red: 153/255, green: 153/255, blue: 153/255)
+    
+    // Render the appropriate TMIcon based on tab type and selection state
+    @ViewBuilder
+    private var iconView: some View {
+        if icon == "house.fill" {
+            // Home tab
+            if isSelected {
+                TMHomeFilledIcon(size: 24, color: grayColor)
+            } else {
+                TMHomeIcon(size: 24, color: grayColor)
+            }
+        } else if icon == "magnifyingglass" {
+            // Search tab
+            if isSelected {
+                TMSearchFilledIcon(size: 24, color: grayColor)
+            } else {
+                TMSearchIcon(size: 24, color: grayColor)
+            }
+        } else if icon == "list.bullet" {
+            // Watchlist tab
+            if isSelected {
+                TMListFilledIcon(size: 24, color: grayColor)
+            } else {
+                TMListIcon(size: 24, color: grayColor)
+            }
+        } else if icon == "ellipsis" {
+            // More tab (no filled version, use same icon for both states)
+            TMMenuDotsIcon(size: 24, color: grayColor)
+        } else {
+            // Fallback to SF Symbol if icon type not recognized
+            Image(systemName: icon)
+                .font(.system(size: 17))
+                .foregroundColor(grayColor)
         }
-        // For outline versions when not selected
-        if icon == "house.fill" { return "house" }
-        return icon
     }
     
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
-                // Use filled icon when selected, outline when not
-                Image(systemName: iconName)
-                    .font(.system(size: 17))
-                    .foregroundColor(isSelected ? Color(red: 65/255, green: 65/255, blue: 65/255) : Color(red: 153/255, green: 153/255, blue: 153/255))
+                // Use TMIcon components - filled when selected, outline when not
+                iconView
                 
                 Text(label)
                     .font(.system(size: 10, weight: .bold))

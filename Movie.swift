@@ -63,6 +63,31 @@ extension Movie {
         guard let aiScore = aiScore else { return "N/A" }
         return String(format: "%.1f", aiScore)
     }
+    
+    /// Extracts YouTube ID from a YouTube URL
+    static func extractYouTubeId(from urlString: String?) -> String? {
+        guard let urlString = urlString else { return nil }
+        // Handle formats like: https://www.youtube.com/watch?v=VIDEO_ID
+        if let range = urlString.range(of: "watch?v=") {
+            let idStart = urlString.index(range.upperBound, offsetBy: 0)
+            let id = String(urlString[idStart...])
+            // Remove any query parameters after the ID
+            if let ampersandIndex = id.firstIndex(of: "&") {
+                return String(id[..<ampersandIndex])
+            }
+            return id
+        }
+        // Handle short format: https://youtu.be/VIDEO_ID
+        if let range = urlString.range(of: "youtu.be/") {
+            let idStart = urlString.index(range.upperBound, offsetBy: 0)
+            let id = String(urlString[idStart...])
+            if let questionIndex = id.firstIndex(of: "?") {
+                return String(id[..<questionIndex])
+            }
+            return id
+        }
+        return nil
+    }
 }
 
 // MARK: - Conversion to MovieDetail
@@ -89,6 +114,7 @@ extension Movie {
             criticsScore: nil,
             audienceScore: nil,
             trailerURL: trailerURL,
+            trailerYoutubeId: Movie.extractYouTubeId(from: trailerURL), // Extract ID from URL if present
             trailerDuration: nil,
             cast: nil,
             crew: nil,

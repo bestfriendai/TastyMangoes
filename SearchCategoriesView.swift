@@ -7,16 +7,17 @@
 import SwiftUI
 
 struct SearchCategoriesView: View {
+    @ObservedObject private var filterState = SearchFilterState.shared
+    @EnvironmentObject private var profileManager: UserProfileManager
+    var searchQuery: String = "" // Passed from SearchView
     @State private var showMySubscriptions = false
-    @State private var selectedPlatforms: Set<String> = []
-    @State private var selectedCategories: Set<String> = []
     
-    // All platform options
-    private let allPlatforms = ["Netflix", "Prime Video", "Disney+", "Max"]
+    // All platform options (10 platforms total)
+    private let allPlatforms = ["Netflix", "Prime Video", "Disney+", "Max", "Hulu", "Criterion", "Paramount+", "Apple TV+", "Peacock", "Tubi"]
     
-    // User's subscriptions (when checkbox is checked) - for now just Prime and Max
+    // User's subscriptions from profile manager
     private var userSubscriptions: [String] {
-        ["Prime Video", "Max"]
+        profileManager.subscriptions
     }
     
     // Platforms to display based on checkbox state
@@ -24,92 +25,113 @@ struct SearchCategoriesView: View {
         showMySubscriptions ? userSubscriptions : allPlatforms
     }
     
-    // Total selected count for button
+    // Total selected count for button (using SearchFilterState)
     private var totalSelections: Int {
-        selectedPlatforms.count + selectedCategories.count
+        filterState.selectedPlatforms.count + filterState.selectedGenres.count
     }
     
-    // Category groups with counts (matching Figma design)
-    private let categoryGroups: [(name: String, categories: [SearchCategoryItem])] = [
+    // Computed property for filtered movies count (based on search + filters)
+    // Note: This is a placeholder - actual movie counts will come from search results
+    private var filteredMoviesCount: Int {
+        // Return 0 as placeholder - real counts will come from actual search results
+        // This property may not be used anymore since we're using real search
+        return 0
+    }
+    
+    // Category groups - counts will be loaded dynamically
+    @State private var categoryGroups: [(name: String, categories: [SearchCategoryItem])] = [
         (
             name: "FUN & LIGHT",
             categories: [
-                SearchCategoryItem(name: "Comedy", icon: "theatermasks", count: 120),
-                SearchCategoryItem(name: "Romance", icon: "heart", count: 888),
-                SearchCategoryItem(name: "Musical", icon: "music.note", count: 420),
-                SearchCategoryItem(name: "Family", icon: "house", count: 140),
-                SearchCategoryItem(name: "Animation", icon: "pawprint", count: 1000)
+                SearchCategoryItem(name: "Comedy", icon: "theatermasks", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Romance", icon: "heart", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Musical", icon: "music.note", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Family", icon: "house", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Animation", icon: "pawprint", tmdbCount: 0, dbCount: 0)
             ]
         ),
         (
             name: "EPIC & IMAGINATIVE",
             categories: [
-                SearchCategoryItem(name: "Adventure", icon: "globe", count: 120),
-                SearchCategoryItem(name: "Fantasy", icon: "wand.and.stars", count: 1000),
-                SearchCategoryItem(name: "Sci-Fi", icon: "airplane", count: 190),
-                SearchCategoryItem(name: "Historical", icon: "building.columns", count: 130)
+                SearchCategoryItem(name: "Adventure", icon: "globe", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Fantasy", icon: "wand.and.stars", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Sci-Fi", icon: "airplane", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Historical", icon: "building.columns", tmdbCount: 0, dbCount: 0)
             ]
         ),
         (
             name: "DARK & INTENSE",
             categories: [
-                SearchCategoryItem(name: "Action", icon: "hand.raised", count: 120),
-                SearchCategoryItem(name: "Thriller", icon: "eye", count: 888),
-                SearchCategoryItem(name: "Mystery", icon: "questionmark.circle", count: 420),
-                SearchCategoryItem(name: "Crime", icon: "car", count: 140),
-                SearchCategoryItem(name: "Horror", icon: "moon", count: 140),
-                SearchCategoryItem(name: "War", icon: "sword", count: 1000),
-                SearchCategoryItem(name: "Western", icon: "hat", count: 640)
+                SearchCategoryItem(name: "Action", icon: "hand.raised", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Thriller", icon: "eye", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Mystery", icon: "questionmark.circle", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Crime", icon: "car", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Horror", icon: "moon", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "War", icon: "sword", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Western", icon: "hat", tmdbCount: 0, dbCount: 0)
             ]
         ),
         (
             name: "REAL STORIES",
             categories: [
-                SearchCategoryItem(name: "Documentary", icon: "film", count: 120),
-                SearchCategoryItem(name: "Biography", icon: "person", count: 888),
-                SearchCategoryItem(name: "Sport", icon: "figure.run", count: 420),
-                SearchCategoryItem(name: "Drama", icon: "theatermasks.fill", count: 140)
+                SearchCategoryItem(name: "Documentary", icon: "film", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Biography", icon: "person", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Sport", icon: "figure.run", tmdbCount: 0, dbCount: 0),
+                SearchCategoryItem(name: "Drama", icon: "theatermasks.fill", tmdbCount: 0, dbCount: 0)
             ]
         )
     ]
     
     var body: some View {
         VStack(spacing: 0) {
-            // TEST BUTTON - Temporary, visible at top for testing
-            if totalSelections > 0 {
-                VStack(spacing: 0) {
-                    Button(action: {
-                        startSearching()
-                    }) {
-                        Text("TEST: Start Searching (\(totalSelections))")
-                            .font(.custom("Nunito-Bold", size: 14))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color(hex: "#FEA500"))
-                            .cornerRadius(8)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
-                    
-                    Divider()
-                        .background(Color(hex: "#f3f3f3"))
-                }
-                .background(Color.white)
-            }
-            
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+                    // Results Count and Clear All Section (only show when selections > 0)
+                    if totalSelections > 0 {
+                        HStack {
+                            // Results count text on left - show actual filtered count
+                            Text("\(filteredMoviesCount) results found")
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#808080"))
+                            
+                            Spacer()
+                            
+                            // "Clear All" button on right
+                            Button(action: {
+                                // Clear all selections
+                                filterState.selectedPlatforms.removeAll()
+                                filterState.selectedGenres.removeAll()
+                                // Also uncheck "My subscriptions" if it was checked
+                                if showMySubscriptions {
+                                    showMySubscriptions = false
+                                }
+                            }) {
+                                Text("Clear All")
+                                    .font(.custom("Nunito-SemiBold", size: 14))
+                                    .foregroundColor(Color(hex: "#FEA500"))
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                    }
+                    
                     // My Subscriptions Section
                     VStack(alignment: .leading, spacing: 16) {
                         // Checkbox and Label
                         HStack(spacing: 8) {
                             Button(action: {
                                 showMySubscriptions.toggle()
-                                // Clear platform selections when toggling
+                                // Add/remove subscription platforms when toggling
                                 if showMySubscriptions {
-                                    selectedPlatforms.removeAll()
+                                    // When checking ON: Add all user's subscription platforms
+                                    for platform in userSubscriptions {
+                                        filterState.selectedPlatforms.insert(platform)
+                                    }
+                                } else {
+                                    // When checking OFF: Remove all user's subscription platforms
+                                    for platform in userSubscriptions {
+                                        filterState.selectedPlatforms.remove(platform)
+                                    }
                                 }
                             }) {
                                 Image(systemName: showMySubscriptions ? "checkmark.square.fill" : "square")
@@ -117,7 +139,7 @@ struct SearchCategoriesView: View {
                                     .foregroundColor(showMySubscriptions ? Color(hex: "#FEA500") : Color(hex: "#B3B3B3"))
                             }
                             
-                            Text("My subscriptions")
+                            Text("My subscriptions (\(profileManager.subscriptions.count))")
                                 .font(.custom("Inter-SemiBold", size: 14))
                                 .foregroundColor(Color(hex: "#333333"))
                         }
@@ -129,12 +151,12 @@ struct SearchCategoriesView: View {
                                 ForEach(platforms, id: \.self) { platform in
                                     PlatformCard(
                                         platform: platform,
-                                        isSelected: selectedPlatforms.contains(platform)
+                                        isSelected: filterState.selectedPlatforms.contains(platform)
                                     ) {
-                                        if selectedPlatforms.contains(platform) {
-                                            selectedPlatforms.remove(platform)
+                                        if filterState.selectedPlatforms.contains(platform) {
+                                            filterState.selectedPlatforms.remove(platform)
                                         } else {
-                                            selectedPlatforms.insert(platform)
+                                            filterState.selectedPlatforms.insert(platform)
                                         }
                                     }
                                 }
@@ -150,52 +172,168 @@ struct SearchCategoriesView: View {
                     CategoryGroupView(
                         groupName: group.name,
                         categories: group.categories,
-                        selectedCategories: $selectedCategories
+                        filterState: filterState
                     )
                     .padding(.horizontal, 16)
                 }
                 
-                // Bottom padding for button
+                // Bottom padding
                 Color.clear
-                    .frame(height: totalSelections > 0 ? 120 : 20)
+                    .frame(height: 20)
                 }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-            // Start Searching Button (only show when selections are made)
-            if totalSelections > 0 {
-                VStack(spacing: 0) {
-                    Divider()
-                        .background(Color(hex: "#f3f3f3"))
-                    
-                    Button(action: {
-                        startSearching()
-                    }) {
-                        Text("Start Searching (\(totalSelections))")
-                            .font(.custom("Nunito-Bold", size: 14))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color(hex: "#333333"))
-                            .cornerRadius(8)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 16)
-                }
-                .background(
-                    Color.white
-                        .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: -2)
-                )
-            } else {
-                Color.clear.frame(height: 0)
             }
         }
+        .task {
+            // Load genre counts when view appears
+            loadGenreCounts()
         }
     }
     
     private func startSearching() {
         // TODO: Navigate to search results with selected platforms and categories
-        print("Starting search with \(selectedPlatforms.count) platforms and \(selectedCategories.count) categories")
+        print("Starting search with \(filterState.selectedPlatforms.count) platforms and \(filterState.selectedGenres.count) genres")
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Formats genre count as "TMDB_count / DB_count"
+    private func formatGenreCount(tmdbCount: Int, dbCount: Int) -> String {
+        let tmdbFormatted = tmdbCount >= 1000 ? "1000+" : "\(tmdbCount)"
+        let dbFormatted = dbCount >= 1000 ? "1000+" : "\(dbCount)"
+        return "\(tmdbFormatted) / \(dbFormatted)"
+    }
+    
+    /// Loads genre counts from TMDB and database
+    private func loadGenreCounts() {
+        Task {
+            // Load counts for all genres
+            var updatedGroups = categoryGroups
+            
+            for groupIndex in 0..<updatedGroups.count {
+                var updatedCategories = updatedGroups[groupIndex].categories
+                
+                for categoryIndex in 0..<updatedCategories.count {
+                    let category = updatedCategories[categoryIndex]
+                    
+                    // Fetch TMDB count
+                    let tmdbCount = await fetchTMDBGenreCount(genreName: category.name)
+                    
+                    // Fetch database count
+                    let dbCount = await fetchDatabaseGenreCount(genreName: category.name)
+                    
+                    // Update category with new counts
+                    updatedCategories[categoryIndex] = SearchCategoryItem(
+                        name: category.name,
+                        icon: category.icon,
+                        tmdbCount: tmdbCount,
+                        dbCount: dbCount
+                    )
+                }
+                
+                updatedGroups[groupIndex] = (name: updatedGroups[groupIndex].name, categories: updatedCategories)
+            }
+            
+            await MainActor.run {
+                self.categoryGroups = updatedGroups
+            }
+        }
+    }
+    
+    /// Fetches genre count from TMDB using discover endpoint
+    private func fetchTMDBGenreCount(genreName: String) async -> Int {
+        // Map genre name to TMDB genre ID
+        guard let genreId = getTMDBGenreId(for: genreName) else {
+            return 0
+        }
+        
+        do {
+            // Use discover endpoint to get total results for this genre
+            var components = URLComponents(string: "\(TMDBConfig.baseURL)/discover/movie")
+            components?.queryItems = [
+                URLQueryItem(name: "api_key", value: TMDBConfig.apiKey),
+                URLQueryItem(name: "with_genres", value: String(genreId)),
+                URLQueryItem(name: "page", value: "1"),
+                URLQueryItem(name: "language", value: "en-US")
+            ]
+            
+            guard let url = components?.url else {
+                return 0
+            }
+            
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let response = try JSONDecoder().decode(TMDBSearchResponse.self, from: data)
+            
+            return response.totalResults
+        } catch {
+            print("⚠️ Error fetching TMDB count for \(genreName): \(error)")
+            return 0
+        }
+    }
+    
+    /// Fetches genre count from our Supabase database
+    private func fetchDatabaseGenreCount(genreName: String) async -> Int {
+        do {
+            return try await SupabaseService.shared.getGenreCount(genreName: genreName)
+        } catch {
+            print("⚠️ Error fetching database count for \(genreName): \(error)")
+            return 0
+        }
+    }
+    
+    /// Maps genre name to TMDB genre ID
+    private func getTMDBGenreId(for genreName: String) -> Int? {
+        // TMDB genre ID mapping
+        let genreMap: [String: Int] = [
+            "Action": 28,
+            "Adventure": 12,
+            "Animation": 16,
+            "Comedy": 35,
+            "Crime": 80,
+            "Documentary": 99,
+            "Drama": 18,
+            "Family": 10751,
+            "Fantasy": 14,
+            "History": 36,  // Historical maps to History
+            "Horror": 27,
+            "Music": 10402,  // Musical maps to Music
+            "Mystery": 9648,
+            "Romance": 10749,
+            "Science Fiction": 878,  // Sci-Fi maps to Science Fiction
+            "TV Movie": 10770,
+            "Thriller": 53,
+            "War": 10752,
+            "Western": 37,
+            "Biography": 18,  // Biography is usually Drama (18) in TMDB
+            "Sport": 18  // Sport is usually Drama (18) in TMDB
+        ]
+        
+        // Try exact match first
+        if let id = genreMap[genreName] {
+            return id
+        }
+        
+        // Try case-insensitive match
+        for (key, id) in genreMap {
+            if key.lowercased() == genreName.lowercased() {
+                return id
+            }
+        }
+        
+        // Handle special cases
+        switch genreName {
+        case "Historical":
+            return 36
+        case "Musical":
+            return 10402
+        case "Sci-Fi":
+            return 878
+        case "Biography":
+            return 18
+        case "Sport":
+            return 18
+        default:
+            return nil
+        }
     }
 }
 
@@ -204,7 +342,7 @@ struct SearchCategoriesView: View {
 struct CategoryGroupView: View {
     let groupName: String
     let categories: [SearchCategoryItem]
-    @Binding var selectedCategories: Set<String>
+    @ObservedObject var filterState: SearchFilterState
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -222,12 +360,12 @@ struct CategoryGroupView: View {
                 ForEach(categories) { category in
                     CategoryCard(
                         category: category,
-                        isSelected: selectedCategories.contains(category.name)
+                        isSelected: filterState.selectedGenres.contains(category.name)
                     ) {
-                        if selectedCategories.contains(category.name) {
-                            selectedCategories.remove(category.name)
+                        if filterState.selectedGenres.contains(category.name) {
+                            filterState.selectedGenres.remove(category.name)
                         } else {
-                            selectedCategories.insert(category.name)
+                            filterState.selectedGenres.insert(category.name)
                         }
                     }
                 }
@@ -242,7 +380,11 @@ struct SearchCategoryItem: Identifiable {
     let id = UUID()
     let name: String
     let icon: String
-    let count: Int
+    let tmdbCount: Int  // Total movies in TMDB for this genre
+    let dbCount: Int    // Movies in our database for this genre
+    
+    // Legacy support - returns tmdbCount for backwards compatibility
+    var count: Int { tmdbCount }
 }
 
 // MARK: - Platform Card
@@ -280,52 +422,7 @@ struct PlatformLogo: View {
     let platform: String
     
     var body: some View {
-        Group {
-            switch platform {
-            case "Netflix":
-                // Netflix red logo
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(hex: "#E50914"))
-                    Text("N")
-                        .font(.custom("Nunito-Bold", size: 32))
-                        .foregroundColor(.white)
-                }
-            case "Prime Video":
-                // Prime Video logo (blue/black)
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(hex: "#00A8E1"))
-                    Text("P")
-                        .font(.custom("Nunito-Bold", size: 32))
-                        .foregroundColor(.white)
-                }
-            case "Disney+":
-                // Disney+ blue logo
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(hex: "#113CCF"))
-                    Text("D")
-                        .font(.custom("Nunito-Bold", size: 32))
-                        .foregroundColor(.white)
-                }
-            case "Max":
-                // Max black logo
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(hex: "#000000"))
-                    Text("M")
-                        .font(.custom("Nunito-Bold", size: 32))
-                        .foregroundColor(.white)
-                }
-            default:
-                // Default placeholder
-                Text(platform.prefix(1))
-                    .font(.custom("Nunito-Bold", size: 24))
-                    .foregroundColor(Color(hex: "#333333"))
-            }
-        }
-        .frame(width: 60, height: 60)
+        PlatformIconHelper.icon(for: platform, size: 60)
     }
 }
 
@@ -335,6 +432,13 @@ struct CategoryCard: View {
     let category: SearchCategoryItem
     let isSelected: Bool
     let onTap: () -> Void
+    
+    /// Formats genre count as "TMDB_count / DB_count"
+    static func formatGenreCount(tmdbCount: Int, dbCount: Int) -> String {
+        let tmdbFormatted = tmdbCount >= 1000 ? "1000+" : "\(tmdbCount)"
+        let dbFormatted = dbCount >= 1000 ? "1000+" : "\(dbCount)"
+        return "\(tmdbFormatted) / \(dbFormatted)"
+    }
     
     var body: some View {
         Button(action: onTap) {
@@ -350,7 +454,7 @@ struct CategoryCard: View {
                         .font(.custom("Nunito-SemiBold", size: 16))
                         .foregroundColor(Color(hex: "#333333"))
                     
-                    Text(category.count >= 1000 ? "1000+" : "\(category.count)")
+                    Text(CategoryCard.formatGenreCount(tmdbCount: category.tmdbCount, dbCount: category.dbCount))
                         .font(.custom("Inter-Regular", size: 12))
                         .foregroundColor(Color(hex: "#808080"))
                 }

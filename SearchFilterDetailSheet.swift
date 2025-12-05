@@ -8,6 +8,7 @@ import SwiftUI
 
 struct SearchFilterDetailSheet: View {
     let filterType: SearchFiltersBottomSheet.FilterType
+    var onApplyFilters: (() -> Void)? = nil // Callback to trigger search after applying filters
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var filterState: SearchFilterState
     
@@ -56,6 +57,19 @@ struct SearchFilterDetailSheet: View {
                     .background(Color(hex: "#f3f3f3"))
                 
                 Button(action: {
+                    print("🔘 [FILTER DETAIL] 'Apply' button tapped for \(filterType.rawValue)")
+                    print("   Staged year range: \(filterState.stagedYearRange.lowerBound)-\(filterState.stagedYearRange.upperBound)")
+                    print("   Applied year range BEFORE: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
+                    
+                    // Apply staged filters to applied filters
+                    filterState.applyStagedFilters()
+                    
+                    print("   Applied year range AFTER: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
+                    
+                    // Trigger search callback if provided
+                    onApplyFilters?()
+                    
+                    // Dismiss the detail sheet
                     dismiss()
                 }) {
                     Text("Apply")
@@ -103,13 +117,20 @@ struct SearchFilterDetailSheet: View {
     
     private var sortByContent: some View {
         VStack(spacing: 0) {
-            let options = ["List order", "Tasty Score", "AI Score", "Watched", "Year"]
+            let options = ["List order", "Alphabetical", "AI Score", "Tasty Score", "Year", "Watched"]
             ForEach(options, id: \.self) { option in
                 RadioButtonRow(
                     title: option,
                     isSelected: filterState.sortBy == option
                 ) {
+                    print("🔘 [SORT] Selected: \(option)")
+                    print("   Staged sortBy BEFORE: \(filterState.stagedSortBy)")
                     filterState.sortBy = option
+                    print("   Staged sortBy AFTER: \(filterState.stagedSortBy)")
+                    
+                    // Apply immediately (sort is not staged like other filters)
+                    filterState.applyStagedFilters()
+                    print("   Applied sortBy: \(filterState.appliedSortBy)")
                 }
                 
                 if option != options.last {

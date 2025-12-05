@@ -1,17 +1,43 @@
 //  SearchView.swift
-//  Created automatically by Cursor Assistant
-//  Created on: 2025-11-14 at 09:59 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 04:45 (America/Los_Angeles - Pacific Time)
-//  Notes: Search view with search bar, suggestions, results, and filter functionality. Updated to show yellow header with "Find Your Movie" title and description when empty (categories view), simpler white header when searching. Removed automatic popular movies loading. Changed to show real-time search results as user types instead of suggestions. Categories view shows by default when search query is empty.
+//  TastyMangoes
+//
+//  Originally created by Cursor Assistant on 2025-11-14
+//  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
+//  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
+//  Last modified: 2025-12-03 at 09:39 PST by Cursor Assistant
+//
+//  Changes made by Claude (2025-12-02):
+//  - Reordered content logic to keep previous results visible while searching
+//  - Only show loading view when there are no results to display
+//  - Only show empty state after search truly completes with no results
+//  - This prevents the distracting flash of "Oops! No movies found" while typing
+//
+//  Changes made by Cursor Assistant (2025-12-03):
+//  - Fixed mic button to show instant UI feedback (shows .requesting state immediately)
+//  - Updated overlay to show ListeningIndicator for both .requesting and .listening states
+//  - Added proper stopListening reason tracking
+//  - Added explicit search trigger when recording finishes (onChange of state to .processing)
+//  - Added debug logging for transcript changes and search queries
 
 import SwiftUI
 
 struct SearchView: View {
-    @StateObject private var viewModel = SearchViewModel()
-    @StateObject private var filterState = SearchFilterState.shared
+    @ObservedObject private var viewModel = SearchViewModel.shared
+    // Use @ObservedObject for singleton to avoid recreating state
+    @ObservedObject private var filterState = SearchFilterState.shared
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
     @State private var showGenresSheet = false
+    @State private var navigateToResults = false
+    @State private var selectedFilterType: SearchFiltersBottomSheet.FilterType? = nil
+    @FocusState private var isSearchFocused: Bool  // Added by Claude for keyboard management
+    @State private var autoOpenMovieId: String? = nil  // For auto-opening single result from Mango
+    @State private var showAutoOpenMovie = false  // Controls fullScreenCover for auto-open
+    
+    // Computed property for selection count (use applied filters for display)
+    private var totalSelections: Int {
+        filterState.appliedSelectedPlatforms.count + filterState.appliedSelectedGenres.count
+    }
     
     var body: some View {
         NavigationStack {
@@ -19,28 +45,117 @@ struct SearchView: View {
                 // Search Header
                 searchHeader
                 
-                // Content
+                // Content - Reordered to prevent flashing empty state
                 if viewModel.searchQuery.isEmpty && !viewModel.hasSearched {
                     // Default: Show categories view when no search query and haven't searched
                     categoriesView
-                } else if viewModel.isSearching {
-                    loadingView
                 } else if let error = viewModel.error {
+                    // Show error if there's one
                     errorView(error: error)
-                } else if viewModel.hasSearched && viewModel.searchResults.isEmpty {
+                } else if !viewModel.searchResults.isEmpty {
+                    // Show results - keep visible even while a new search is in progress
+                    ZStack {
+                        resultsListView
+                        
+                        // Subtle loading indicator overlay when searching with existing results
+                        if viewModel.isSearching {
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                        .padding(8)
+                                        .background(Color.white.opacity(0.9))
+                                        .cornerRadius(8)
+                                        .shadow(radius: 2)
+                                        .padding(.trailing, 20)
+                                        .padding(.top, 8)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                } else if viewModel.isSearching {
+                    // Only show full loading view when we have no results to display yet
+                    loadingView
+                } else if !viewModel.searchQuery.isEmpty && viewModel.hasSearched {
+                    // Only show empty state after search truly completes with no results
                     emptyStateView
-                } else if !viewModel.searchQuery.isEmpty {
-                    // Show real-time search results as user types
-                    resultsListView
                 } else {
                     // Fallback to categories
                     categoriesView
                 }
             }
             .background(Color(hex: "#fdfdfd"))
+            .onReceive(NotificationCenter.default.publisher(for: .mangoOpenMoviePage)) { notification in
+                // Auto-open movie page when Mango finds a single result
+                if let movieId = notification.userInfo?["movieId"] as? String {
+                    autoOpenMovieId = movieId
+                    showAutoOpenMovie = true
+                }
+            }
+            .onChange(of: viewModel.searchResults) { oldResults, newResults in
+                // Mango speaks when search results update (only when search is complete)
+                guard let query = viewModel.lastQuery, !viewModel.isSearching else { return }
+                
+                if newResults.isEmpty {
+                    MangoSpeaker.shared.speak("I couldn't find anything for \(query).")
+                } else if newResults.count == 1 {
+                    MangoSpeaker.shared.speak("I found one movie for \(query).")
+                } else {
+                    MangoSpeaker.shared.speak("I found \(newResults.count) matches for \(query).")
+                }
+            }
+            .fullScreenCover(isPresented: $showAutoOpenMovie) {
+                if let movieId = autoOpenMovieId {
+                    NavigationStack {
+                        MoviePageView(movieId: movieId)
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Start Searching Button - show when selections > 0 OR search query is not empty
+                if totalSelections > 0 || !viewModel.searchQuery.isEmpty {
+                    VStack(spacing: 0) {
+                        Button(action: {
+                            startSearching()
+                        }) {
+                            // Show count if there are selections, otherwise just "Start Searching"
+                            let buttonText = totalSelections > 0
+                                ? "Start Searching (\(totalSelections))"
+                                : "Start Searching"
+                            Text(buttonText)
+                                .font(.custom("Nunito-Bold", size: 16))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#333333"))
+                                .cornerRadius(12)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 16)
+                        .background(Color.white)
+                    }
+                } else {
+                    Color.clear.frame(height: 0)
+                }
+            }
+            .navigationDestination(isPresented: $navigateToResults) {
+                CategoryResultsView()
+            }
         }
         .sheet(isPresented: $showFilters) {
-            SearchFiltersBottomSheet(isPresented: $showFilters)
+            SearchFiltersBottomSheet(
+                isPresented: $showFilters,
+                onApplyFilters: {
+                    // Trigger search when filters are applied
+                    if !viewModel.searchQuery.isEmpty {
+                        viewModel.search()
+                    }
+                },
+                initialFilterType: selectedFilterType
+            )
         }
         .sheet(isPresented: $showPlatformsSheet) {
             SearchPlatformsBottomSheet(isPresented: $showPlatformsSheet)
@@ -48,6 +163,89 @@ struct SearchView: View {
         .sheet(isPresented: $showGenresSheet) {
             SearchGenresBottomSheet(isPresented: $showGenresSheet)
         }
+        .onChange(of: filterState.appliedSelectedPlatforms) { oldValue, newValue in
+            // Re-search when applied filters change (only after "Show Results" is tapped)
+            if !viewModel.searchQuery.isEmpty {
+                viewModel.search()
+            }
+        }
+        .onChange(of: filterState.appliedSelectedGenres) { oldValue, newValue in
+            // Re-search when applied filters change (only after "Show Results" is tapped)
+            if !viewModel.searchQuery.isEmpty {
+                viewModel.search()
+            }
+        }
+        .onChange(of: filterState.appliedYearRange) { oldValue, newValue in
+            // Re-search when applied filters change (only after "Show Results" is tapped)
+            if !viewModel.searchQuery.isEmpty {
+                viewModel.search()
+            }
+        }
+        .onChange(of: filterState.appliedSortBy) { oldValue, newValue in
+            // Re-sort existing results immediately when sort changes
+            print("🔀 [SEARCH VIEW] Sort changed: '\(oldValue)' -> '\(newValue)'")
+            viewModel.applySorting()
+        }
+        .onChange(of: showFilters) { oldValue, newValue in
+            // When filter sheet is dismissed without applying, staged filters are discarded
+            // When "Show Results" is tapped, applyStagedFilters() is called which triggers onChange above
+            if !newValue {
+                // Sheet was dismissed - reset selectedFilterType
+                selectedFilterType = nil
+                // If filters weren't applied, they're already discarded
+                // If they were applied, the onChange handlers above will trigger search
+            }
+        }
+        // Voice recognition removed - use TalkToMango center button for voice input
+    }
+    
+    // MARK: - Actions
+    
+    private func startSearching() {
+        isSearchFocused = false  // Added by Claude - dismiss keyboard
+        // Wire up NAVIGATE connection: Search button → Category Results View
+        // Navigate to results view with selected filters
+        navigateToResults = true
+    }
+    
+    // MARK: - Voice Command Parsing
+    
+    private func parseVoiceCommand(_ transcript: String) -> (query: String, recommender: String?) {
+        let lowercased = transcript.lowercased()
+        
+        // Pattern: "[Name] recommends [Movie]"
+        if let range = lowercased.range(of: " recommends ") {
+            let recommender = String(transcript[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            let movie = String(transcript[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            if !recommender.isEmpty && !movie.isEmpty {
+                return (movie, recommender)
+            }
+        }
+        
+        // Pattern: "[Name] recommended [Movie]" (past tense, no "by")
+        if let range = lowercased.range(of: " recommended ") {
+            // Check if it's NOT "recommended by" pattern
+            let afterRecommended = String(transcript[range.upperBound...]).lowercased()
+            if !afterRecommended.hasPrefix("by ") {
+                let recommender = String(transcript[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                let movie = String(transcript[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                if !recommender.isEmpty && !movie.isEmpty {
+                    return (movie, recommender)
+                }
+            }
+        }
+        
+        // Pattern: "[Movie] recommended by [Name]"
+        if let range = lowercased.range(of: " recommended by ") {
+            let movie = String(transcript[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            let recommender = String(transcript[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            if !recommender.isEmpty && !movie.isEmpty {
+                return (movie, recommender)
+            }
+        }
+        
+        // No recommendation pattern found - just a regular search
+        return (transcript, nil)
     }
     
     // MARK: - Search Header
@@ -99,12 +297,17 @@ struct SearchView: View {
                     TextField("Searching by name...", text: $viewModel.searchQuery)
                         .font(.custom("Inter-Regular", size: 16))
                         .foregroundColor(Color(hex: "#666666"))
-                        .onChange(of: viewModel.searchQuery) { _, _ in
+                        .focused($isSearchFocused)  // Added by Claude for keyboard management
+                        .onChange(of: viewModel.searchQuery) { oldValue, newValue in
+                            print("📝 [SEARCH VIEW] Search query changed: '\(oldValue)' -> '\(newValue)'")
+                            print("   Current appliedYearRange: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
+                            filterState.searchQuery = newValue // Sync to filterState for tab bar
                             viewModel.search()
                         }
                     
                     if !viewModel.searchQuery.isEmpty {
                         Button(action: {
+                            isSearchFocused = false  // Added by Claude - dismiss keyboard
                             viewModel.clearSearch()
                         }) {
                             Image(systemName: "xmark.circle.fill")
@@ -113,9 +316,7 @@ struct SearchView: View {
                         }
                     }
                     
-                    Image(systemName: "mic.fill")
-                        .foregroundColor(Color(hex: "#666666"))
-                        .frame(width: 20, height: 20)
+                    // Mic button removed - use TalkToMango center button for voice input
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
@@ -138,6 +339,9 @@ struct SearchView: View {
             .padding(.bottom, 12)
             
             // Filter Badges (only show when there are active filters or search results)
+            // Debug: Log what the badge will show
+            let _ = print("🏷️ [BADGE] yearFilterText will show: '\(filterState.yearFilterText)' (appliedYearRange: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound))")
+            
             if filterState.hasActiveFilters || !viewModel.searchResults.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -154,6 +358,24 @@ struct SearchView: View {
                             title: filterState.genreFilterText,
                             onTap: {
                                 showGenresSheet = true
+                            }
+                        )
+                        
+                        // Year Badge
+                        FilterBadgeButton(
+                            title: filterState.yearFilterText,
+                            onTap: {
+                                selectedFilterType = .year
+                                showFilters = true
+                            }
+                        )
+                        
+                        // Sort Badge
+                        FilterBadgeButton(
+                            title: filterState.sortFilterText,
+                            onTap: {
+                                selectedFilterType = .sortBy
+                                showFilters = true
                             }
                         )
                     }
@@ -230,20 +452,41 @@ struct SearchView: View {
     // MARK: - Empty State
     
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "film")
-                .font(.system(size: 64))
-                .foregroundColor(Color(hex: "#CCCCCC"))
+        VStack(spacing: 0) {
+            // Back button - show when search query is not empty
+            if !viewModel.searchQuery.isEmpty {
+                HStack {
+                    Button(action: {
+                        // Clear search and return to genre/platform selection
+                        viewModel.clearSearch()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(hex: "#333333"))
+                            .frame(width: 44, height: 44)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+            }
             
-            Text("No movies found")
-                .font(.custom("Nunito-Bold", size: 24))
-                .foregroundColor(Color(hex: "#1a1a1a"))
-            
-            Text("Try a different search term")
-                .font(.custom("Inter-Regular", size: 16))
-                .foregroundColor(Color(hex: "#666666"))
+            VStack(spacing: 16) {
+                Image(systemName: "film")
+                    .font(.system(size: 64))
+                    .foregroundColor(Color(hex: "#CCCCCC"))
+                
+                Text("No movies found")
+                    .font(.custom("Nunito-Bold", size: 24))
+                    .foregroundColor(Color(hex: "#1a1a1a"))
+                
+                Text("Try a different search term")
+                    .font(.custom("Inter-Regular", size: 16))
+                    .foregroundColor(Color(hex: "#666666"))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Suggestions View
@@ -308,29 +551,77 @@ struct SearchView: View {
     // MARK: - Results List
     
     private var resultsListView: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                // Results count
+        return VStack(spacing: 0) {
+            // Back button - only show when search query is not empty
+            if !viewModel.searchQuery.isEmpty {
                 HStack {
-                    Text("\(viewModel.searchResults.count) results found")
-                        .font(.custom("Inter-SemiBold", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
+                    Button(action: {
+                        // Clear search and return to genre/platform selection
+                        viewModel.clearSearch()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(hex: "#333333"))
+                            .frame(width: 44, height: 44)
+                    }
                     
                     Spacer()
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
-                
-                // Movie cards
-                LazyVStack(spacing: 12) {
-                    ForEach(viewModel.searchResults) { movie in
-                        NavigationLink(destination: MoviePageView(movieId: movie.id)) {
-                            SearchMovieCard(movie: movie)
+                .padding(.top, 8)
+            }
+            
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Results count (only show when there are results or active filters)
+                    if !viewModel.searchResults.isEmpty || filterState.hasActiveFilters {
+                        HStack {
+                            // Show count based on whether we have search results or just filters
+                            let resultsText = !viewModel.searchResults.isEmpty
+                                ? "\(viewModel.searchResults.count) results found"
+                                : (filterState.hasActiveFilters ? "0 results found" : "")
+                            
+                            if !resultsText.isEmpty {
+                                Text(resultsText)
+                                    .font(.custom("Inter-SemiBold", size: 14))
+                                    .foregroundColor(Color(hex: "#666666"))
+                            }
+                            
+                            Spacer()
+                            
+                            // Clear All button when filters are active
+                            if filterState.hasActiveFilters {
+                                Button(action: {
+                                    filterState.clearAllAppliedFilters()
+                                    // Also clear search results when clearing filters
+                                    viewModel.searchResults = []
+                                    viewModel.hasSearched = false
+                                    // Trigger search if we have a query
+                                    if !viewModel.searchQuery.isEmpty {
+                                        viewModel.search()
+                                    }
+                                }) {
+                                    Text("Clear All")
+                                        .font(.custom("Nunito-SemiBold", size: 14))
+                                        .foregroundColor(Color(hex: "#FEA500"))
+                                }
+                            }
                         }
-                        .buttonStyle(PlainButtonStyle())
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
                     }
+                
+                    // Movie cards
+                    LazyVStack(spacing: 12) {
+                        ForEach(viewModel.searchResults) { movie in
+                            NavigationLink(destination: MovieDetailView(movie: movie)) {
+                                SearchMovieCard(movie: movie)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding(.horizontal, 20)
                 }
-                .padding(.horizontal, 20)
             }
         }
     }
@@ -338,13 +629,13 @@ struct SearchView: View {
     // MARK: - Categories View
     
     private var categoriesView: some View {
-        SearchCategoriesView()
+        return SearchCategoriesView(searchQuery: viewModel.searchQuery)
     }
     
     // MARK: - Popular Movies View
     
     private var popularMoviesView: some View {
-        ScrollView {
+        return ScrollView {
             VStack(spacing: 16) {
                 HStack {
                     Text("Popular Movies")
@@ -369,7 +660,7 @@ struct SearchView: View {
                 // Movie cards
                 LazyVStack(spacing: 12) {
                     ForEach(viewModel.searchResults) { movie in
-                        NavigationLink(destination: MoviePageView(movieId: movie.id)) {
+                        NavigationLink(destination: MovieDetailView(movie: movie)) {
                             SearchMovieCard(movie: movie)
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -385,9 +676,14 @@ struct SearchView: View {
 
 struct SearchMovieCard: View {
     let movie: Movie
+    @State private var showMoviePage = false
     
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        Button(action: {
+            // Wire up NAVIGATE connection: Product Card → Movie Page
+            showMoviePage = true
+        }) {
+            HStack(alignment: .top, spacing: 12) {
             // Poster
             MoviePosterImage(
                 posterURL: movie.posterImageURL,
@@ -504,6 +800,13 @@ struct SearchMovieCard: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .fullScreenCover(isPresented: $showMoviePage) {
+            NavigationStack {
+                MoviePageView(movieId: movie.id)
+            }
+        }
     }
 }
 

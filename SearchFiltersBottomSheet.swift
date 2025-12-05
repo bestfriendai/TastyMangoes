@@ -9,9 +9,18 @@ import SwiftUI
 struct SearchFiltersBottomSheet: View {
     @Binding var isPresented: Bool
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var filterState = SearchFilterState.shared
+    // Use @ObservedObject for singleton to avoid recreating state
+    @ObservedObject private var filterState = SearchFilterState.shared
     
     @State private var selectedFilterType: FilterType? = nil
+    var onApplyFilters: (() -> Void)? // Callback to trigger search after applying filters
+    var initialFilterType: FilterType? = nil // Filter type to open when sheet appears
+    
+    init(isPresented: Binding<Bool>, onApplyFilters: (() -> Void)? = nil, initialFilterType: FilterType? = nil) {
+        self._isPresented = isPresented
+        self.onApplyFilters = onApplyFilters
+        self.initialFilterType = initialFilterType
+    }
     
     enum FilterType: String, Identifiable {
         case sortBy = "Sort by"
@@ -96,21 +105,49 @@ struct SearchFiltersBottomSheet: View {
                 .padding(.vertical, 12)
             }
             
-            // Close Button
+            // Action Buttons
             VStack(spacing: 0) {
                 Divider()
                     .background(Color(hex: "#f3f3f3"))
                 
-                Button(action: {
-                    dismiss()
-                }) {
-                    Text("Close")
-                        .font(.custom("Nunito-Bold", size: 14))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color(hex: "#333333"))
-                        .cornerRadius(8)
+                HStack(spacing: 12) {
+                    // Reset Button (left, secondary style)
+                    Button(action: {
+                        filterState.resetStagedFilters()
+                    }) {
+                        Text("Reset")
+                            .font(.custom("Nunito-Bold", size: 16))
+                            .foregroundColor(Color(hex: "#333333"))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(hex: "#F5F5F5"))
+                            .cornerRadius(8)
+                    }
+                    
+                    // Show Results Button (right, primary style)
+                    Button(action: {
+                        print("🔘 [FILTER SHEET] 'Show Results' button tapped")
+                        print("   Staged year range: \(filterState.stagedYearRange.lowerBound)-\(filterState.stagedYearRange.upperBound)")
+                        print("   Applied year range BEFORE: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
+                        
+                        // Apply staged filters to applied filters
+                        filterState.applyStagedFilters()
+                        
+                        print("   Applied year range AFTER: \(filterState.appliedYearRange.lowerBound)-\(filterState.appliedYearRange.upperBound)")
+                        
+                        // Trigger search callback if provided
+                        onApplyFilters?()
+                        // Dismiss the sheet
+                        dismiss()
+                    }) {
+                        Text("Show Results")
+                            .font(.custom("Nunito-Bold", size: 16))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(hex: "#333333"))
+                            .cornerRadius(8)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -121,9 +158,35 @@ struct SearchFiltersBottomSheet: View {
         .cornerRadius(24, corners: [.topLeft, .topRight])
         .presentationDetents([.height(600)])
         .presentationDragIndicator(.hidden)
+        .onAppear {
+            // Load applied filters into staged filters when sheet opens
+            filterState.loadStagedFilters()
+            
+            // If an initial filter type was specified, open that filter detail sheet
+            if let initialType = initialFilterType {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    selectedFilterType = initialType
+                }
+            }
+        }
+        .onDisappear {
+            // If dismissed without applying, staged filters are discarded automatically
+            // (they're not copied to applied filters)
+        }
         .sheet(item: $selectedFilterType) { filterType in
-            SearchFilterDetailSheet(filterType: filterType)
-                .environmentObject(filterState)
+            SearchFilterDetailSheet(filterType: filterType, onApplyFilters: {
+                // When a filter detail sheet applies filters, also apply them in the main sheet
+                // and trigger search
+                filterState.applyStagedFilters()
+                // Close the detail sheet first by setting selectedFilterType to nil
+                selectedFilterType = nil
+                // Close the main sheet and trigger search after a short delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    isPresented = false
+                    onApplyFilters?()
+                }
+            })
+            .environmentObject(filterState)
         }
     }
 }

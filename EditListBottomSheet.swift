@@ -51,6 +51,12 @@ struct EditListBottomSheet: View {
                     .padding(.vertical, 12)
                     .background(Color(hex: "#f3f3f3"))
                     .cornerRadius(8)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        if isValidName {
+                            saveListName()
+                        }
+                    }
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)

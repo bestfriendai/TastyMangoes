@@ -120,18 +120,124 @@ struct TMDBCrew: Codable {
     }
 }
 
+// MARK: - Images and Videos Models
+
+/// Images response from TMDB
+struct TMDBImagesResponse: Codable {
+    let id: Int
+    let backdrops: [TMDBImage]
+    let posters: [TMDBImage]
+}
+
+/// Image from TMDB
+struct TMDBImage: Codable, Identifiable {
+    let filePath: String
+    let width: Int?
+    let height: Int?
+    let aspectRatio: Double?
+    let voteAverage: Double?
+    let voteCount: Int?
+    
+    var imageURL: URL? {
+        // If filePath is already a full URL (from Supabase storage), use it directly
+        if filePath.hasPrefix("http://") || filePath.hasPrefix("https://") {
+            return URL(string: filePath)
+        }
+        // Otherwise, build TMDB URL
+        return URL(string: "https://image.tmdb.org/t/p/w500\(filePath)")
+    }
+    
+    var originalImageURL: URL? {
+        // If filePath is already a full URL (from Supabase storage), use it directly
+        if filePath.hasPrefix("http://") || filePath.hasPrefix("https://") {
+            return URL(string: filePath)
+        }
+        // Otherwise, build TMDB URL
+        return URL(string: "https://image.tmdb.org/t/p/original\(filePath)")
+    }
+    
+    // Identifiable conformance - use filePath as ID
+    var id: String {
+        filePath
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case filePath = "file_path"
+        case width = "width"
+        case height = "height"
+        case aspectRatio = "aspect_ratio"
+        case voteAverage = "vote_average"
+        case voteCount = "vote_count"
+    }
+}
+
+/// Videos response from TMDB
+struct TMDBVideosResponse: Codable {
+    let id: Int
+    let results: [TMDBVideo]
+}
+
+/// Video from TMDB
+struct TMDBVideo: Codable, Identifiable {
+    let id: String
+    let key: String
+    let name: String
+    let site: String // "YouTube", "Vimeo", etc.
+    let size: Int // 360, 480, 720, 1080
+    let type: String // "Trailer", "Teaser", "Clip", etc.
+    let official: Bool
+    let publishedAt: String
+    let customThumbnailURL: String? // Optional custom thumbnail URL (e.g., from Supabase storage)
+    
+    var youtubeURL: URL? {
+        guard site == "YouTube" else { return nil }
+        return URL(string: "https://www.youtube.com/watch?v=\(key)")
+    }
+    
+    var thumbnailURL: URL? {
+        // Use custom thumbnail URL if available (from Supabase storage)
+        if let customUrl = customThumbnailURL, let url = URL(string: customUrl) {
+            return url
+        }
+        // Otherwise, use YouTube default thumbnail
+        guard site == "YouTube" else { return nil }
+        return URL(string: "https://img.youtube.com/vi/\(key)/maxresdefault.jpg")
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id, key, name, site, size, type, official
+        case publishedAt = "published_at"
+        case customThumbnailURL = "custom_thumbnail_url"
+    }
+    
+    // Custom initializer for creating from MovieClip
+    init(id: String, key: String, name: String, site: String, size: Int, type: String, official: Bool, publishedAt: String, customThumbnailURL: String? = nil) {
+        self.id = id
+        self.key = key
+        self.name = name
+        self.site = site
+        self.size = size
+        self.type = type
+        self.official = official
+        self.publishedAt = publishedAt
+        self.customThumbnailURL = customThumbnailURL
+    }
+}
+
 // MARK: - Conversion to App Models
 
 extension TMDBMovie {
     /// Convert TMDB movie to our lightweight Movie model
     func toMovie() -> Movie {
+        // TMDB returns poster paths like "/abc123.jpg" or "abc123.jpg"
+        // MoviePosterImage expects just the path and will build the full URL
         return Movie(
             id: String(id),
             title: title,
             year: extractYear(from: releaseDate),
             trailerURL: nil,
             trailerDuration: nil,
-            posterImageURL: posterPath,
+            posterImageURL: posterPath, // Pass path as-is, MoviePosterImage will build URL
             tastyScore: nil, // We'll calculate this later
             aiScore: voteAverage,
             genres: [], // Genre names come from a separate API call
@@ -197,6 +303,7 @@ extension TMDBMovieDetail {
             criticsScore: nil,
             audienceScore: voteAverage, // Use TMDB score as audience score
             trailerURL: nil, // Would need separate videos API call
+            trailerYoutubeId: nil, // Would need separate videos API call  
             trailerDuration: nil,
             cast: castMembers,
             crew: crewMembers,

@@ -30,6 +30,7 @@ struct MovieDetail: Codable, Identifiable {
     
     // Video/Trailer
     let trailerURL: String?
+    let trailerYoutubeId: String? // Raw YouTube ID (e.g., "CxwTLktovTU")
     let trailerDuration: Int? // in seconds
     
     // Cast & Crew
@@ -113,6 +114,7 @@ struct MovieDetail: Codable, Identifiable {
         case criticsScore = "critics_score"
         case audienceScore = "audience_score"
         case trailerURL = "trailer_url"
+        case trailerYoutubeId = "trailer_youtube_id"
         case trailerDuration = "trailer_duration"
         case cast, crew, budget, revenue, tagline, status
         case voteAverage = "vote_average"
@@ -137,6 +139,10 @@ struct CastMember: Codable, Identifiable {
     
     var profileURL: URL? {
         guard let profilePath = profilePath else { return nil }
+        // Handle both full URLs (from Supabase Storage) and TMDB paths
+        if profilePath.starts(with: "http") {
+            return URL(string: profilePath)
+        }
         return URL(string: "https://image.tmdb.org/t/p/w185\(profilePath)")
     }
     
@@ -155,6 +161,10 @@ struct CrewMember: Codable, Identifiable {
     
     var profileURL: URL? {
         guard let profilePath = profilePath else { return nil }
+        // Handle both full URLs (from Supabase Storage) and TMDB paths
+        if profilePath.starts(with: "http") {
+            return URL(string: profilePath)
+        }
         return URL(string: "https://image.tmdb.org/t/p/w185\(profilePath)")
     }
     
@@ -188,6 +198,7 @@ extension MovieDetail {
             criticsScore: 79.0,
             audienceScore: 96.0,
             trailerURL: "https://www.youtube.com/watch?v=SUXWAEX2jlg",
+            trailerYoutubeId: "SUXWAEX2jlg",
             trailerDuration: 150,
             cast: [
                 CastMember(id: 287, name: "Brad Pitt", character: "Tyler Durden", profilePath: "/cckcYc2v0yh1tc9QjRelptcOBko.jpg", order: 0),

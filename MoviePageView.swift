@@ -5,6 +5,7 @@
 //  Notes: Fixed horizontal tab bar pinning - tab bar now properly pins below header when scrolling up, and scrolls to sections when tabs are clicked. Updated MenuBottomSheet to match Figma design with correct review icon. Changed AddToListView presentation from fullScreenCover to sheet to match bottom sheet design. Added navigation to list functionality from toast notifications. Replaced deprecated NavigationLink with fullScreenCover for navigating to IndividualListView.
 
 import SwiftUI
+import UIKit
 
 // MARK: - Sections
 
@@ -12,7 +13,8 @@ private enum MovieSection: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case castCrew = "Cast & Crew"
     case reviews = "Reviews"
-    case similar = "More to Watch"
+    // TODO: Similar movies disabled - re-enable later
+    // Keeping similar case commented out would break Swift - removed from allCases filter instead
     case getSmarter = "Get Smarter"
     case clips = "Movie Clips"
     case photos = "Photos"
@@ -31,11 +33,16 @@ struct MoviePageView: View {
     @State private var selectedSection: MovieSection = .overview
     @State private var showMenuBottomSheet = false
     @State private var showAddToList = false
+    @State private var showRateBottomSheet = false
+    @State private var showPlatformBottomSheet = false
+    @State private var showFriendsBottomSheet = false
+    @State private var showTrailerPlayer = false
     @State private var scrollProxy: ScrollViewProxy?
     @State private var tabBarMinY: CGFloat = 1000 // Start with large value so pinned bar doesn't show initially
     @State private var showIndividualList = false
     @State private var navigateToListId: String? = nil
     @State private var navigateToListName: String? = nil
+    @State private var navigateToSearch = false
     
     // Computed property to determine if pinned tab bar should show
     private var shouldShowPinnedTabBar: Bool {
@@ -216,21 +223,22 @@ struct MoviePageView: View {
                                 }
                             )
                         
-                        similarSection
-                            .id(MovieSection.similar.id)
-                            .background(
-                                GeometryReader { geometry in
-                                    let frame = geometry.frame(in: .named("scroll"))
-                                    Color.clear.preference(
-                                        key: SectionVisibilityPreferenceKey.self,
-                                        value: [SectionVisibility(
-                                            section: .similar,
-                                            minY: frame.minY,
-                                            maxY: frame.maxY
-                                        )]
-                                    )
-                                }
-                            )
+                        // TODO: Similar Movies section disabled - re-enable later
+                        // similarSection
+                        //     .id(MovieSection.similar.id)
+                        //     .background(
+                        //         GeometryReader { geometry in
+                        //             let frame = geometry.frame(in: .named("scroll"))
+                        //             Color.clear.preference(
+                        //                 key: SectionVisibilityPreferenceKey.self,
+                        //                 value: [SectionVisibility(
+                        //                     section: .similar,
+                        //                     minY: frame.minY,
+                        //                     maxY: frame.maxY
+                        //                 )]
+                        //             )
+                        //         }
+                        //     )
                         
                         // Help Us Get Smarter section
                         helpUsGetSmarterSection
@@ -285,16 +293,24 @@ struct MoviePageView: View {
                     }
                     .padding(.top, 24)
                     .padding(.horizontal, 16)
-                    
-                    // Bottom Action Buttons
-                    bottomActionButtons
-                        .padding(.top, 32)
-                        .padding(.bottom, 100) // Extra padding to ensure buttons are visible above tab bar
+                    .padding(.bottom, 100) // Extra padding to ensure content is visible above pinned buttons
                 }
             }
             .coordinateSpace(name: "scroll")
             .background(Color(hex: "#fdfdfd"))
             .navigationBarBackButtonHidden(true)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Pinned Bottom Action Buttons
+                VStack(spacing: 0) {
+                    Divider()
+                        .background(Color(hex: "#f3f3f3"))
+                    
+                    bottomActionButtons
+                        .padding(.top, 16)
+                        .padding(.bottom, 8)
+                        .background(Color.white)
+                }
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     // Pinned Header: Back arrow, Title, Details, Share, Menu
@@ -339,6 +355,7 @@ struct MoviePageView: View {
                     AddToListView(
                         movieId: movieId,
                         movieTitle: movie.title,
+                        prefilledRecommender: SearchFilterState.shared.detectedRecommender,
                         onNavigateToList: { listId, listName in
                             navigateToListId = listId
                             navigateToListName = listName
@@ -350,6 +367,27 @@ struct MoviePageView: View {
                         }
                     )
                     .environmentObject(WatchlistManager.shared)
+                }
+            }
+            .sheet(isPresented: $showRateBottomSheet) {
+                if let movie = viewModel.movie {
+                    RateBottomSheet(
+                        isPresented: $showRateBottomSheet,
+                        movieId: movieId,
+                        movieTitle: movie.title
+                    )
+                }
+            }
+            .sheet(isPresented: $showPlatformBottomSheet) {
+                PlatformBottomSheet(isPresented: $showPlatformBottomSheet)
+            }
+            .sheet(isPresented: $showFriendsBottomSheet) {
+                FriendsBottomSheet(isPresented: $showFriendsBottomSheet)
+            }
+            .sheet(isPresented: $showTrailerPlayer) {
+                if let movie = viewModel.movie {
+                    let videoId = movie.trailerYoutubeId ?? ""
+                    TrailerPlayerSheet(videoId: videoId, movieTitle: movie.title)
                 }
             }
             .fullScreenCover(isPresented: $showIndividualList) {
@@ -391,6 +429,16 @@ struct MoviePageView: View {
                             .font(.custom("Inter-Regular", size: 14))
                             .foregroundColor(Color(hex: "#666666"))
                         
+                        if let rating = movie.rating, !rating.isEmpty, rating.trimmingCharacters(in: .whitespaces) != "" {
+                            Text("·")
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#666666"))
+                            
+                            Text(rating)
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#666666"))
+                        }
+                        
                         Text("·")
                             .font(.custom("Inter-Regular", size: 14))
                             .foregroundColor(Color(hex: "#666666"))
@@ -413,15 +461,26 @@ struct MoviePageView: View {
                 
                 // Share and Menu Icons
                 HStack(spacing: 16) {
+                    // Share button (wired from Figma: NAVIGATE or action)
                     Button(action: {
-                        // Share action
-                        print("Share tapped")
+                        // Share action - TODO: Implement share functionality
+                        if let movie = viewModel.movie {
+                            let activityVC = UIActivityViewController(
+                                activityItems: [movie.title, movie.posterURL ?? ""],
+                                applicationActivities: nil
+                            )
+                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                               let rootViewController = windowScene.windows.first?.rootViewController {
+                                rootViewController.present(activityVC, animated: true)
+                            }
+                        }
                     }) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 18, weight: .medium))
                             .foregroundColor(Color(hex: "#1a1a1a"))
                     }
                     
+                    // Menu button (wired from Figma: OVERLAY → Menu Bottom Sheet)
                     Button(action: {
                         showMenuBottomSheet = true
                     }) {
@@ -442,7 +501,7 @@ struct MoviePageView: View {
     
     private func trailerSection(_ movie: MovieDetail) -> some View {
         ZStack(alignment: .topLeading) {
-            // Backdrop Image
+            // Backdrop Image - disable hit testing so button can receive taps
             if let backdropURL = movie.backdropURL {
                 AsyncImage(url: backdropURL) { phase in
                     switch phase {
@@ -463,37 +522,89 @@ struct MoviePageView: View {
                 }
                 .frame(height: 193)
                 .clipped()
+                .allowsHitTesting(false) // Allow taps to pass through to button
             } else {
                 Rectangle()
                     .fill(Color(hex: "#1a1a1a"))
                     .frame(height: 193)
+                    .allowsHitTesting(false) // Allow taps to pass through to button
             }
             
-            // Play Trailer Button
-            HStack(spacing: 6) {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#f3f3f3"))
+            // Play Trailer Button - bigger and white (using Button like movie clips)
+            Button(action: {
+                print("🎬 [Trailer] Button tapped for movie: \(movie.title)")
+                print("🎬 [Trailer] movie.trailerYoutubeId: \(movie.trailerYoutubeId ?? "nil")")
+                print("🎬 [Trailer] movie.trailerURL: \(movie.trailerURL ?? "nil")")
+                print("🎬 [Trailer] viewModel.movieVideos count: \(viewModel.movieVideos.count)")
                 
-                Text("Play Trailer")
-                    .font(.custom("Nunito-Bold", size: 12))
-                    .foregroundColor(Color(hex: "#f3f3f3"))
+                // Try multiple sources for trailer URL
+                var youtubeURLToOpen: URL?
                 
-                if let duration = formatTrailerDuration(movie.trailerDuration) {
-                    Text(duration)
-                        .font(.custom("Inter-Regular", size: 12))
-                        .foregroundColor(Color(hex: "#ececec"))
+                // Priority 1: Use trailer_youtube_id from database
+                if let trailerYouTubeId = movie.trailerYoutubeId, !trailerYouTubeId.isEmpty {
+                    let youtubeURLString = "https://www.youtube.com/watch?v=\(trailerYouTubeId)"
+                    print("🎬 [Trailer] Constructing YouTube URL from ID: \(trailerYouTubeId) -> \(youtubeURLString)")
+                    youtubeURLToOpen = URL(string: youtubeURLString)
                 }
+                
+                // Priority 2: Extract ID from trailerURL if it's a full URL
+                if youtubeURLToOpen == nil, let trailerURL = movie.trailerURL, !trailerURL.isEmpty {
+                    print("🎬 [Trailer] Attempting to extract YouTube ID from trailerURL: \(trailerURL)")
+                    if let extractedId = extractYouTubeId(from: trailerURL) {
+                        let youtubeURLString = "https://www.youtube.com/watch?v=\(extractedId)"
+                        print("🎬 [Trailer] Extracted ID: \(extractedId) -> \(youtubeURLString)")
+                        youtubeURLToOpen = URL(string: youtubeURLString)
+                    } else if trailerURL.contains("youtube.com") || trailerURL.contains("youtu.be") {
+                        // If it's already a YouTube URL, use it directly
+                        youtubeURLToOpen = URL(string: trailerURL)
+                    }
+                }
+                
+                // Priority 3: Fallback to viewModel videos (same as movie clips)
+                if youtubeURLToOpen == nil {
+                    print("🎬 [Trailer] Checking viewModel.movieVideos for trailer...")
+                    if let firstTrailer = viewModel.movieVideos.first(where: { $0.type == "Trailer" }),
+                       let youtubeURL = firstTrailer.youtubeURL {
+                        print("🎬 [Trailer] Using trailer from viewModel videos: \(youtubeURL)")
+                        youtubeURLToOpen = youtubeURL
+                    }
+                }
+                
+                // Open embedded player if we have a YouTube ID, otherwise fall back to external
+                                if let trailerYouTubeId = movie.trailerYoutubeId, !trailerYouTubeId.isEmpty {
+                                    print("🎬 [Trailer] Opening embedded player for: \(trailerYouTubeId)")
+                                    showTrailerPlayer = true
+                                } else if let url = youtubeURLToOpen {
+                                    print("🎬 [Trailer] Opening URL externally: \(url)")
+                                    UIApplication.shared.open(url)
+                                } else {
+                                    print("❌ [Trailer] No valid trailer URL found")
+                                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text("Play Trailer")
+                        .font(.custom("Nunito-Bold", size: 18))
+                        .foregroundColor(.white)
+                    
+                    if let duration = formatTrailerDuration(movie.trailerDuration) {
+                        Text(duration)
+                            .font(.custom("Inter-Regular", size: 16))
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.black.opacity(0.3)) // Add subtle background for better visibility
+                .cornerRadius(8)
+                .contentShape(Rectangle()) // Ensure entire area is tappable
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .buttonStyle(PlainButtonStyle()) // Prevent default button styling
             .padding(.top, 12)
             .padding(.leading, 12)
-            .onTapGesture {
-                if let trailerURL = movie.trailerURL {
-                    print("Play trailer: \(trailerURL)")
-                }
-            }
         }
         .frame(height: 193)
         .cornerRadius(8)
@@ -626,67 +737,77 @@ struct MoviePageView: View {
                 .lineLimit(2)
             }
             
-            // Watch On / Liked By cards
+            // Watch On / Liked By cards (wired from Figma: CHANGE_TO → Expanded states)
             HStack(spacing: 4) {
-                // Watch On
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Watch on:")
-                            .font(.custom("Nunito-Bold", size: 12))
-                            .foregroundColor(Color(hex: "#333333"))
-                        Spacer()
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                    }
-                    
-                    HStack(spacing: -6) {
-                        ForEach(0..<3) { _ in
-                            Circle()
-                                .fill(Color.blue)
-                                .frame(width: 32, height: 32)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
-                                )
+                // Watch On / Platform Card (wired from Figma: CHANGE_TO → Property 1=4)
+                Button(action: {
+                    showPlatformBottomSheet = true
+                }) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Watch on:")
+                                .font(.custom("Nunito-Bold", size: 12))
+                                .foregroundColor(Color(hex: "#333333"))
+                            Spacer()
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                                .foregroundColor(.black)
+                        }
+                        
+                        HStack(spacing: -6) {
+                            ForEach(0..<3) { _ in
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
+                                    )
+                            }
                         }
                     }
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white)
+                    .cornerRadius(8)
+                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity)
-                .background(Color.white)
-                .cornerRadius(8)
-                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
+                .buttonStyle(PlainButtonStyle())
                 
-                // Liked By
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Liked by:")
-                            .font(.custom("Nunito-Bold", size: 12))
-                            .foregroundColor(Color(hex: "#333333"))
-                        Spacer()
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                    }
-                    
-                    HStack(spacing: -6) {
-                        ForEach(0..<3) { _ in
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 32, height: 32)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
-                                )
+                // Liked By / Friends Card (wired from Figma: CHANGE_TO → Property 1=2)
+                Button(action: {
+                    showFriendsBottomSheet = true
+                }) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Liked by:")
+                                .font(.custom("Nunito-Bold", size: 12))
+                                .foregroundColor(Color(hex: "#333333"))
+                            Spacer()
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                                .foregroundColor(.black)
+                        }
+                        
+                        HStack(spacing: -6) {
+                            ForEach(0..<3) { _ in
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
+                                    )
+                            }
                         }
                     }
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white)
+                    .cornerRadius(8)
+                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity)
-                .background(Color.white)
-                .cornerRadius(8)
-                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
+                .buttonStyle(PlainButtonStyle())
             }
         }
     }
@@ -696,7 +817,11 @@ struct MoviePageView: View {
     private func sectionTabsBar(proxy: ScrollViewProxy) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
-                ForEach(MovieSection.allCases) { section in
+                // TODO: Filter out disabled similar section - use activeCases instead of allCases
+                ForEach(MovieSection.allCases.filter { section in
+                    // Filter out similar section (commented out in enum but still exists)
+                    section.rawValue != "More to Watch"
+                }) { section in
                     SectionTabButton(
                         title: section.rawValue,
                         isSelected: selectedSection == section
@@ -761,7 +886,7 @@ struct MoviePageView: View {
                 }
                 
                 if !movie.releaseDate.isEmpty {
-                    InfoRow(label: "Release dates", value: movie.releaseDate)
+                    InfoRow(label: "Release dates", value: formatReleaseDate(movie.releaseDate))
                 }
                 
                 InfoRow(label: "Country", value: "United States")
@@ -814,30 +939,30 @@ struct MoviePageView: View {
             // Horizontal scrolling cast cards
             if !viewModel.displayedCast.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 1) {
                         ForEach(viewModel.displayedCast.prefix(10), id: \.id) { member in
                             VStack(spacing: 8) {
-                                // Profile Image
+                                // Profile Image - 8% larger with 40% less spacing
                                 AsyncImage(url: member.profileURL) { phase in
                                     switch phase {
                                     case .empty:
-                                        Circle()
+                                        RoundedRectangle(cornerRadius: 8)
                                             .fill(Color(hex: "#f0f0f0"))
-                                            .frame(width: 80, height: 80)
+                                            .frame(width: 119, height: 178)
                                     case .success(let image):
                                         image
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
-                                            .frame(width: 80, height: 80)
-                                            .clipShape(Circle())
+                                            .frame(width: 119, height: 178)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
                                     case .failure:
-                                        Circle()
+                                        RoundedRectangle(cornerRadius: 8)
                                             .fill(Color(hex: "#f0f0f0"))
-                                            .frame(width: 80, height: 80)
+                                            .frame(width: 119, height: 178)
                                     @unknown default:
-                                        Circle()
+                                        RoundedRectangle(cornerRadius: 8)
                                             .fill(Color(hex: "#f0f0f0"))
-                                            .frame(width: 80, height: 80)
+                                            .frame(width: 119, height: 178)
                                     }
                                 }
                                 
@@ -853,7 +978,7 @@ struct MoviePageView: View {
                                         .lineLimit(1)
                                 }
                             }
-                            .frame(width: 100)
+                            .frame(width: 140)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -861,19 +986,22 @@ struct MoviePageView: View {
                 .padding(.horizontal, -16)
             }
             
-            // Director and Writer
-            if let director = movie.director {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Director")
-                        .font(.custom("Inter-SemiBold", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
-                    
-                    Text(director)
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#333333"))
+            // All Crew Positions - stacked vertically with aligned names
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(getCrewPositions(from: movie), id: \.job) { position in
+                    HStack(alignment: .top, spacing: 0) {
+                        Text(position.job)
+                            .font(.custom("Inter-SemiBold", size: 14))
+                            .foregroundColor(Color(hex: "#666666"))
+                            .frame(width: 100, alignment: .leading)
+                        
+                        Text(position.names)
+                            .font(.custom("Inter-Regular", size: 14))
+                            .foregroundColor(Color(hex: "#333333"))
+                    }
                 }
-                .padding(.top, 16)
             }
+            .padding(.top, 16)
         }
     }
     
@@ -946,9 +1074,9 @@ struct MoviePageView: View {
             .padding(.horizontal, -16)
             .padding(.top, 12)
             
-            // Leave a Review button
+            // Leave a Review button (wired from Figma: OVERLAY → Rate Bottom Sheet)
             Button(action: {
-                print("Leave a Review tapped")
+                showRateBottomSheet = true
             }) {
                 HStack {
                     Image(systemName: "bubble.left")
@@ -980,32 +1108,22 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("More Movies Like This")
+                    Text("Similar Movies")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
                 
                 Spacer()
-                
-                Text("See All")
-                    .font(.custom("Inter-SemiBold", size: 14))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
             }
             
-            // Horizontal scrolling similar movies
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(0..<5) { index in
-                        SimilarMovieCard(index: index)
-                    }
-                }
-                .padding(.horizontal, 16)
+            // Coming Soon placeholder - Similar Movies feature temporarily disabled
+            VStack(spacing: 8) {
+                Text("Coming Soon")
+                    .font(.custom("Inter-Regular", size: 14))
+                    .foregroundColor(Color(hex: "#999999"))
+                    .padding(.vertical, 24)
             }
-            .padding(.horizontal, -16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     
@@ -1113,9 +1231,9 @@ struct MoviePageView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
             
-            // Start Rating button
+            // Start Rating button (wired from Figma: OVERLAY → Rate Bottom Sheet)
             Button(action: {
-                print("Start Rating tapped")
+                showRateBottomSheet = true
             }) {
                 Text("Start Rating")
                     .font(.custom("Nunito-Bold", size: 16))
@@ -1155,27 +1273,36 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("Movie Clips (3)")
+                    Text("Movie Clips (\(viewModel.movieVideos.count))")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
                 
                 Spacer()
                 
-                Text("See All")
-                    .font(.custom("Inter-SemiBold", size: 14))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
+                if !viewModel.movieVideos.isEmpty {
+                    Text("See All")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                }
             }
             
             // Horizontal scrolling movie clips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<3) { index in
-                        MovieClipCard(index: index)
+                    if !viewModel.movieVideos.isEmpty {
+                        ForEach(viewModel.movieVideos.prefix(5)) { video in
+                            MoviePageClipCard(video: video)
+                        }
+                    } else {
+                        // Show loading placeholders while videos are being fetched
+                        ForEach(0..<3) { index in
+                            MovieClipCard(index: index)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1194,27 +1321,36 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("Photos (12)")
+                    Text("Photos")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
                 
                 Spacer()
                 
-                Text("See All")
-                    .font(.custom("Inter-SemiBold", size: 14))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
+                if !viewModel.movieImages.isEmpty {
+                    Text("See All")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                }
             }
             
             // Horizontal scrolling photos
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(0..<6) { index in
-                        PhotoCard(index: index)
+                    if !viewModel.movieImages.isEmpty {
+                        ForEach(viewModel.movieImages.prefix(5)) { image in
+                            MoviePagePhotoCard(image: image)
+                        }
+                    } else {
+                        // Show loading placeholders while images are being fetched
+                        ForEach(0..<6) { index in
+                            PhotoCard(index: index)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1226,43 +1362,179 @@ struct MoviePageView: View {
     // MARK: - Bottom Action Buttons
     
     private var bottomActionButtons: some View {
-        HStack(spacing: 12) {
+        let isWatched = WatchlistManager.shared.isWatched(movieId: movieId)
+        let isInWatchlist = !WatchlistManager.shared.getListsForMovie(movieId: movieId).isEmpty
+        
+        return HStack(spacing: 12) {
+            // Mark as Watched button (wired from Figma: CHANGE_TO → Active state, OVERLAY → Rate Bottom Sheet)
             Button(action: {
+                // First toggle watched status (CHANGE_TO connection - changes button state)
                 WatchlistManager.shared.toggleWatched(movieId: movieId)
+                // Then show rate bottom sheet (per Figma prototype connection)
+                showRateBottomSheet = true
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "popcorn.fill")
+                    Image(systemName: isWatched ? "popcorn.fill" : "popcorn")
                         .font(.system(size: 16, weight: .medium))
-                    Text("Mark as Watched")
+                    Text(isWatched ? "Watched" : "Mark as Watched")
                         .font(.custom("Inter-SemiBold", size: 14))
                 }
-                .foregroundColor(Color(hex: "#333333"))
+                .foregroundColor(isWatched ? Color(hex: "#648d00") : Color(hex: "#333333"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color(hex: "#F5F5F5"))
+                .background(isWatched ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
                 .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isWatched ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
+                )
             }
             
             Button(action: {
                 showAddToList = true
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "list.bullet.rectangle")
+                    Image(systemName: isInWatchlist ? "checkmark.circle.fill" : "list.bullet.rectangle")
                         .font(.system(size: 16, weight: .medium))
-                    Text("Add to Watchlist")
+                    Text(isInWatchlist ? "In Watchlist" : "Add to Watchlist")
                         .font(.custom("Inter-SemiBold", size: 14))
                 }
-                .foregroundColor(Color(hex: "#333333"))
+                .foregroundColor(isInWatchlist ? Color(hex: "#648d00") : Color(hex: "#333333"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color(hex: "#F5F5F5"))
+                .background(isInWatchlist ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
                 .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isInWatchlist ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
+                )
             }
         }
         .padding(.horizontal, 16)
     }
     
-    // MARK: - Helper
+    // MARK: - Helper Functions
+    
+    // MARK: - Crew Position Data Structure
+    struct CrewPosition: Identifiable {
+        let id: String
+        let job: String
+        let names: String
+    }
+    
+    private func getCrewPositions(from movie: MovieDetail) -> [CrewPosition] {
+        guard let crew = movie.crew, !crew.isEmpty else { return [] }
+        
+        // Group crew by job title
+        var positions: [String: [String]] = [:]
+        
+        for member in crew {
+            let job = normalizeJobTitle(member.job)
+            if positions[job] == nil {
+                positions[job] = []
+            }
+            positions[job]?.append(member.name)
+        }
+        
+        // Define priority order for display
+        let priorityOrder = [
+            "Director",
+            "Writer",
+            "Screenplay",
+            "Producer",
+            "Director of Photography",
+            "Cinematography",
+            "Composer",
+            "Original Music Composer",
+            "Music",
+            "Editor",
+            "Production Design",
+            "Costume Design",
+            "Makeup",
+            "Sound",
+            "Visual Effects"
+        ]
+        
+        // Sort positions by priority, then alphabetically
+        let sortedPositions = positions.sorted { first, second in
+            let firstIndex = priorityOrder.firstIndex(of: first.key) ?? Int.max
+            let secondIndex = priorityOrder.firstIndex(of: second.key) ?? Int.max
+            
+            if firstIndex != secondIndex {
+                return firstIndex < secondIndex
+            }
+            return first.key < second.key
+        }
+        
+        // Convert to CrewPosition array
+        return sortedPositions.map { job, names in
+            CrewPosition(
+                id: job,
+                job: job,
+                names: names.joined(separator: ", ")
+            )
+        }
+    }
+    
+    private func normalizeJobTitle(_ job: String) -> String {
+        // Normalize job titles for consistent display
+        let normalized: String
+        switch job.lowercased() {
+        case "screenplay", "writer", "story":
+            normalized = "Writer"
+        case "director of photography", "cinematography":
+            normalized = "Director of Photography"
+        case "original music composer", "music":
+            normalized = "Composer"
+        default:
+            normalized = job
+        }
+        return normalized
+    }
+    
+    /// Extracts YouTube ID from a YouTube URL string
+    private func extractYouTubeId(from urlString: String) -> String? {
+        // Handle formats like: https://www.youtube.com/watch?v=VIDEO_ID
+        if let range = urlString.range(of: "watch?v=") {
+            let idStart = urlString.index(range.upperBound, offsetBy: 0)
+            let id = String(urlString[idStart...])
+            // Remove any query parameters after the ID
+            if let ampersandIndex = id.firstIndex(of: "&") {
+                return String(id[..<ampersandIndex])
+            }
+            return id
+        }
+        // Handle short format: https://youtu.be/VIDEO_ID
+        if let range = urlString.range(of: "youtu.be/") {
+            let idStart = urlString.index(range.upperBound, offsetBy: 0)
+            let id = String(urlString[idStart...])
+            if let questionIndex = id.firstIndex(of: "?") {
+                return String(id[..<questionIndex])
+            }
+            return id
+        }
+        return nil
+    }
+    
+    private func formatReleaseDate(_ dateString: String) -> String {
+        // Parse date string (format: "YYYY-MM-DD" or similar)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
+        if let date = dateFormatter.date(from: dateString) {
+            // Format as "Month Day, Year" (e.g., "November 1, 2024")
+            let outputFormatter = DateFormatter()
+            outputFormatter.dateFormat = "MMMM d, yyyy"
+            return outputFormatter.string(from: date)
+        }
+        
+        // Fallback: try to extract year if format is different
+        if Int(dateString.prefix(4)) != nil {
+            return dateString // Return as-is if we can't parse
+        }
+        
+        return dateString // Return original if parsing fails
+    }
     
     private func formatTrailerDuration(_ durationInSeconds: Int?) -> String? {
         guard let duration = durationInSeconds else { return nil }
@@ -1396,6 +1668,94 @@ private struct SectionTabButton: View {
 
 // MARK: - Movie Clip Card
 
+private struct MoviePageClipCard: View {
+    let video: TMDBVideo
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                // Video thumbnail from YouTube
+                if let thumbnailURL = video.thumbnailURL {
+                    AsyncImage(url: thumbnailURL) { phase in
+                        switch phase {
+                        case .empty:
+                            Rectangle()
+                                .fill(Color(hex: "#1a1a1a"))
+                                .frame(width: 248, height: 140)
+                                .overlay(ProgressView())
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 248, height: 140)
+                                .clipped()
+                        case .failure:
+                            Rectangle()
+                                .fill(Color(hex: "#1a1a1a"))
+                                .frame(width: 248, height: 140)
+                        @unknown default:
+                            Rectangle()
+                                .fill(Color(hex: "#1a1a1a"))
+                                .frame(width: 248, height: 140)
+                        }
+                    }
+                    .overlay(
+                        // Play button overlay
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.9))
+                                .frame(width: 48, height: 48)
+                            
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
+                        }
+                    )
+                    .onTapGesture {
+                        if let youtubeURL = video.youtubeURL {
+                            UIApplication.shared.open(youtubeURL)
+                        }
+                    }
+                } else {
+                    // Fallback placeholder
+                    Rectangle()
+                        .fill(Color(hex: "#1a1a1a"))
+                        .frame(width: 248, height: 140)
+                        .overlay(
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.9))
+                                    .frame(width: 48, height: 48)
+                                
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(Color(hex: "#1a1a1a"))
+                            }
+                        )
+                        .onTapGesture {
+                            if let youtubeURL = video.youtubeURL {
+                                UIApplication.shared.open(youtubeURL)
+                            }
+                        }
+                }
+            }
+            
+            // Clip title
+            Text(video.name)
+                .font(.custom("Inter-SemiBold", size: 14))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .padding(.top, 8)
+                .lineLimit(2)
+        }
+        .frame(width: 248)
+        .onTapGesture {
+            if let youtubeURL = video.youtubeURL {
+                UIApplication.shared.open(youtubeURL)
+            }
+        }
+    }
+}
+
 private struct MovieClipCard: View {
     let index: Int
     
@@ -1418,26 +1778,10 @@ private struct MovieClipCard: View {
                                 .foregroundColor(Color(hex: "#1a1a1a"))
                         }
                     )
-                
-                // Duration badge
-                VStack {
-                    HStack {
-                        Spacer()
-                        Text("0:30")
-                            .font(.custom("Inter-Regular", size: 12))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.6))
-                            .cornerRadius(4)
-                    }
-                    Spacer()
-                }
-                .padding(8)
             }
             
-            // Clip title
-            Text("Clip Title \(index + 1)")
+            // Clip title placeholder
+            Text("Loading...")
                 .font(.custom("Inter-SemiBold", size: 14))
                 .foregroundColor(Color(hex: "#1a1a1a"))
                 .padding(.top, 8)
@@ -1448,6 +1792,45 @@ private struct MovieClipCard: View {
 }
 
 // MARK: - Photo Card
+
+private struct MoviePagePhotoCard: View {
+    let image: TMDBImage
+    
+    var body: some View {
+        AsyncImage(url: image.imageURL) { phase in
+            switch phase {
+            case .empty:
+                // Loading placeholder
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+                    .overlay(
+                        ProgressView()
+                    )
+            case .success(let loadedImage):
+                loadedImage
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 140, height: 210)
+                    .clipped()
+                    .cornerRadius(8)
+            case .failure:
+                // Error placeholder
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(Color(hex: "#999999"))
+                    )
+            @unknown default:
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+            }
+        }
+    }
+}
 
 private struct PhotoCard: View {
     let index: Int
@@ -1521,6 +1904,66 @@ private struct ReviewCard: View {
 
 // MARK: - Similar Movie Card
 
+private struct MoviePageSimilarMovieCard: View {
+    let movie: Movie
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Poster
+            MoviePosterImage(
+                posterURL: movie.posterImageURL,
+                width: 120,
+                height: 180,
+                cornerRadius: 8
+            )
+            
+            Text(movie.title)
+                .font(.custom("Nunito-Bold", size: 14))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .lineLimit(1)
+            
+            // Year and genres
+            HStack(spacing: 4) {
+                Text(String(movie.year))
+                if !movie.genres.isEmpty {
+                    Text("·")
+                    Text(movie.genres.prefix(2).joined(separator: "/"))
+                        .lineLimit(1)
+                }
+            }
+            .font(.custom("Inter-Regular", size: 12))
+            .foregroundColor(Color(hex: "#666666"))
+            
+            // Scores
+            HStack(spacing: 4) {
+                // Tasty Score
+                if let tastyScore = movie.tastyScore {
+                    Image("TastyScoreIcon")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+                    Text("\(Int(tastyScore * 100))%")
+                        .font(.custom("Inter-SemiBold", size: 12))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                
+                Spacer()
+                
+                // AI Score
+                if let aiScore = movie.aiScore {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    Text(String(format: "%.1f", aiScore))
+                        .font(.custom("Inter-SemiBold", size: 12))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+            }
+        }
+        .frame(width: 120)
+    }
+}
+
 private struct SimilarMovieCard: View {
     let index: Int
     
@@ -1532,32 +1975,17 @@ private struct SimilarMovieCard: View {
                 .frame(width: 120, height: 180)
                 .cornerRadius(8)
             
-            Text("Movie Title")
+            Text("Loading...")
                 .font(.custom("Nunito-Bold", size: 14))
                 .foregroundColor(Color(hex: "#1a1a1a"))
                 .lineLimit(1)
             
-            Text("2024 · Action/Sci-Fi")
+            Text("—")
                 .font(.custom("Inter-Regular", size: 12))
                 .foregroundColor(Color(hex: "#666666"))
             
             HStack(spacing: 4) {
-                Image("TastyScoreIcon")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 14, height: 14)
-                Text("99%")
-                    .font(.custom("Inter-SemiBold", size: 12))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
-                
                 Spacer()
-                
-                Image(systemName: "star.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "#FEA500"))
-                Text("7.2")
-                    .font(.custom("Inter-SemiBold", size: 12))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
             }
         }
         .frame(width: 120)

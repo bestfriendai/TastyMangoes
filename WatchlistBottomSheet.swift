@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct Watchlist: Identifiable {
+struct SelectableWatchlistItem: Identifiable {
     let id: String
     let name: String
     let filmCount: Int
@@ -19,18 +19,9 @@ struct WatchlistBottomSheet: View {
     @Binding var isPresented: Bool
     @State private var searchText: String = ""
     @State private var selectedWatchlists: Set<String> = []
-    @State private var watchlists: [Watchlist] = []
+    @State private var watchlists: [SelectableWatchlistItem] = []
     @State private var dragOffset: CGFloat = 0
-    
-    // Sample data - replace with your actual data source
-    private let sampleWatchlists = [
-        Watchlist(id: "1", name: "Masterlist", filmCount: 8, imageURL: nil, isSelected: true),
-        Watchlist(id: "2", name: "Must-Watch Movies", filmCount: 12, imageURL: nil, isSelected: false),
-        Watchlist(id: "3", name: "Sci-Fi Masterpieces", filmCount: 10, imageURL: nil, isSelected: false),
-        Watchlist(id: "4", name: "Action Blockbusters", filmCount: 20, imageURL: nil, isSelected: false),
-        Watchlist(id: "5", name: "My Favorite Films", filmCount: 15, imageURL: nil, isSelected: false),
-        Watchlist(id: "6", name: "Animated Adventures", filmCount: 15, imageURL: nil, isSelected: false)
-    ]
+    @EnvironmentObject private var watchlistManager: WatchlistManager
     
     var body: some View {
         VStack(spacing: 0) {
@@ -73,9 +64,7 @@ struct WatchlistBottomSheet: View {
         .frame(maxHeight: 600)
         .offset(y: max(0, dragOffset))
         .onAppear {
-            watchlists = sampleWatchlists
-            // Pre-select watchlists that are already selected
-            selectedWatchlists = Set(watchlists.filter { $0.isSelected }.map { $0.id })
+            loadWatchlists()
         }
     }
     
@@ -98,7 +87,7 @@ struct WatchlistBottomSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Button(action: {}) {
                 ListCardView(
-                    watchlist: Watchlist(
+                    watchlist: SelectableWatchlistItem(
                         id: "master",
                         name: "Masterlist",
                         filmCount: 8,
@@ -221,7 +210,7 @@ struct WatchlistBottomSheet: View {
     
     // MARK: - Computed Properties
     
-    private var filteredWatchlists: [Watchlist] {
+    private var filteredWatchlists: [SelectableWatchlistItem] {
         if searchText.isEmpty {
             return watchlists
         } else {
@@ -233,8 +222,37 @@ struct WatchlistBottomSheet: View {
     
     // MARK: - Helper Methods
     
+    private func loadWatchlists() {
+        // Load watchlists from WatchlistManager
+        let allLists = watchlistManager.getAllWatchlists()
+        
+        // Convert to SelectableWatchlistItem format
+        watchlists = allLists.map { list in
+            SelectableWatchlistItem(
+                id: list.id,
+                name: list.name,
+                filmCount: list.filmCount,
+                imageURL: list.thumbnailURL,
+                isSelected: false
+            )
+        }
+        
+        // Add masterlist if it exists
+        if let masterlist = watchlistManager.getWatchlist(listId: "masterlist") {
+            let masterlistItem = SelectableWatchlistItem(
+                id: masterlist.id,
+                name: masterlist.name,
+                filmCount: masterlist.filmCount,
+                imageURL: masterlist.thumbnailURL,
+                isSelected: true
+            )
+            // Insert masterlist at the beginning
+            watchlists.insert(masterlistItem, at: 0)
+        }
+    }
+    
     private func toggleWatchlistSelection(_ id: String) {
-        if id == "1" { return } // Don't allow deselecting masterlist
+        if id == "masterlist" || id == "1" { return } // Don't allow deselecting masterlist
         
         if selectedWatchlists.contains(id) {
             selectedWatchlists.remove(id)
@@ -247,7 +265,7 @@ struct WatchlistBottomSheet: View {
 // MARK: - List Card View
 
 struct ListCardView: View {
-    let watchlist: Watchlist
+    let watchlist: SelectableWatchlistItem
     let isDisabled: Bool
     
     var body: some View {

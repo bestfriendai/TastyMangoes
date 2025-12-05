@@ -53,8 +53,44 @@ class MovieDetailService {
             return cached.movieDetail
         }
         
-        // Try TMDB API first
+        // Try reading directly from work_cards_cache first (no TMDB calls, instant)
+        // Use the SupabaseService method that reads from cache directly
         do {
+            if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(id)) {
+                let movieDetail = movieCard.toMovieDetail()
+                
+                // Cache the result
+                movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: id))
+                
+                print("[MOVIE DETAIL] Loaded movie \(id) from work_cards_cache (no TMDB call)")
+                return movieDetail
+            }
+        } catch {
+            print("⚠️ [MOVIE DETAIL] work_cards_cache read failed for ID \(id), trying get-movie-card: \(error)")
+        }
+        
+        // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
+        // NOTE: This should rarely happen if movies are already ingested.
+        // Watchlist movies should always have cache entries - if we reach here from watchlist,
+        // it indicates a data inconsistency that should be investigated.
+        do {
+            print("[TMDB CALL] MovieDetailService falling back to get-movie-card for ID \(id) (may trigger TMDB)")
+            let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: id)
+            let movieDetail = movieCard.toMovieDetail()
+            
+            // Cache the result
+            movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: id))
+            
+            return movieDetail
+        } catch {
+            print("⚠️ Supabase get-movie-card failed for ID \(id), falling back to TMDB: \(error)")
+        }
+        
+        // Fallback to TMDB API
+        // NOTE: This is a true fallback - movie not in Supabase cache or get-movie-card failed.
+        // Should be rare for movies that are already in watchlist/database.
+        do {
+            print("[TMDB CALL] MovieDetailService fetching fresh details from TMDB for tmdbId=\(id)")
             let movieDetail = try await fetchFromTMDB(movieId: id)
             
             // Cache the result
@@ -65,7 +101,7 @@ class MovieDetailService {
             print("⚠️ TMDB API failed for ID \(id), falling back to JSON: \(error)")
         }
         
-        // Fall back to JSON
+        // Final fallback to JSON
         let movie = try await loadFromJSON(id: id)
         
         // Cache the result
@@ -81,10 +117,47 @@ class MovieDetailService {
             return cached.movieDetail
         }
         
-        // Try to convert string ID to Int for TMDB API
+        // Try to convert string ID to Int for Supabase
         if let movieId = Int(stringId) {
-            // Fetch from TMDB API
+            // Try reading directly from work_cards_cache first (no TMDB calls)
             do {
+                if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: stringId) {
+                    let movieDetail = movieCard.toMovieDetail()
+                    
+                    // Cache the result
+                    stringIdCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: stringId as NSString)
+                    movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: movieId))
+                    
+                    print("[MOVIE DETAIL] Loaded movie \(stringId) from work_cards_cache (no TMDB call)")
+                    return movieDetail
+                }
+            } catch {
+                print("⚠️ [MOVIE DETAIL] work_cards_cache read failed for string ID \(stringId): \(error)")
+            }
+            
+            // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
+            // NOTE: This should rarely happen if movies are already ingested.
+            // Watchlist movies should always have cache entries - if we reach here from watchlist,
+            // it indicates a data inconsistency that should be investigated.
+            do {
+                print("[TMDB CALL] MovieDetailService falling back to get-movie-card for string ID \(stringId) (may trigger TMDB)")
+                let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                let movieDetail = movieCard.toMovieDetail()
+                
+                // Cache the result
+                stringIdCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: stringId as NSString)
+                movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: movieId))
+                
+                return movieDetail
+            } catch {
+                print("⚠️ Supabase get-movie-card failed for string ID \(stringId), falling back to TMDB: \(error)")
+            }
+            
+            // Fallback to TMDB API
+            // NOTE: This is a true fallback - movie not in Supabase cache or get-movie-card failed.
+            // Should be rare for movies that are already in watchlist/database.
+            do {
+                print("[TMDB CALL] MovieDetailService fetching fresh details from TMDB for stringId=\(stringId)")
                 let movieDetail = try await fetchFromTMDB(movieId: movieId)
                 
                 // Cache the result
