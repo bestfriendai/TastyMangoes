@@ -1,8 +1,8 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
-//  Notes: Fixed trailing action buttons layout, watched toggle, scores alignment. Optimized loading: cache-first display, single batch Supabase query, no TMDB calls.
+//  Last modified: 2025-12-05 at 11:34 (America/Los_Angeles - Pacific Time)
+//  Notes: Watched Movies section: font size matches Masterlist (20pt), starts collapsed, entire header row is tappable.
 //
 //  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
 //  directly from work_cards_cache. All movie data comes from Supabase cache tables.
@@ -20,6 +20,7 @@ struct AllListsView: View {
     }
 }
 
+// WATCHLIST MAIN VIEW – Discover Your Lists / Masterlist screen
 struct WatchlistView: View {
     @State private var searchText: String = ""
     @State private var watchedFilter: String = "Any"
@@ -33,6 +34,12 @@ struct WatchlistView: View {
     @State private var masterlistName: String = "Masterlist"
     @State private var masterlistMovies: [MasterlistMovie] = []
     @State private var isLoadingMovies: Bool = false
+    @State private var isWatchedSectionExpanded: Bool = false
+    
+    // Computed property for watched masterlist movies
+    private var watchedMasterlistMovies: [MasterlistMovie] {
+        masterlistMovies.filter { $0.isWatched == true }
+    }
     
     var body: some View {
         NavigationStack {
@@ -275,6 +282,52 @@ struct WatchlistView: View {
     
     private var masterlistSection: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Watched Movies Section (only show if there are watched movies)
+            if !watchedMasterlistMovies.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color(hex: "#648d00"))
+                                .frame(width: 6, height: 6)
+                            
+                            Text("Watched Movies (\(watchedMasterlistMovies.count))")
+                                .font(.custom("Nunito-Bold", size: 20))
+                                .foregroundColor(Color(hex: "#1a1a1a"))
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: isWatchedSectionExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(hex: "#666666"))
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            isWatchedSectionExpanded.toggle()
+                        }
+                    }
+                    
+                    if isWatchedSectionExpanded {
+                        VStack(spacing: 0) {
+                            ForEach(watchedMasterlistMovies) { movie in
+                                MasterlistMovieCard(
+                                    movie: movie,
+                                    isWatched: movie.isWatched,
+                                    onToggleWatched: {
+                                        // Toggle watched status via WatchlistManager (updates Supabase)
+                                        watchlistManager.toggleWatched(movieId: movie.id)
+                                        // Reload movies to reflect the change
+                                        loadMasterlistMovies()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Section Header
             HStack {
                 HStack(spacing: 4) {
@@ -335,7 +388,16 @@ struct WatchlistView: View {
             // Movie List
             VStack(spacing: 0) {
                 ForEach(masterlistMovies) { movie in
-                    MasterlistMovieCard(movie: movie)
+                    MasterlistMovieCard(
+                        movie: movie,
+                        isWatched: movie.isWatched,
+                        onToggleWatched: {
+                            // Toggle watched status via WatchlistManager (updates Supabase)
+                            watchlistManager.toggleWatched(movieId: movie.id)
+                            // Reload movies to reflect the change
+                            loadMasterlistMovies()
+                        }
+                    )
                 }
             }
         }
@@ -590,22 +652,31 @@ struct SmallListCard: View {
 
 // MARK: - Masterlist Movie Card
 
+// WATCHLIST ROW VIEW – Movie row in a watchlist
 struct MasterlistMovieCard: View {
     let movie: MasterlistMovie
+    let isWatched: Bool
+    let onToggleWatched: () -> Void
     @EnvironmentObject private var watchlistManager: WatchlistManager
     @State private var showMoviePage = false
     
-    // Get watched state from manager (observes changes)
-    private var isWatched: Bool {
-        watchlistManager.isWatched(movieId: movie.id)
-    }
-    
     var body: some View {
         Button(action: {
-            // Wire up NAVIGATE connection: Product Card → Movie Page
+            // Navigate to movie page
             showMoviePage = true
         }) {
-            HStack(spacing: 12) {
+            mainCardContent
+        }
+        .buttonStyle(PlainButtonStyle())
+        .fullScreenCover(isPresented: $showMoviePage) {
+            NavigationStack {
+                MoviePageView(movieId: movie.id)
+            }
+        }
+    }
+    
+    private var mainCardContent: some View {
+        HStack(spacing: 12) {
             // Poster
             MoviePosterImage(
                 posterURL: movie.posterURL,
@@ -616,11 +687,23 @@ struct MasterlistMovieCard: View {
             
             // Movie Info
             VStack(alignment: .leading, spacing: 6) {
-                // Title
-                Text(movie.title)
-                    .font(.custom("Nunito-Bold", size: 16))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
-                    .lineLimit(1)
+                // Title with Watched badge
+                HStack(spacing: 8) {
+                    Text(movie.title)
+                        .font(.custom("Nunito-Bold", size: 16))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                        .lineLimit(1)
+                    
+                    if isWatched {
+                        Text("Watched")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(hex: "#648d00").opacity(0.15))
+                            .foregroundColor(Color(hex: "#648d00"))
+                            .cornerRadius(8)
+                    }
+                }
                 
                 // Year, Genre, Runtime
                 Text("\(movie.year) · \(movie.genres.joined(separator: "/")) · \(movie.runtime)")
@@ -695,10 +778,8 @@ struct MasterlistMovieCard: View {
                 
                 // 2. Watched/Checkmark Button (middle) - always visible, shows checked state when watched
                 Button(action: {
-                    // Toggle watched status
-                    print("✅ MasterlistMovieCard: Watched button tapped for \(movie.title) - toggling watched status")
-                    watchlistManager.toggleWatched(movieId: movie.id)
-                    print("   New watched status: \(watchlistManager.isWatched(movieId: movie.id))")
+                    // Toggle watched status via parent callback
+                    onToggleWatched()
                 }) {
                     Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
                         .font(.system(size: 16))
@@ -725,13 +806,6 @@ struct MasterlistMovieCard: View {
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1)
         .padding(.bottom, 8)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .fullScreenCover(isPresented: $showMoviePage) {
-            NavigationStack {
-                MoviePageView(movieId: movie.id)
-            }
-        }
     }
 }
 
