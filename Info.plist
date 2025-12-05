@@ -24,8 +24,6 @@
 	<string>TastyMangoes uses the microphone to search for movies by voice.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>TastyMangoes uses speech recognition to convert your voice to text for movie searches.</string>
-	<key>OPENAI_API_KEY</key>
-	<string>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</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>
