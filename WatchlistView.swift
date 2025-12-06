@@ -1,8 +1,8 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 11:34 (America/Los_Angeles - Pacific Time)
-//  Notes: Watched Movies section: font size matches Masterlist (20pt), starts collapsed, entire header row is tappable.
+//  Last modified: 2025-12-05 at 16:48 (America/Los_Angeles - Pacific Time)
+//  Notes: Changed delete area background from red to green (#648d00) to match app theme. Fixed vertical scrolling with selective swipe gesture.
 //
 //  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
 //  directly from work_cards_cache. All movie data comes from Supabase cache tables.
@@ -659,20 +659,96 @@ struct MasterlistMovieCard: View {
     let onToggleWatched: () -> Void
     @EnvironmentObject private var watchlistManager: WatchlistManager
     @State private var showMoviePage = false
+    @State private var isShowingActions: Bool = false
+    @State private var showDeleteConfirmation: Bool = false
     
     var body: some View {
-        Button(action: {
-            // Navigate to movie page
-            showMoviePage = true
-        }) {
+        ZStack(alignment: .trailing) {
+            // Background Delete action area - clearly visible with red background
+            HStack {
+                Spacer()
+                Button(action: {
+                    // Show confirmation instead of deleting immediately
+                    showDeleteConfirmation = true
+                }) {
+                    Text("Delete")
+                        .font(.custom("Inter-SemiBold", size: 16))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color.red)
+                        .cornerRadius(8)
+                }
+                .padding(.trailing, 20)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(hex: "#648d00").opacity(0.1))
+            .clipped()
+            
+            // Foreground card that slides left when actions are shown
             mainCardContent
+                .offset(x: isShowingActions ? -140 : 0)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 30)
+                        .onEnded { value in
+                            let translation = value.translation
+                            // Only treat as horizontal swipe if it's clearly horizontal (2x more horizontal than vertical)
+                            // This ensures vertical scrolling isn't interfered with
+                            if abs(translation.width) > abs(translation.height) * 2 && abs(translation.width) > 60 {
+                                let dx = translation.width
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                    if dx < -60 {
+                                        // Strong left swipe: reveal actions
+                                        isShowingActions = true
+                                    } else if dx > 60 {
+                                        // Strong right swipe: hide actions
+                                        isShowingActions = false
+                                    }
+                                }
+                            }
+                        }
+                )
+                .onTapGesture {
+                    // Tapping the card:
+                    if isShowingActions {
+                        // If actions are visible, close them instead of navigating
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                            isShowingActions = false
+                        }
+                    } else {
+                        // Normal behavior: show movie page
+                        showMoviePage = true
+                    }
+                }
         }
-        .buttonStyle(PlainButtonStyle())
+        .clipped()
         .fullScreenCover(isPresented: $showMoviePage) {
             NavigationStack {
                 MoviePageView(movieId: movie.id)
             }
         }
+        .confirmationDialog(
+            "Remove this movie from your list?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                performDelete()
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                    isShowingActions = false
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                // Do nothing, just dismiss
+            }
+        }
+    }
+    
+    // Helper function for delete logic (reused by trash can and swipe delete)
+    private func performDelete() {
+        // Delete movie from watchlist
+        print("🗑️ MasterlistMovieCard: Delete tapped for \(movie.title)")
+        watchlistManager.removeMovieFromList(movieId: movie.id, listId: "masterlist")
     }
     
     private var mainCardContent: some View {
@@ -788,9 +864,8 @@ struct MasterlistMovieCard: View {
                 
                 // 3. Delete/Trash Button (bottom) - using Figma icon
                 Button(action: {
-                    // Delete movie from watchlist
-                    print("🗑️ MasterlistMovieCard: Delete tapped for \(movie.title)")
-                    watchlistManager.removeMovieFromList(movieId: movie.id, listId: "masterlist")
+                    // Use the same delete logic as swipe delete
+                    self.performDelete()
                 }) {
                     TMDeleteIcon(size: 16, color: Color(hex: "#666666"))
                 }
@@ -805,6 +880,13 @@ struct MasterlistMovieCard: View {
         .background(Color.white)
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1)
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(Color(hex: "#648d00").opacity(0.2))
+                .offset(y: 44), // Position at bottom of card
+            alignment: .bottom
+        )
         .padding(.bottom, 8)
     }
 }
