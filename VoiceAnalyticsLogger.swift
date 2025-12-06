@@ -1,7 +1,8 @@
 //  VoiceAnalyticsLogger.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
-//  Notes: Logger for voice interactions - logs to Supabase for analytics
+//  Last modified: 2025-12-05 at 19:30 (America/Los_Angeles - Pacific Time)
+//  Notes: Added createWatchlist case to switch statement for exhaustive matching.
 
 import Foundation
 
@@ -72,6 +73,8 @@ class VoiceAnalyticsLogger {
             return "recommender_search"
         case .movieSearch:
             return "movie_search"
+        case .createWatchlist:
+            return "create_watchlist"
         case .unknown:
             return "unknown"
         }

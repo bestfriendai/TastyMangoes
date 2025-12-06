@@ -1,8 +1,8 @@
 //  DeleteListBottomSheet.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-17 at 02:27 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 02:55 (America/Los_Angeles - Pacific Time)
-//  Notes: Created Delete List confirmation bottom sheet matching Figma design. Implemented delete functionality with WatchlistManager and undo capability.
+//  Last modified: 2025-12-05 at 19:54 (America/Los_Angeles - Pacific Time)
+//  Notes: Added onDeleteComplete callback to dismiss parent ManageListBottomSheet after deletion. Prevents automatically opening next list's delete dialog.
 
 import SwiftUI
 
@@ -12,6 +12,7 @@ struct DeleteListBottomSheet: View {
     @EnvironmentObject private var watchlistManager: WatchlistManager
     let listId: String
     let listName: String
+    var onDeleteComplete: (() -> Void)? = nil // Callback to dismiss parent sheet
     
     @State private var showToast = false
     
@@ -104,7 +105,14 @@ struct DeleteListBottomSheet: View {
         // Delete list from WatchlistManager
         watchlistManager.deleteWatchlist(listId: listId)
         showToast = true
+        
+        // Dismiss this sheet first
         dismiss()
+        
+        // Then dismiss the parent ManageListBottomSheet after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            onDeleteComplete?()
+        }
         
         // Hide toast after 3 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

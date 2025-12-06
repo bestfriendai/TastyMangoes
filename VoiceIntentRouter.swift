@@ -1,8 +1,8 @@
 //  VoiceIntentRouter.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 09:45 PST (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
-//  Notes: Central router for handling voice utterances. Integrated OpenAI LLM fallback for unknown commands.
+//  Last modified: 2025-12-05 at 19:30 (America/Los_Angeles - Pacific Time)
+//  Notes: Added duplicate transcript prevention to avoid processing same command multiple times. Added handleCreateWatchlistCommand for local list creation.
 
 import Foundation
 
@@ -32,6 +32,10 @@ enum VoiceIntentRouter {
     
     // Track if we've already logged the "not configured" message this session
     private static var hasLoggedNotConfigured = false
+    
+    // Track processed transcripts to prevent duplicate handling
+    private static var processedTranscripts: Set<String> = []
+    private static let processedTranscriptsQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.processed")
     
     /// Handle a voice utterance from any source
     /// - Parameters:
@@ -71,12 +75,41 @@ enum VoiceIntentRouter {
     
     /// Handle TalkToMango transcript - parse command and trigger search with LLM fallback
     static func handleTalkToMangoTranscript(_ text: String) async {
+        // Prevent duplicate processing of the same transcript
+        let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let alreadyProcessed = processedTranscriptsQueue.sync {
+            if processedTranscripts.contains(normalizedText) {
+                return true
+            }
+            processedTranscripts.insert(normalizedText)
+            // Clean up old entries after 10 seconds to prevent memory growth
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                processedTranscriptsQueue.async {
+                    processedTranscripts.remove(normalizedText)
+                }
+            }
+            return false
+        }
+        
+        if alreadyProcessed {
+            print("⚠️ [VoiceIntentRouter] Skipping duplicate transcript: '\(text)'")
+            return
+        }
+        
+        print("🎙 [VoiceIntentRouter] Processing transcript: '\(text)'")
+        
         // Step 1: Try MangoCommand parser first
         let mangoCommand = MangoCommandParser.shared.parse(text)
         var finalCommand: MangoCommand = mangoCommand
         var llmUsed = false
         var llmIntent: LLMIntent? = nil
         var llmError: Error? = nil
+        
+        // Step 1.5: Handle create watchlist command locally (no LLM needed)
+        if case .createWatchlist(let listName, _) = mangoCommand {
+            await handleCreateWatchlistCommand(listName: listName, rawText: text)
+            return // Early return - no LLM call needed
+        }
         
         // Step 2: If parser returned unknown, try LLM fallback
         if case .unknown = mangoCommand {
@@ -189,12 +222,39 @@ enum VoiceIntentRouter {
             llmError: llmError
         )
     }
+    
+    /// Handle create watchlist command locally
+    private static func handleCreateWatchlistCommand(listName: String, rawText: String) async {
+        print("📋 [Mango] Creating watchlist: '\(listName)'")
+        
+        await MainActor.run {
+            // Create watchlist using existing WatchlistManager
+            let watchlistManager = WatchlistManager.shared
+            let newWatchlist = watchlistManager.createWatchlist(name: listName)
+            
+            print("✅ [Mango] Created watchlist: '\(newWatchlist.name)' (ID: \(newWatchlist.id))")
+            
+            // Speak confirmation
+            MangoSpeaker.shared.speak("Created a new list called \(listName).")
+            
+            // Post notification for UI confirmation/toast
+            NotificationCenter.default.post(
+                name: NSNotification.Name("MangoCreatedWatchlist"),
+                object: nil,
+                userInfo: [
+                    "listName": listName,
+                    "listId": newWatchlist.id
+                ]
+            )
+        }
+    }
 }
 
 extension Notification.Name {
     static let mangoNavigateToSearch = Notification.Name("mangoNavigateToSearch")
     static let mangoOpenMoviePage = Notification.Name("mangoOpenMoviePage")
     static let mangoPerformMovieQuery = Notification.Name("mangoPerformMovieQuery")
+    static let mangoCreatedWatchlist = Notification.Name("MangoCreatedWatchlist")
 }
 
 

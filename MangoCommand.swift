@@ -1,19 +1,20 @@
 //  MangoCommand.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 18:12 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
-//  Notes: Parser for TalkToMango voice commands - extracts recommender name and movie title from natural language input. Added unknown case for LLM fallback.
+//  Last modified: 2025-12-05 at 19:26 (America/Los_Angeles - Pacific Time)
+//  Notes: Added createWatchlist command parsing - detects "create a new list called X" patterns. Extracts list name and handles locally without LLM.
 
 import Foundation
 
 enum MangoCommand {
     case recommenderSearch(recommender: String, movie: String, raw: String)
     case movieSearch(query: String, raw: String)
+    case createWatchlist(listName: String, raw: String)
     case unknown(raw: String)
     
     var raw: String {
         switch self {
-        case .recommenderSearch(_, _, let raw), .movieSearch(_, let raw), .unknown(let raw):
+        case .recommenderSearch(_, _, let raw), .movieSearch(_, let raw), .createWatchlist(_, let raw), .unknown(let raw):
             return raw
         }
     }
@@ -33,14 +34,14 @@ enum MangoCommand {
             return movie
         case .movieSearch(let query, _):
             return query
-        case .unknown:
+        case .createWatchlist, .unknown:
             return nil
         }
     }
     
     var isValid: Bool {
         switch self {
-        case .recommenderSearch, .movieSearch:
+        case .recommenderSearch, .movieSearch, .createWatchlist:
             return true
         case .unknown:
             return false
@@ -54,7 +55,10 @@ final class MangoCommandParser {
     private init() {}
 
     func parse(_ text: String) -> MangoCommand {
-        let lower = text.lowercased()
+        // Check for create watchlist command first (before other patterns)
+        if let listName = extractWatchlistName(from: text) {
+            return .createWatchlist(listName: listName, raw: text)
+        }
         
         // COMMON PATTERNS
         // "<name> recommends <movie>"
@@ -113,6 +117,52 @@ final class MangoCommandParser {
             // No pattern matched - return unknown for LLM fallback
             return .unknown(raw: text)
         }
+    }
+    
+    /// Extract watchlist name from create list commands
+    /// Supports patterns like:
+    /// - "create a new list called X"
+    /// - "create a list called X"
+    /// - "make a new list called X"
+    /// - "make a list called X"
+    /// - "new list called X"
+    /// - "create a new watchlist called X"
+    /// - "make a list named X"
+    private func extractWatchlistName(from text: String) -> String? {
+        let lower = text.lowercased()
+        
+        // Patterns to match (in order of specificity)
+        let patterns = [
+            "create a new list called",
+            "create a new watchlist called",
+            "create a list called",
+            "make a new list called",
+            "make a list called",
+            "new list called",
+            "create a new list named",
+            "create a list named",
+            "make a new list named",
+            "make a list named",
+            "new list named"
+        ]
+        
+        for pattern in patterns {
+            if let range = lower.range(of: pattern) {
+                // Extract everything after the pattern
+                let afterPattern = String(text[range.upperBound...])
+                let trimmed = afterPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove trailing punctuation
+                let cleaned = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
+                
+                // Return if we have a non-empty name
+                if !cleaned.isEmpty {
+                    return cleaned
+                }
+            }
+        }
+        
+        return nil
     }
 }
 

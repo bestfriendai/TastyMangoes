@@ -56,8 +56,10 @@ class SearchViewModel: ObservableObject {
             queue: .main
         ) { [weak self] note in
             guard let query = note.object as? String else { return }
-            self?.isMangoInitiatedSearch = true
-            self?.search(query: query)
+            Task { @MainActor in
+                self?.isMangoInitiatedSearch = true
+                self?.search(query: query)
+            }
         }
     }
     

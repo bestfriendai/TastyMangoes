@@ -1,8 +1,8 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 16:51 (America/Los_Angeles - Pacific Time)
-//  Notes: Removed trash icon button from cards - delete now only available via swipe-left gesture.
+//  Last modified: 2025-12-05 at 19:52 (America/Los_Angeles - Pacific Time)
+//  Notes: Added pencil menu button to list cards - opens ManageListBottomSheet with Edit/Manage/Duplicate/Delete options. SwipeableListCard now has menu button overlay.
 //
 //  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
 //  directly from work_cards_cache. All movie data comes from Supabase cache tables.
@@ -267,9 +267,7 @@ struct WatchlistView: View {
             // Other positions: List cards
             let listIndex = position - 1 // -1 because position 0 is "Create New"
             if listIndex < yourLists.count {
-                NavigationLink(destination: IndividualListView(listId: yourLists[listIndex].id, listName: yourLists[listIndex].name)) {
-                    SmallListCard(list: yourLists[listIndex])
-                }
+                SwipeableListCard(list: yourLists[listIndex])
             } else {
                 // Empty space
                 Spacer()
@@ -609,6 +607,53 @@ struct CreateNewListCard: View {
         .background(Color.white)
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1)
+    }
+}
+
+// MARK: - Swipeable List Card (with delete)
+
+struct SwipeableListCard: View {
+    let list: WatchlistItem
+    @EnvironmentObject private var watchlistManager: WatchlistManager
+    @State private var showIndividualList = false
+    @State private var showManageListSheet = false
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            // Main card content - tappable to navigate
+            Button(action: {
+                showIndividualList = true
+            }) {
+                SmallListCard(list: list)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Menu button (pencil icon) - opens ManageListBottomSheet
+            Button(action: {
+                showManageListSheet = true
+            }) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(hex: "#666666"))
+                    .frame(width: 24, height: 24)
+                    .background(Color(hex: "#f3f3f3"))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .padding(.top, 4)
+            .padding(.trailing, 4)
+        }
+        .navigationDestination(isPresented: $showIndividualList) {
+            IndividualListView(listId: list.id, listName: list.name)
+        }
+        .sheet(isPresented: $showManageListSheet) {
+            ManageListBottomSheet(
+                isPresented: $showManageListSheet,
+                listId: list.id,
+                listName: list.name
+            )
+            .environmentObject(watchlistManager)
+        }
     }
 }
 
