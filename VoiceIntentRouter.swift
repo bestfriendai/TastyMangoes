@@ -37,6 +37,29 @@ enum VoiceIntentRouter {
     private static var processedTranscripts: Set<String> = []
     private static let processedTranscriptsQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.processed")
     
+    // Current movie context - set when Mango is invoked from MoviePageView
+    private static var currentMovieId: String? = nil
+    private static let currentMovieIdQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.currentmovie")
+    
+    /// Set the current movie ID when Mango is invoked from MoviePageView
+    static func setCurrentMovieId(_ movieId: String?) {
+        currentMovieIdQueue.sync {
+            currentMovieId = movieId
+            if let id = movieId {
+                print("🎬 [VoiceIntentRouter] Set current movie context: \(id)")
+            } else {
+                print("🎬 [VoiceIntentRouter] Cleared current movie context")
+            }
+        }
+    }
+    
+    /// Get the current movie ID (if any)
+    private static func getCurrentMovieId() -> String? {
+        return currentMovieIdQueue.sync {
+            return currentMovieId
+        }
+    }
+    
     /// Handle a voice utterance from any source
     /// - Parameters:
     ///   - utterance: The transcribed text from the user
@@ -109,6 +132,16 @@ enum VoiceIntentRouter {
         if case .createWatchlist(let listName, _) = mangoCommand {
             await handleCreateWatchlistCommand(listName: listName, rawText: text)
             return // Early return - no LLM call needed
+        }
+        
+        // Step 1.6: Handle "add this movie to <ListName>" command locally (no LLM needed)
+        // Only process if we have a current movie context (Mango invoked from MoviePageView)
+        if let currentMovieId = getCurrentMovieId() {
+            if await handleAddThisMovieToListCommand(transcript: text, currentMovieId: currentMovieId) {
+                // Command was recognized and handled - clear context and return
+                setCurrentMovieId(nil)
+                return // Early return - no LLM call needed
+            }
         }
         
         // Step 2: If parser returned unknown, try LLM fallback
@@ -247,6 +280,92 @@ enum VoiceIntentRouter {
                 ]
             )
         }
+    }
+    
+    /// Handle "add this movie to <ListName>" command locally
+    /// Returns true if the command was recognized and handled, false otherwise
+    private static func handleAddThisMovieToListCommand(transcript: String, currentMovieId: String) async -> Bool {
+        let lower = transcript.lowercased()
+        
+        // Patterns to match (case-insensitive)
+        let patterns = [
+            "add this movie to",
+            "add this to",
+            "put this movie in",
+            "put this in",
+            "add this movie to my",
+            "add this to my",
+            "put this movie in my",
+            "put this in my"
+        ]
+        
+        var targetListName: String? = nil
+        
+        // Try to match each pattern
+        for pattern in patterns {
+            if let range = lower.range(of: pattern) {
+                // Extract everything after the pattern
+                let afterPattern = String(transcript[range.upperBound...])
+                let trimmed = afterPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove trailing punctuation and filler words
+                var cleaned = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
+                cleaned = cleaned.replacingOccurrences(of: " list", with: "", options: .caseInsensitive)
+                cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !cleaned.isEmpty {
+                    targetListName = cleaned
+                    break
+                }
+            }
+        }
+        
+        guard let listName = targetListName else {
+            // No pattern matched - not an "add this movie" command
+            return false
+        }
+        
+        print("🎬 [Mango] Detected 'add this movie' command - movie: \(currentMovieId), target list: '\(listName)'")
+        
+        await MainActor.run {
+            let watchlistManager = WatchlistManager.shared
+            
+            // Find watchlist by name (case-insensitive)
+            let allWatchlists = watchlistManager.getAllWatchlists()
+            let matchingWatchlist = allWatchlists.first { watchlist in
+                watchlist.name.localizedCaseInsensitiveCompare(listName) == .orderedSame
+            }
+            
+            guard let watchlist = matchingWatchlist else {
+                print("❌ [Mango] Could not find watchlist named '\(listName)'")
+                MangoSpeaker.shared.speak("I couldn't find a list called \(listName).")
+                return
+            }
+            
+            // Add movie to the list using existing function
+            let wasAdded = watchlistManager.addMovieToList(movieId: currentMovieId, listId: watchlist.id)
+            
+            if wasAdded {
+                print("✅ [Mango] Added movie \(currentMovieId) to list '\(watchlist.name)' (ID: \(watchlist.id))")
+                MangoSpeaker.shared.speak("Added this movie to \(watchlist.name).")
+                
+                // Post notification for UI confirmation/toast
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("MangoAddedMovieToList"),
+                    object: nil,
+                    userInfo: [
+                        "movieId": currentMovieId,
+                        "listName": watchlist.name,
+                        "listId": watchlist.id
+                    ]
+                )
+            } else {
+                print("ℹ️ [Mango] Movie \(currentMovieId) is already in list '\(watchlist.name)'")
+                MangoSpeaker.shared.speak("This movie is already in \(watchlist.name).")
+            }
+        }
+        
+        return true // Command was recognized and handled
     }
 }
 

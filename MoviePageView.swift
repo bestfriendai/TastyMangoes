@@ -1,8 +1,8 @@
 //  MoviePageView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:37 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 03:13 (America/Los_Angeles - Pacific Time)
-//  Notes: Fixed horizontal tab bar pinning - tab bar now properly pins below header when scrolling up, and scrolls to sections when tabs are clicked. Updated MenuBottomSheet to match Figma design with correct review icon. Changed AddToListView presentation from fullScreenCover to sheet to match bottom sheet design. Added navigation to list functionality from toast notifications. Replaced deprecated NavigationLink with fullScreenCover for navigating to IndividualListView.
+//  Last modified: 2025-12-05 at 19:58 (America/Los_Angeles - Pacific Time)
+//  Notes: Added Mango button to bottom bar - centered between Watched and Add to Watchlist buttons, overlapping by ~18% (10px). Uses same component and behavior as tab bar Mango button.
 
 import SwiftUI
 import UIKit
@@ -43,6 +43,12 @@ struct MoviePageView: View {
     @State private var navigateToListId: String? = nil
     @State private var navigateToListName: String? = nil
     @State private var navigateToSearch = false
+    
+    // Mango button state
+    @StateObject private var speechRecognizer = SpeechRecognizer()
+    @State private var showListeningView = false
+    @State private var isListening = false
+    @State private var animatePulse = false
     
     // Computed property to determine if pinned tab bar should show
     private var shouldShowPinnedTabBar: Bool {
@@ -300,15 +306,25 @@ struct MoviePageView: View {
             .background(Color(hex: "#fdfdfd"))
             .navigationBarBackButtonHidden(true)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Pinned Bottom Action Buttons
-                VStack(spacing: 0) {
-                    Divider()
-                        .background(Color(hex: "#f3f3f3"))
+                // Pinned Bottom Action Buttons with Mango button
+                ZStack(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        Divider()
+                            .background(Color(hex: "#f3f3f3"))
+                        
+                        bottomActionButtons
+                            .padding(.top, 16)
+                            .padding(.bottom, 8)
+                            .background(Color.white)
+                    }
                     
-                    bottomActionButtons
-                        .padding(.top, 16)
-                        .padding(.bottom, 8)
-                        .background(Color.white)
+                    // Mango button - centered horizontally and overlapping buttons by ~18% (10px of 56px)
+                    HStack {
+                        Spacer()
+                        mangoButton
+                        Spacer()
+                    }
+                    .offset(y: -10) // Overlap by ~10px (18% of 56px button height)
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -1411,6 +1427,88 @@ struct MoviePageView: View {
             }
         }
         .padding(.horizontal, 16)
+    }
+    
+    // MARK: - Mango Button
+    
+    private var mangoButton: some View {
+        Button {
+            // Present listening view - same behavior as tab bar Mango
+            if !showListeningView {
+                print("🎤 User tapped TalkToMango button on MoviePageView")
+                // Set current movie context so "add this movie" commands work
+                VoiceIntentRouter.setCurrentMovieId(movieId)
+                showListeningView = true
+            } else {
+                print("⚠️ TalkToMango button tapped but view already showing - ignoring")
+            }
+        } label: {
+            ZStack {
+                // Prominent filled orange circular background with gradient
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(hex: "#FFA500"),
+                                Color(hex: "#FF8C00")
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        // Border with white opacity
+                        Circle()
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            .frame(width: 56, height: 56)
+                    )
+                    .overlay(
+                        // Inner shadow/glow effect
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.4),
+                                        Color.clear
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .center
+                                )
+                            )
+                            .frame(width: 56, height: 56)
+                            .blendMode(.overlay)
+                    )
+                
+                // White mango logo icon inside the circle (matches Figma)
+                MangoLogoIcon(size: 28, color: .white)
+            }
+            .scaleEffect(animatePulse ? 1.06 : 1.0)
+            .shadow(
+                color: Color(hex: "#FFA500").opacity(animatePulse ? 0.6 : 0.4),
+                radius: animatePulse ? 16 : 12,
+                x: 0,
+                y: 4
+            )
+            .animation(
+                .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                value: animatePulse
+            )
+        }
+        .onAppear {
+            // Start pulse animation when button appears
+            animatePulse = true
+        }
+        .fullScreenCover(isPresented: $showListeningView) {
+            MangoListeningView(
+                speechRecognizer: speechRecognizer,
+                isPresented: $showListeningView
+            )
+            .onDisappear {
+                // Clear current movie context when listening view is dismissed
+                VoiceIntentRouter.setCurrentMovieId(nil)
+            }
+        }
     }
     
     // MARK: - Helper Functions
