@@ -57,7 +57,22 @@ class MovieDetailService {
         // Use the SupabaseService method that reads from cache directly
         do {
             if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(id)) {
-                let movieDetail = movieCard.toMovieDetail()
+                var movieDetail = movieCard.toMovieDetail()
+                
+                print("🎬 [MovieDetailService] Loaded MovieCard for \(id), cast count: \(movieDetail.cast?.count ?? 0), crew count: \(movieDetail.crew?.count ?? 0)")
+                
+                // Fetch full crew data from works_meta
+                do {
+                    if let crew = try await SupabaseService.shared.fetchCrewMembers(workId: movieCard.workId) {
+                        print("✅ [MovieDetailService] Fetched \(crew.count) crew members from works_meta")
+                        movieDetail = movieDetail.withCrew(crew)
+                        print("✅ [MovieDetailService] Updated movieDetail with crew, new crew count: \(movieDetail.crew?.count ?? 0)")
+                    } else {
+                        print("⚠️ [MovieDetailService] No crew members found in works_meta for workId: \(movieCard.workId)")
+                    }
+                } catch {
+                    print("❌ [MovieDetailService] Error fetching crew: \(error)")
+                }
                 
                 // Cache the result
                 movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: id))
@@ -69,22 +84,27 @@ class MovieDetailService {
             print("⚠️ [MOVIE DETAIL] work_cards_cache read failed for ID \(id), trying get-movie-card: \(error)")
         }
         
-        // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
-        // NOTE: This should rarely happen if movies are already ingested.
-        // Watchlist movies should always have cache entries - if we reach here from watchlist,
-        // it indicates a data inconsistency that should be investigated.
-        do {
-            print("[TMDB CALL] MovieDetailService falling back to get-movie-card for ID \(id) (may trigger TMDB)")
-            let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: id)
-            let movieDetail = movieCard.toMovieDetail()
-            
-            // Cache the result
-            movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: id))
-            
-            return movieDetail
-        } catch {
-            print("⚠️ Supabase get-movie-card failed for ID \(id), falling back to TMDB: \(error)")
-        }
+            // Fallback to get-movie-card function (may trigger TMDB if movie not in DB)
+            // NOTE: This should rarely happen if movies are already ingested.
+            // Watchlist movies should always have cache entries - if we reach here from watchlist,
+            // it indicates a data inconsistency that should be investigated.
+            do {
+                print("[TMDB CALL] MovieDetailService falling back to get-movie-card for ID \(id) (may trigger TMDB)")
+                let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: id)
+                var movieDetail = movieCard.toMovieDetail()
+                
+                // Fetch full crew data from works_meta
+                if let crew = try await SupabaseService.shared.fetchCrewMembers(workId: movieCard.workId) {
+                    movieDetail = movieDetail.withCrew(crew)
+                }
+                
+                // Cache the result
+                movieCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: NSNumber(value: id))
+                
+                return movieDetail
+            } catch {
+                print("⚠️ Supabase get-movie-card failed for ID \(id), falling back to TMDB: \(error)")
+            }
         
         // Fallback to TMDB API
         // NOTE: This is a true fallback - movie not in Supabase cache or get-movie-card failed.
@@ -122,7 +142,40 @@ class MovieDetailService {
             // Try reading directly from work_cards_cache first (no TMDB calls)
             do {
                 if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: stringId) {
-                    let movieDetail = movieCard.toMovieDetail()
+                    var movieDetail = movieCard.toMovieDetail()
+                    
+                    // Fetch full crew data from works_meta
+                    if let crew = try await SupabaseService.shared.fetchCrewMembers(workId: movieCard.workId) {
+                        movieDetail = MovieDetail(
+                            id: movieDetail.id,
+                            title: movieDetail.title,
+                            originalTitle: movieDetail.originalTitle,
+                            overview: movieDetail.overview,
+                            releaseDate: movieDetail.releaseDate,
+                            posterPath: movieDetail.posterPath,
+                            backdropPath: movieDetail.backdropPath,
+                            runtime: movieDetail.runtime,
+                            genres: movieDetail.genres,
+                            director: movieDetail.director,
+                            rating: movieDetail.rating,
+                            tastyScore: movieDetail.tastyScore,
+                            aiScore: movieDetail.aiScore,
+                            criticsScore: movieDetail.criticsScore,
+                            audienceScore: movieDetail.audienceScore,
+                            trailerURL: movieDetail.trailerURL,
+                            trailerYoutubeId: movieDetail.trailerYoutubeId,
+                            trailerDuration: movieDetail.trailerDuration,
+                            cast: movieDetail.cast,
+                            crew: crew, // Use full crew from works_meta
+                            budget: movieDetail.budget,
+                            revenue: movieDetail.revenue,
+                            tagline: movieDetail.tagline,
+                            status: movieDetail.status,
+                            voteAverage: movieDetail.voteAverage,
+                            voteCount: movieDetail.voteCount,
+                            popularity: movieDetail.popularity
+                        )
+                    }
                     
                     // Cache the result
                     stringIdCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: stringId as NSString)
@@ -142,7 +195,12 @@ class MovieDetailService {
             do {
                 print("[TMDB CALL] MovieDetailService falling back to get-movie-card for string ID \(stringId) (may trigger TMDB)")
                 let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
-                let movieDetail = movieCard.toMovieDetail()
+                var movieDetail = movieCard.toMovieDetail()
+                
+                // Fetch full crew data from works_meta
+                if let crew = try await SupabaseService.shared.fetchCrewMembers(workId: movieCard.workId) {
+                    movieDetail = movieDetail.withCrew(crew)
+                }
                 
                 // Cache the result
                 stringIdCache.setObject(MovieDetailWrapper(movieDetail: movieDetail), forKey: stringId as NSString)

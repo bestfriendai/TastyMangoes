@@ -1530,69 +1530,63 @@ struct MoviePageView: View {
     private func getCrewPositions(from movie: MovieDetail) -> [CrewPosition] {
         guard let crew = movie.crew, !crew.isEmpty else { return [] }
         
-        // Group crew by job title
-        var positions: [String: [String]] = [:]
-        
-        for member in crew {
-            let job = normalizeJobTitle(member.job)
-            if positions[job] == nil {
-                positions[job] = []
-            }
-            positions[job]?.append(member.name)
-        }
-        
-        // Define priority order for display
-        let priorityOrder = [
+        // Define the specific roles we want to display (in order)
+        let targetRoles = [
             "Director",
             "Writer",
             "Screenplay",
-            "Producer",
-            "Director of Photography",
-            "Cinematography",
-            "Composer",
-            "Original Music Composer",
-            "Music",
-            "Editor",
-            "Production Design",
-            "Costume Design",
-            "Makeup",
-            "Sound",
-            "Visual Effects"
+            "Original Music Composer"
         ]
         
-        // Sort positions by priority, then alphabetically
-        let sortedPositions = positions.sorted { first, second in
-            let firstIndex = priorityOrder.firstIndex(of: first.key) ?? Int.max
-            let secondIndex = priorityOrder.firstIndex(of: second.key) ?? Int.max
-            
-            if firstIndex != secondIndex {
-                return firstIndex < secondIndex
+        // Group crew by job title (keeping original job names, not normalized)
+        var positions: [String: [String]] = [:]
+        
+        for member in crew {
+            let job = normalizeJobTitleForDisplay(member.job)
+            // Only include if it's one of our target roles
+            if targetRoles.contains(job) {
+                if positions[job] == nil {
+                    positions[job] = []
+                }
+                positions[job]?.append(member.name)
             }
-            return first.key < second.key
         }
         
-        // Convert to CrewPosition array
-        return sortedPositions.map { job, names in
-            CrewPosition(
-                id: job,
-                job: job,
+        // Sort positions by target order (only include roles that exist)
+        let sortedPositions = targetRoles.compactMap { role -> CrewPosition? in
+            guard let names = positions[role], !names.isEmpty else {
+                return nil // Skip roles that don't exist
+            }
+            return CrewPosition(
+                id: role,
+                job: role,
                 names: names.joined(separator: ", ")
             )
         }
+        
+        return sortedPositions
     }
     
-    private func normalizeJobTitle(_ job: String) -> String {
+    private func normalizeJobTitleForDisplay(_ job: String) -> String {
         // Normalize job titles for consistent display
+        // Keep "Screenplay" and "Original Music Composer" separate from other roles
+        let jobLower = job.lowercased()
         let normalized: String
-        switch job.lowercased() {
-        case "screenplay", "writer", "story":
+        
+        switch jobLower {
+        case "writer", "story":
             normalized = "Writer"
+        case "screenplay":
+            normalized = "Screenplay" // Keep separate from Writer
         case "director of photography", "cinematography":
             normalized = "Director of Photography"
-        case "original music composer", "music":
-            normalized = "Composer"
+        case "original music composer":
+            normalized = "Original Music Composer" // Keep as-is
+        case "music", "composer":
+            // Normalize generic "Music" or "Composer" to "Original Music Composer"
+            normalized = "Original Music Composer"
         default:
-            normalized = job
+            normalized = job // Keep original if not matched
         }
         return normalized
     }

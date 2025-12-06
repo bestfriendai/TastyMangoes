@@ -657,6 +657,83 @@ class SupabaseService: ObservableObject {
         return cachedCard?.payload
     }
     
+    // MARK: - Crew Members Fetching
+    
+    /// Fetches crew members from works_meta.crew_members JSONB array
+    func fetchCrewMembers(workId: Int) async throws -> [CrewMember]? {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        print("🔍 [SupabaseService] Fetching crew for workId: \(workId)")
+        
+        // Fetch crew_members JSONB from works_meta
+        struct WorksMetaRow: Codable {
+            let crewMembers: [CrewMemberJSON]?
+            
+            enum CodingKeys: String, CodingKey {
+                case crewMembers = "crew_members"
+            }
+        }
+        
+        let response: WorksMetaRow? = try? await client
+            .from("works_meta")
+            .select("crew_members")
+            .eq("work_id", value: workId)
+            .single()
+            .execute()
+            .value
+        
+        guard let crewMembersJSON = response?.crewMembers else {
+            print("⚠️ [SupabaseService] No crew_members found for workId: \(workId)")
+            return nil
+        }
+        
+        print("✅ [SupabaseService] Found \(crewMembersJSON.count) crew members in JSONB")
+        
+        // Convert JSONB crew members to CrewMember objects
+        let crewMembers = crewMembersJSON.compactMap { json -> CrewMember? in
+            // Parse person_id (string) to Int
+            let personId = Int(json.personId) ?? 0
+            
+            // Use photo_url_medium as profilePath (fallback to photo_url_small)
+            let profilePath = json.photoUrlMedium ?? json.photoUrlSmall
+            
+            print("  - Crew: \(json.name) (\(json.job))")
+            
+            return CrewMember(
+                id: personId,
+                name: json.name,
+                job: json.job,
+                department: json.department,
+                profilePath: profilePath
+            )
+        }
+        
+        print("✅ [SupabaseService] Converted \(crewMembers.count) crew members")
+        return crewMembers.isEmpty ? nil : crewMembers
+    }
+    
+    // MARK: - Crew Member JSON Structure (matches Supabase JSONB)
+    
+    private struct CrewMemberJSON: Codable {
+        let personId: String
+        let name: String
+        let job: String
+        let department: String
+        let photoUrlSmall: String?
+        let photoUrlMedium: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case personId = "person_id"
+            case name
+            case job
+            case department
+            case photoUrlSmall = "photo_url_small"
+            case photoUrlMedium = "photo_url_medium"
+        }
+    }
+    
     // MARK: - Voice Analytics Logging
     
     /// Log a voice interaction event to Supabase
