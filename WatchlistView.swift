@@ -1,8 +1,8 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 16:48 (America/Los_Angeles - Pacific Time)
-//  Notes: Changed delete area background from red to green (#648d00) to match app theme. Fixed vertical scrolling with selective swipe gesture.
+//  Last modified: 2025-12-05 at 16:51 (America/Los_Angeles - Pacific Time)
+//  Notes: Removed trash icon button from cards - delete now only available via swipe-left gesture.
 //
 //  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
 //  directly from work_cards_cache. All movie data comes from Supabase cache tables.
@@ -744,7 +744,7 @@ struct MasterlistMovieCard: View {
         }
     }
     
-    // Helper function for delete logic (reused by trash can and swipe delete)
+    // Helper function for delete logic (used by swipe delete)
     private func performDelete() {
         // Delete movie from watchlist
         print("🗑️ MasterlistMovieCard: Delete tapped for \(movie.title)")
@@ -842,7 +842,7 @@ struct MasterlistMovieCard: View {
             
             Spacer()
             
-            // Trailing Action Buttons - Three separate buttons stacked vertically in grey pill
+            // Trailing Action Buttons - Two buttons stacked vertically in grey pill
             VStack(spacing: 8) {
                 // 1. Overflow Menu (top) - using Figma icon
                 Button(action: {
@@ -852,7 +852,7 @@ struct MasterlistMovieCard: View {
                     TMMenuDotsIcon(size: 16, color: Color(hex: "#666666"))
                 }
                 
-                // 2. Watched/Checkmark Button (middle) - always visible, shows checked state when watched
+                // 2. Watched/Checkmark Button (bottom) - always visible, shows checked state when watched
                 Button(action: {
                     // Toggle watched status via parent callback
                     onToggleWatched()
@@ -860,14 +860,6 @@ struct MasterlistMovieCard: View {
                     Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
                         .font(.system(size: 16))
                         .foregroundColor(isWatched ? Color(hex: "#648d00") : Color(hex: "#666666"))
-                }
-                
-                // 3. Delete/Trash Button (bottom) - using Figma icon
-                Button(action: {
-                    // Use the same delete logic as swipe delete
-                    self.performDelete()
-                }) {
-                    TMDeleteIcon(size: 16, color: Color(hex: "#666666"))
                 }
             }
             .padding(.vertical, 8)
