@@ -400,10 +400,17 @@ struct MoviePageView: View {
             .sheet(isPresented: $showFriendsBottomSheet) {
                 FriendsBottomSheet(isPresented: $showFriendsBottomSheet)
             }
-            .sheet(isPresented: $showTrailerPlayer) {
-                if let movie = viewModel.movie {
-                    let videoId = movie.trailerYoutubeId ?? ""
-                    TrailerPlayerSheet(videoId: videoId, movieTitle: movie.title)
+            .fullScreenCover(isPresented: $showTrailerPlayer) {
+                if let movie = viewModel.movie,
+                   let videoId = movie.trailerYoutubeId,
+                   !videoId.isEmpty {
+                    TrailerPlayerSheet(
+                        videoId: videoId,
+                        movieTitle: movie.title,
+                        onDismiss: {
+                            showTrailerPlayer = false
+                        }
+                    )
                 }
             }
             .fullScreenCover(isPresented: $showIndividualList) {
