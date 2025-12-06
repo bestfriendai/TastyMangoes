@@ -1,8 +1,8 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 19:52 (America/Los_Angeles - Pacific Time)
-//  Notes: Added pencil menu button to list cards - opens ManageListBottomSheet with Edit/Manage/Duplicate/Delete options. SwipeableListCard now has menu button overlay.
+//  Last modified: 2025-12-05 at 20:26 (America/Los_Angeles - Pacific Time)
+//  Notes: Added voice sorting support - masterlistSortBy state and applySortToMasterlist() function. Listens for MangoSortListCommand notification. Sets list context for Mango voice commands.
 //
 //  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
 //  directly from work_cards_cache. All movie data comes from Supabase cache tables.
@@ -35,6 +35,7 @@ struct WatchlistView: View {
     @State private var masterlistMovies: [MasterlistMovie] = []
     @State private var isLoadingMovies: Bool = false
     @State private var isWatchedSectionExpanded: Bool = false
+    @State private var masterlistSortBy: String = "Title" // Current sort: "Title", "Year", "Genre", "Tasty Score", "AI Score", "Watched"
     
     // Computed property for watched masterlist movies
     private var watchedMasterlistMovies: [MasterlistMovie] {
@@ -106,6 +107,21 @@ struct WatchlistView: View {
             loadLists()
             loadMasterlistName() // Also reload masterlist name in case it was edited
             loadMasterlistMovies() // Reload movies when watchlist changes (including watched state)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("MangoSortListCommand"))) { notification in
+            // Handle sort command from Mango
+            if let sortBy = notification.userInfo?["sortBy"] as? String {
+                masterlistSortBy = sortBy
+                applySortToMasterlist()
+            }
+        }
+        .onAppear {
+            // Set list context when WatchlistView appears (for Mango sort commands)
+            VoiceIntentRouter.setCurrentListContext(listId: "masterlist", listType: .masterlist)
+        }
+        .onDisappear {
+            // Clear list context when leaving WatchlistView
+            VoiceIntentRouter.setCurrentListContext(listId: nil, listType: nil)
         }
         }
     }
@@ -432,6 +448,7 @@ struct WatchlistView: View {
             let cacheTime = Date().timeIntervalSince(startTime) * 1000
             print("[WATCHLIST PERF] loadMasterlistMovies - using cached items: \(cachedMovies.count) (took \(Int(cacheTime))ms)")
             masterlistMovies = cachedMovies
+            applySortToMasterlist()
         } else {
             print("[WATCHLIST PERF] loadMasterlistMovies - no cached items available")
         }
@@ -500,8 +517,9 @@ struct WatchlistView: View {
                         moviesById[movie.id] = movie
                     }
                     
-                    // Convert back to array, sorted by title for consistency
-                    self.masterlistMovies = Array(moviesById.values).sorted { $0.title < $1.title }
+                    // Convert back to array and apply current sort
+                    self.masterlistMovies = Array(moviesById.values)
+                    self.applySortToMasterlist()
                     
                     self.isLoadingMovies = false
                     
@@ -514,6 +532,44 @@ struct WatchlistView: View {
                     self.isLoadingMovies = false
                 }
             }
+        }
+    }
+    
+    /// Apply current sort to masterlistMovies
+    private func applySortToMasterlist() {
+        switch masterlistSortBy {
+        case "Title":
+            masterlistMovies.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case "Year", "Year Newest First":
+            // Sort by year (newest first)
+            masterlistMovies.sort { (Int($0.year) ?? 0) > (Int($1.year) ?? 0) }
+        case "Year Oldest First":
+            masterlistMovies.sort { (Int($0.year) ?? 0) < (Int($1.year) ?? 0) }
+        case "Genre":
+            // Sort by first genre, then by title
+            masterlistMovies.sort { movie1, movie2 in
+                let genre1 = movie1.genres.first ?? ""
+                let genre2 = movie2.genres.first ?? ""
+                if genre1 != genre2 {
+                    return genre1 < genre2
+                }
+                return movie1.title.localizedCaseInsensitiveCompare(movie2.title) == .orderedAscending
+            }
+        case "Tasty Score", "Tasty Score Highest":
+            masterlistMovies.sort { ($0.tastyScore ?? 0) > ($1.tastyScore ?? 0) }
+        case "AI Score", "AI Score Highest":
+            masterlistMovies.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+        case "Watched":
+            // Watched movies first, then unwatched
+            masterlistMovies.sort { movie1, movie2 in
+                if movie1.isWatched == movie2.isWatched {
+                    return movie1.title.localizedCaseInsensitiveCompare(movie2.title) == .orderedAscending
+                }
+                return movie1.isWatched && !movie2.isWatched
+            }
+        default:
+            // Default: sort by title
+            masterlistMovies.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         }
     }
 }

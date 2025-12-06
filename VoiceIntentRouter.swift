@@ -1,8 +1,8 @@
 //  VoiceIntentRouter.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 09:45 PST (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 19:30 (America/Los_Angeles - Pacific Time)
-//  Notes: Added duplicate transcript prevention to avoid processing same command multiple times. Added handleCreateWatchlistCommand for local list creation.
+//  Last modified: 2025-12-05 at 20:26 (America/Los_Angeles - Pacific Time)
+//  Notes: Added handleSortListCommand - processes "sort this list by X" commands when invoked from WatchlistView. Added list context tracking (masterlist/customList) and sort notification system.
 
 import Foundation
 
@@ -41,6 +41,15 @@ enum VoiceIntentRouter {
     private static var currentMovieId: String? = nil
     private static let currentMovieIdQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.currentmovie")
     
+    // Current list context - set when Mango is invoked from WatchlistView or IndividualListView
+    enum ListType {
+        case masterlist
+        case customList
+    }
+    private static var currentListId: String? = nil
+    private static var currentListType: ListType? = nil
+    private static let currentListQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.currentlist")
+    
     /// Set the current movie ID when Mango is invoked from MoviePageView
     static func setCurrentMovieId(_ movieId: String?) {
         currentMovieIdQueue.sync {
@@ -57,6 +66,29 @@ enum VoiceIntentRouter {
     private static func getCurrentMovieId() -> String? {
         return currentMovieIdQueue.sync {
             return currentMovieId
+        }
+    }
+    
+    /// Set the current list context when Mango is invoked from a list view
+    static func setCurrentListContext(listId: String?, listType: ListType?) {
+        currentListQueue.sync {
+            currentListId = listId
+            currentListType = listType
+            if let id = listId, let type = listType {
+                print("📋 [VoiceIntentRouter] Set current list context: \(id) (\(type))")
+            } else {
+                print("📋 [VoiceIntentRouter] Cleared current list context")
+            }
+        }
+    }
+    
+    /// Get the current list context (if any)
+    private static func getCurrentListContext() -> (listId: String, listType: ListType)? {
+        return currentListQueue.sync {
+            guard let id = currentListId, let type = currentListType else {
+                return nil
+            }
+            return (id, type)
         }
     }
     
@@ -140,6 +172,15 @@ enum VoiceIntentRouter {
             if await handleAddThisMovieToListCommand(transcript: text, currentMovieId: currentMovieId) {
                 // Command was recognized and handled - clear context and return
                 setCurrentMovieId(nil)
+                return // Early return - no LLM call needed
+            }
+        }
+        
+        // Step 1.7: Handle "sort this list by X" command locally (no LLM needed)
+        // Only process if we have a current list context (Mango invoked from WatchlistView)
+        if let listContext = getCurrentListContext() {
+            if await handleSortListCommand(transcript: text, listId: listContext.listId, listType: listContext.listType) {
+                // Command was recognized and handled - return (don't clear context, user might sort again)
                 return // Early return - no LLM call needed
             }
         }
@@ -363,6 +404,96 @@ enum VoiceIntentRouter {
                 print("ℹ️ [Mango] Movie \(currentMovieId) is already in list '\(watchlist.name)'")
                 MangoSpeaker.shared.speak("This movie is already in \(watchlist.name).")
             }
+        }
+        
+        return true // Command was recognized and handled
+    }
+    
+    /// Handle "sort this list by X" command locally
+    /// Returns true if the command was recognized and handled, false otherwise
+    private static func handleSortListCommand(transcript: String, listId: String, listType: ListType) async -> Bool {
+        let lower = transcript.lowercased()
+        
+        // Check if transcript contains "sort"
+        guard lower.contains("sort") else {
+            return false
+        }
+        
+        // Patterns to match sort keys
+        var sortKey: String? = nil
+        var sortDirection: String? = nil
+        
+        // Detect sort key
+        if lower.contains("by year") || lower.contains("year") {
+            sortKey = "Year"
+            // Check for direction
+            if lower.contains("oldest") || lower.contains("earliest") {
+                sortDirection = "Oldest First"
+            } else if lower.contains("newest") || lower.contains("latest") {
+                sortDirection = "Newest First"
+            }
+        } else if lower.contains("by genre") || lower.contains("genre") {
+            sortKey = "Genre"
+        } else if lower.contains("by title") || lower.contains("title") || lower.contains("alphabetical") {
+            sortKey = "Title"
+        } else if lower.contains("by rating") || lower.contains("rating") {
+            // Check if it's Tasty Score or AI Score
+            if lower.contains("tasty") {
+                sortKey = "Tasty Score"
+            } else if lower.contains("ai") {
+                sortKey = "AI Score"
+            } else {
+                // Default to Tasty Score for "rating"
+                sortKey = "Tasty Score"
+            }
+            // Check for direction
+            if lower.contains("highest") || lower.contains("best") {
+                sortDirection = "Highest"
+            } else if lower.contains("lowest") || lower.contains("worst") {
+                sortDirection = "Lowest"
+            }
+        } else if lower.contains("tasty score") || lower.contains("tasty") {
+            sortKey = "Tasty Score"
+            if lower.contains("highest") || lower.contains("best") {
+                sortDirection = "Highest"
+            }
+        } else if lower.contains("ai score") || lower.contains("ai") {
+            sortKey = "AI Score"
+            if lower.contains("highest") || lower.contains("best") {
+                sortDirection = "Highest"
+            }
+        } else if lower.contains("watched") {
+            sortKey = "Watched"
+        }
+        
+        guard let key = sortKey else {
+            // No recognized sort key - not a sort command
+            return false
+        }
+        
+        // Build final sort string
+        var finalSortBy = key
+        if let direction = sortDirection {
+            finalSortBy = "\(key) \(direction)"
+        }
+        
+        print("🔀 [Mango] Detected sort command - list: \(listId) (\(listType)), sort: '\(finalSortBy)'")
+        
+        await MainActor.run {
+            // Post notification to apply sort
+            NotificationCenter.default.post(
+                name: NSNotification.Name("MangoSortListCommand"),
+                object: nil,
+                userInfo: [
+                    "listId": listId,
+                    "listType": listType,
+                    "sortBy": finalSortBy
+                ]
+            )
+            
+            // Speak confirmation
+            let confirmationText = sortDirection != nil ? "Sorted by \(key.lowercased()), \(sortDirection!.lowercased())." : "Sorted by \(key.lowercased())."
+            MangoSpeaker.shared.speak(confirmationText)
         }
         
         return true // Command was recognized and handled
