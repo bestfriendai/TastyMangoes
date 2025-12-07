@@ -208,7 +208,9 @@ enum VoiceIntentRouter {
                     switch intent.intent {
                     case "recommender_search":
                         if let movie = intent.movieTitle, !movie.isEmpty,
-                           let recommender = intent.recommender, !recommender.isEmpty {
+                           let rawRecommender = intent.recommender, !rawRecommender.isEmpty {
+                            // Normalize recommender name (e.g., "Kyo" -> "Keo", "hyatt" -> "Hayat")
+                            let recommender = RecommenderNormalizer.normalize(rawRecommender)
                             finalCommand = .recommenderSearch(recommender: recommender, movie: movie, raw: text)
                             print("🤖 [LLM] Mapped to recommenderSearch: \(recommender) recommends \(movie)")
                         } else {

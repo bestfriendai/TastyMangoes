@@ -89,7 +89,9 @@ final class MangoCommandParser {
             if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
                 if let recommenderRange = Range(match.range(at: recommenderIdx), in: text),
                    let movieRange = Range(match.range(at: movieIdx), in: text) {
-                    recommender = String(text[recommenderRange]).trimmingCharacters(in: .whitespaces)
+                    let rawRecommender = String(text[recommenderRange]).trimmingCharacters(in: .whitespaces)
+                    // Normalize recommender name (e.g., "Kyo" -> "Keo", "hyatt" -> "Hayat")
+                    recommender = RecommenderNormalizer.normalize(rawRecommender)
                     movieTitle = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
                     break
                 }
