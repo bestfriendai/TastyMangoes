@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		B5B058782ECB14A7455AA373 /* MangoListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B058792ECB14A7455AA373 /* MangoListeningView.swift */; };
 		B5B0587A2ECB14A7455AA373 /* VoiceIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */; };
-		
 		C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C517CD042EC9806C00EAE1FE /* Assets.xcassets */; };
 		C517CD212EC9806C00EAE1FE /* movies.json in Resources */ = {isa = PBXBuildFile; fileRef = C517CD122EC9806C00EAE1FE /* movies.json */; };
 		C517CD222EC9806C00EAE1FE /* CategoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD062EC9806C00EAE1FE /* CategoryItem.swift */; };
@@ -36,13 +35,14 @@
 		C517CD372EC9806C00EAE1FE /* MovieDetailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD0E2EC9806C00EAE1FE /* MovieDetailService.swift */; };
 		C517CD382EC9806C00EAE1FE /* HomeVew.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */; };
 		C51B70512ED2D66500B76CF7 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */; };
+		C52BC7972EE5254F0001A42C /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = C52BC7962EE5254F0001A42C /* Secrets.xcconfig */; };
 		C54126272EE16BBF0014AA7F /* OpenAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54126262EE16BBF0014AA7F /* OpenAIClient.swift */; };
 		C54126292EE16BCB0014AA7F /* OpenAIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54126282EE16BCB0014AA7F /* OpenAIConfig.swift */; };
 		C541262B2EE16BE10014AA7F /* VoiceAnalyticsLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = C541262A2EE16BE10014AA7F /* VoiceAnalyticsLogger.swift */; };
 		C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */; };
 		C595491E2EE1266F0065A8CD /* MangoCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = C595491D2EE1266F0065A8CD /* MangoCommand.swift */; };
-		C59549212EE1266F0065A8CD /* RecommenderNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59549222EE1266F0065A8CD /* RecommenderNormalizer.swift */; };
 		C595491F2EE1266F0065A8CD /* MangoSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59549202EE1266F0065A8CD /* MangoSpeaker.swift */; };
+		C59549212EE1266F0065A8CD /* RecommenderNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59549222EE1266F0065A8CD /* RecommenderNormalizer.swift */; };
 		C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */; };
 		C5ADA3582ED5578700440F8D /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3572ED5578700440F8D /* Auth */; };
 		C5ADA35A2ED5578700440F8D /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3592ED5578700440F8D /* PostgREST */; };
@@ -111,7 +111,6 @@
 /* Begin PBXFileReference section */
 		B5B058792ECB14A7455AA373 /* MangoListeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoListeningView.swift; sourceTree = "<group>"; };
 		B5B0587B2ECB14A7455AA373 /* VoiceIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceIntentRouter.swift; sourceTree = "<group>"; };
-
 		C517CD042EC9806C00EAE1FE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C517CD052EC9806C00EAE1FE /* CastTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastTabView.swift; sourceTree = "<group>"; };
 		C517CD062EC9806C00EAE1FE /* CategoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryItem.swift; sourceTree = "<group>"; };
@@ -139,13 +138,14 @@
 		C517CD1C2EC9806C00EAE1FE /* Tmdbservice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tmdbservice.swift; sourceTree = "<group>"; };
 		C517CD1D2EC9806C00EAE1FE /* TMIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMIcons.swift; sourceTree = "<group>"; };
 		C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieDetailView.swift; sourceTree = "<group>"; };
+		C52BC7962EE5254F0001A42C /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		C54126262EE16BBF0014AA7F /* OpenAIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIClient.swift; sourceTree = "<group>"; };
 		C54126282EE16BCB0014AA7F /* OpenAIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIConfig.swift; sourceTree = "<group>"; };
 		C541262A2EE16BE10014AA7F /* VoiceAnalyticsLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAnalyticsLogger.swift; sourceTree = "<group>"; };
 		C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayerView.swift; sourceTree = "<group>"; };
 		C595491D2EE1266F0065A8CD /* MangoCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoCommand.swift; sourceTree = "<group>"; };
-		C59549222EE1266F0065A8CD /* RecommenderNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommenderNormalizer.swift; sourceTree = "<group>"; };
 		C59549202EE1266F0065A8CD /* MangoSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoSpeaker.swift; sourceTree = "<group>"; };
+		C59549222EE1266F0065A8CD /* RecommenderNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommenderNormalizer.swift; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
 		C5B95D222ECB15DE00B47098 /* WatchlistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistManager.swift; sourceTree = "<group>"; };
 		C5B95D242ECB1D2800B47098 /* SearchFiltersBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersBottomSheet.swift; sourceTree = "<group>"; };
@@ -237,6 +237,7 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C52BC7962EE5254F0001A42C /* Secrets.xcconfig */,
 				C517CD042EC9806C00EAE1FE /* Assets.xcassets */,
 				C5B95D442ECB3D9100B47098 /* AddMoviesToListView.swift */,
 				C5B95D422ECB3D5300B47098 /* AddToListView.swift */,
@@ -316,7 +317,6 @@
 				C5B95D3C2ECB334600B47098 /* YourListsView.swift */,
 				C5ADA3642ED5601500440F8D /* Frameworks */,
 				C5D017342E989F7800164472 /* Products */,
-				
 			);
 			sourceTree = "<group>";
 		};
@@ -458,7 +458,7 @@
 			files = (
 				C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */,
 				C517CD212EC9806C00EAE1FE /* movies.json in Resources */,
-				
+				C52BC7972EE5254F0001A42C /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -592,7 +592,7 @@
 /* Begin XCBuildConfiguration section */
 		C5D017522E989F7900164472 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			
+			baseConfigurationReference = C52BC7962EE5254F0001A42C /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -657,7 +657,7 @@
 		};
 		C5D017532E989F7900164472 /* Release */ = {
 			isa = XCBuildConfiguration;
-			
+			baseConfigurationReference = C52BC7962EE5254F0001A42C /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
