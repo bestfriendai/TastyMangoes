@@ -4,11 +4,12 @@
 //  Originally created by Cursor Assistant on 2025-11-14
 //  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
 //  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
-//  Last modified: 2025-12-03 at 09:39 PST by Cursor Assistant
+//  Modified by Cursor Assistant on 2025-12-03 at 09:39 PST
+//  Modified by Claude on 2025-12-06 at 22:05 (America/Los_Angeles - Pacific Time)
 //
 //  Changes made by Claude (2025-12-02):
 //  - Reordered content logic to keep previous results visible while searching
-//  - Only show loading view when there are no results to display
+//  - Only show loading view when there are no results to display yet
 //  - Only show empty state after search truly completes with no results
 //  - This prevents the distracting flash of "Oops! No movies found" while typing
 //
@@ -18,6 +19,9 @@
 //  - Added proper stopListening reason tracking
 //  - Added explicit search trigger when recording finishes (onChange of state to .processing)
 //  - Added debug logging for transcript changes and search queries
+//
+//  Changes made by Claude (2025-12-06):
+//  - Added isMangoInitiated: true to pendingMangoQuery search call for voice analytics
 
 import SwiftUI
 
@@ -93,7 +97,7 @@ struct SearchView: View {
                     print("🍋 [SearchView] Found pending Mango query: '\(pendingQuery)'")
                     // Small delay to ensure tab navigation animation completes
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        viewModel.search(query: pendingQuery)
+                        viewModel.search(query: pendingQuery, isMangoInitiated: true)
                         // Clear the pending query after triggering search
                         filterState.pendingMangoQuery = nil
                         print("🍋 [SearchView] Triggered search for pending query and cleared it")

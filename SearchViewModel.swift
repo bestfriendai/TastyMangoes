@@ -4,12 +4,18 @@
 //
 //  Originally created by Claude on 11/13/25 at 9:07 PM
 //  Modified by Claude on 2025-12-02 at 12:15 AM (Pacific Time)
+//  Modified by Claude on 2025-12-06 at 22:05 (America/Los_Angeles - Pacific Time)
 //
 //  Changes made by Claude (2025-12-02):
 //  - Fixed flashing "no movies found" issue during typing
 //  - Keep previous results visible while new search is in progress
 //  - Only show empty state after debounced search truly completes with no results
 //  - Fixed Task cancellation not resetting isSearching state
+//
+//  Changes made by Claude (2025-12-06):
+//  - Added voice analytics result logging for Mango-initiated searches
+//  - Logs success/no_results/network_error to voice_utterance_events table
+//  - Added isMangoInitiated parameter to search(query:) method
 
 import Foundation
 import SwiftUI
@@ -67,8 +73,11 @@ class SearchViewModel: ObservableObject {
     // MARK: - Search Methods
     
     /// Public method to trigger search with a query string (for programmatic access)
-    func search(query: String) {
+    func search(query: String, isMangoInitiated: Bool = false) {
         searchQuery = query
+        if isMangoInitiated {
+            isMangoInitiatedSearch = true
+        }
         search()
     }
     
@@ -247,6 +256,14 @@ class SearchViewModel: ObservableObject {
             
             print("✅ Found \(searchResults.count) movies from Supabase for '\(query)'")
             
+            // Log search result for voice analytics (if this was a Mango-initiated search)
+            if isMangoInitiatedSearch {
+                await VoiceAnalyticsLogger.shared.logSearchResult(
+                    query: query,
+                    resultCount: searchResults.count
+                )
+            }
+            
             // Reset Mango flag after search completes (speech will be handled by SearchView onChange)
             isMangoInitiatedSearch = false
             
@@ -272,6 +289,18 @@ class SearchViewModel: ObservableObject {
             hasSearched = true
             lastSearchedQuery = query
             print("❌ Search error: \(searchError.localizedDescription)")
+            
+            // Log search error for voice analytics (if this was a Mango-initiated search)
+            if isMangoInitiatedSearch {
+                await VoiceAnalyticsLogger.shared.logSearchResult(
+                    query: query,
+                    resultCount: 0,
+                    error: searchError
+                )
+            }
+            
+            // Reset Mango flag after error
+            isMangoInitiatedSearch = false
         }
         
         isSearching = false

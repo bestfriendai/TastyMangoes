@@ -1,10 +1,19 @@
 //  VoiceAnalyticsLogger.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 19:30 (America/Los_Angeles - Pacific Time)
-//  Notes: Added createWatchlist case to switch statement for exhaustive matching.
+//  Last modified by Claude: 2025-12-06 at 21:55 (America/Los_Angeles - Pacific Time)
+//  Notes: Added failure reason tracking (handler_result, result_count, error_message)
 
 import Foundation
+
+/// Result of handling a voice command
+enum VoiceHandlerResult: String {
+    case success = "success"
+    case noResults = "no_results"
+    case ambiguous = "ambiguous"       // 10+ results
+    case networkError = "network_error"
+    case parseError = "parse_error"    // Both local parser and LLM failed
+}
 
 /// Logger for voice interaction analytics
 class VoiceAnalyticsLogger {
@@ -15,21 +24,17 @@ class VoiceAnalyticsLogger {
     // Track if we've seen a 404 (function not deployed) to avoid spam
     private var hasSeen404 = false
     
-    /// Log a voice interaction event
-    /// - Parameters:
-    ///   - utterance: The original user utterance
-    ///   - mangoCommand: The initial MangoCommand parser result
-    ///   - llmUsed: Whether LLM fallback was used
-    ///   - finalCommand: The final command after LLM processing (if any)
-    ///   - llmIntent: The LLM intent response (if LLM was used)
-    ///   - llmError: Any error from LLM call (if LLM was used and failed)
+    /// Log a voice interaction event (initial parse phase)
     func log(
         utterance: String,
         mangoCommand: MangoCommand,
         llmUsed: Bool,
         finalCommand: MangoCommand,
         llmIntent: LLMIntent?,
-        llmError: Error?
+        llmError: Error?,
+        handlerResult: VoiceHandlerResult? = nil,
+        resultCount: Int? = nil,
+        errorMessage: String? = nil
     ) async {
         // Don't block UI - fire and forget
         Task {
@@ -48,21 +53,79 @@ class VoiceAnalyticsLogger {
                     llmIntent: llmIntent?.intent,
                     llmMovieTitle: llmIntent?.movieTitle,
                     llmRecommender: llmIntent?.recommender,
-                    llmError: llmError?.localizedDescription
+                    llmError: llmError?.localizedDescription,
+                    handlerResult: handlerResult?.rawValue,
+                    resultCount: resultCount,
+                    errorMessage: errorMessage
                 )
                 
                 try await SupabaseService.shared.logVoiceEvent(event)
                 print("📊 [VoiceAnalytics] Logged voice event to Supabase")
             } catch SupabaseError.functionNotFound {
-                // Function not deployed - log once, then skip future attempts
                 if !hasSeen404 {
                     print("⚠️ [VoiceAnalytics] log-voice-event function not found (404). Skipping analytics logging for this session.")
                     hasSeen404 = true
                 }
-                // Silently skip logging - don't spam logs
             } catch {
-                // Don't fail the user flow if logging fails
                 print("⚠️ [VoiceAnalytics] Failed to log voice event: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// Log search result after search completes (called from SearchViewModel)
+    func logSearchResult(
+        query: String,
+        resultCount: Int,
+        error: Error? = nil
+    ) async {
+        // Determine handler result
+        let handlerResult: VoiceHandlerResult
+        let errorMessage: String?
+        
+        if let error = error {
+            handlerResult = .networkError
+            errorMessage = error.localizedDescription
+        } else if resultCount == 0 {
+            handlerResult = .noResults
+            errorMessage = nil
+        } else if resultCount >= 10 {
+            handlerResult = .ambiguous
+            errorMessage = nil
+        } else {
+            handlerResult = .success
+            errorMessage = nil
+        }
+        
+        print("📊 [VoiceAnalytics] Search result: \(handlerResult.rawValue) (\(resultCount) results)")
+        
+        Task {
+            do {
+                let event = VoiceEventLog(
+                    utterance: query,
+                    mangoCommandType: "movie_search",
+                    mangoCommandRaw: query,
+                    mangoCommandMovieTitle: query,
+                    mangoCommandRecommender: nil,
+                    llmUsed: false,
+                    finalCommandType: "search_result",
+                    finalCommandRaw: query,
+                    finalCommandMovieTitle: query,
+                    finalCommandRecommender: nil,
+                    llmIntent: nil,
+                    llmMovieTitle: nil,
+                    llmRecommender: nil,
+                    llmError: nil,
+                    handlerResult: handlerResult.rawValue,
+                    resultCount: resultCount,
+                    errorMessage: errorMessage
+                )
+                
+                try await SupabaseService.shared.logVoiceEvent(event)
+                print("📊 [VoiceAnalytics] Logged search result to Supabase")
+            } catch SupabaseError.functionNotFound {
+                // Already logged warning, silently skip
+            } catch {
+                print("⚠️ [VoiceAnalytics] Failed to log search result: \(error.localizedDescription)")
             }
         }
     }
@@ -99,6 +162,11 @@ struct VoiceEventLog: Codable {
     let llmRecommender: String?
     let llmError: String?
     
+    // New fields for result tracking
+    let handlerResult: String?
+    let resultCount: Int?
+    let errorMessage: String?
+    
     enum CodingKeys: String, CodingKey {
         case utterance
         case mangoCommandType = "mango_command_type"
@@ -114,6 +182,8 @@ struct VoiceEventLog: Codable {
         case llmMovieTitle = "llm_movie_title"
         case llmRecommender = "llm_recommender"
         case llmError = "llm_error"
+        case handlerResult = "handler_result"
+        case resultCount = "result_count"
+        case errorMessage = "error_message"
     }
 }
-
