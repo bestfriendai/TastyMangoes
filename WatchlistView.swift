@@ -1,14 +1,118 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 20:26 (America/Los_Angeles - Pacific Time)
-//  Notes: Added voice sorting support - masterlistSortBy state and applySortToMasterlist() function. Listens for MangoSortListCommand notification. Sets list context for Mango voice commands.
+//  Last modified: 2025-12-06 at 11:55 (America/Los_Angeles - Pacific Time)
+//  Notes: Added voice sorting support - masterlistSortBy state and applySortToMasterlist() function. Listens for MangoSortListCommand notification. Sets list context for Mango voice commands. Added UserDidSignIn notification listener to refresh watchlists when user signs in. Fixed loading spinner and masterlist sync timing - now waits for sync to complete before loading movies.
 //
 //  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
 //  directly from work_cards_cache. All movie data comes from Supabase cache tables.
 
 import SwiftUI
 import Combine
+import Auth
+
+// MARK: - Debug Function to Check Masterlist Movies
+
+@MainActor
+func checkMasterlistMoviesInDatabase() async {
+    print("\n" + String(repeating: "=", count: 60))
+    print("🔍 [DEBUG] CHECKING MASTERLIST MOVIES IN SUPABASE DATABASE")
+    print(String(repeating: "=", count: 60))
+    
+    do {
+        let supabaseService = SupabaseService.shared
+        
+        // Get current user
+        guard let user = try await supabaseService.getCurrentUser() else {
+            print("❌ [DEBUG] No user logged in")
+            return
+        }
+        print("✅ [DEBUG] Current user: \(user.id)")
+        
+        // Get all watchlists for user
+        let watchlists = try await supabaseService.getUserWatchlists(userId: user.id)
+        print("✅ [DEBUG] Found \(watchlists.count) watchlists total")
+        
+        // Find masterlist
+        guard let masterlist = watchlists.first(where: { $0.name.lowercased() == "masterlist" }) else {
+            print("❌ [DEBUG] Masterlist watchlist not found!")
+            print("[DEBUG] Available watchlists:")
+            for watchlist in watchlists {
+                print("  - \(watchlist.name) (ID: \(watchlist.id))")
+            }
+            return
+        }
+        
+        print("✅ [DEBUG] Found Masterlist watchlist:")
+        print("   ID: \(masterlist.id)")
+        print("   Name: \(masterlist.name)")
+        
+        // Get movies in masterlist
+        print("\n🔄 [DEBUG] Querying watchlist_movies table for watchlist_id=\(masterlist.id)...")
+        let movies = try await supabaseService.getWatchlistMovies(watchlistId: masterlist.id)
+        print("✅ [DEBUG] Query returned \(movies.count) movies in Masterlist")
+        
+        // Check specifically for "The Godfather" (common TMDB IDs: 238, 240, 242)
+        let godfatherIds = ["238", "240", "242"] // The Godfather trilogy
+        
+        if movies.isEmpty {
+            print("\n⚠️ [DEBUG] ⚠️ NO MOVIES FOUND IN MASTERLIST ⚠️")
+            print("[DEBUG] This means the movies were NOT saved to Supabase.")
+        } else {
+            print("\n✅ [DEBUG] Movies found in Masterlist:")
+            for (index, movie) in movies.enumerated() {
+                print("  \(index + 1). Movie ID: \(movie.movieId)")
+                print("     Added at: \(movie.addedAt.description)")
+                if let recommender = movie.recommenderName {
+                    print("     Recommended by: \(recommender)")
+                }
+            }
+            
+            let foundGodfather = movies.first { godfatherIds.contains($0.movieId) }
+            if let godfather = foundGodfather {
+                print("\n🎬 [DEBUG] ✅ THE GODFATHER IS IN YOUR MASTERLIST!")
+                print("   Movie ID: \(godfather.movieId)")
+                print("   Added at: \(godfather.addedAt.description)")
+                if let recommender = godfather.recommenderName {
+                    print("   Recommended by: \(recommender)")
+                }
+            } else {
+                print("\n🎬 [DEBUG] ❌ The Godfather is NOT in your Masterlist")
+                print("   (Checked for movie IDs: 238, 240, 242)")
+            }
+        }
+        
+        // Also check local state
+        let watchlistManager = WatchlistManager.shared
+        let localMovieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+        print("\n📱 [DEBUG] Local state (WatchlistManager) has \(localMovieIds.count) movies for 'masterlist':")
+        if localMovieIds.isEmpty {
+            print("  ⚠️ [DEBUG] Local state is also empty")
+        } else {
+            for (index, movieId) in Array(localMovieIds).enumerated() {
+                print("  \(index + 1). \(movieId)")
+            }
+            
+            // Check for Godfather in local state too
+            let foundGodfatherLocal = localMovieIds.first { godfatherIds.contains($0) }
+            if let godfatherId = foundGodfatherLocal {
+                print("\n🎬 [DEBUG] ✅ THE GODFATHER IS IN LOCAL STATE (Movie ID: \(godfatherId))")
+            } else {
+                print("\n🎬 [DEBUG] ❌ The Godfather is NOT in local state")
+            }
+        }
+        
+        print(String(repeating: "=", count: 60) + "\n")
+        
+    } catch {
+        print("❌ [DEBUG] Error checking masterlist movies: \(error)")
+        print("Error details: \(error.localizedDescription)")
+        if let nsError = error as NSError? {
+            print("Error domain: \(nsError.domain), code: \(nsError.code)")
+        }
+        print(String(repeating: "=", count: 60) + "\n")
+    }
+}
 
 // MARK: - All Lists View (placeholder)
 
@@ -97,6 +201,12 @@ struct WatchlistView: View {
             
             let onAppearTime = Date().timeIntervalSince(startTime) * 1000
             print("[WATCHLIST PERF] onAppear - finished initial setup (\(Int(onAppearTime))ms)")
+            
+            // Check database for masterlist movies (including The Godfather check)
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds to allow sync to complete
+                await checkMasterlistMoviesInDatabase()
+            }
         }
         .onChange(of: watchlistManager.currentSortOption) { oldValue, newValue in
             // Reload lists when sort option changes (e.g., from YourListsView)
@@ -107,6 +217,31 @@ struct WatchlistView: View {
             loadLists()
             loadMasterlistName() // Also reload masterlist name in case it was edited
             loadMasterlistMovies() // Reload movies when watchlist changes (including watched state)
+            
+            // Check database for masterlist movies (debugging) - wait for sync to complete
+            Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds to allow sync to complete
+                await checkMasterlistMoviesInDatabase()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("UserDidSignIn"))) { _ in
+            // Refresh watchlists when user signs in
+            print("🔄 [WatchlistView] User signed in - refreshing watchlists")
+            // Wait a moment for sync to complete, then reload
+            Task {
+                // Give sync a moment to start
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                await MainActor.run {
+                    loadLists()
+                    loadMasterlistName()
+                    loadMasterlistMovies()
+                }
+                
+                // Check database for masterlist movies (debugging)
+                Task {
+                    await checkMasterlistMoviesInDatabase()
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("MangoSortListCommand"))) { notification in
             // Handle sort command from Mango
@@ -354,12 +489,12 @@ struct WatchlistView: View {
                             .font(.custom("Nunito-Bold", size: 20))
                             .foregroundColor(Color(hex: "#1a1a1a"))
                         
-                        if watchlistManager.isMasterListCountLoading {
+                        if watchlistManager.isMasterListCountLoading || isLoadingMovies {
                             ProgressView()
                                 .scaleEffect(0.7)
                                 .frame(width: 16, height: 16)
                         } else {
-                            Text("(\(watchlistManager.getWatchlist(listId: "masterlist")?.filmCount ?? 0))")
+                            Text("(\(masterlistMovies.count))")
                                 .font(.custom("Nunito-Bold", size: 20))
                                 .foregroundColor(Color(hex: "#1a1a1a"))
                         }
@@ -451,6 +586,8 @@ struct WatchlistView: View {
             applySortToMasterlist()
         } else {
             print("[WATCHLIST PERF] loadMasterlistMovies - no cached items available")
+            // Clear the list if no cache, so we show loading state
+            masterlistMovies = []
         }
         
         // Step 2: Refresh from Supabase in background (don't clear list while refreshing)
@@ -464,11 +601,24 @@ struct WatchlistView: View {
             let refreshStartTime = Date()
             print("[WATCHLIST PERF] loadMasterlistMovies - fetching from Supabase...")
             
-            // Get movie IDs from masterlist
-            let movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+            // Wait for sync to complete if it's still loading
+            var retryCount = 0
+            var movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+            print("[WATCHLIST PERF] loadMasterlistMovies - initial movieIds count: \(movieIds.count), isMasterListCountLoading: \(watchlistManager.isMasterListCountLoading)")
             
-            guard !movieIds.isEmpty else {
-                print("[WATCHLIST PERF] loadMasterlistMovies - no movies in list, skipping fetch")
+            // Wait for sync to complete (up to 2 seconds)
+            while watchlistManager.isMasterListCountLoading && retryCount < 10 {
+                print("[WATCHLIST PERF] loadMasterlistMovies - waiting for sync to complete (retry \(retryCount))...")
+                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+                retryCount += 1
+            }
+            
+            print("[WATCHLIST PERF] loadMasterlistMovies - after sync wait: movieIds count: \(movieIds.count), isMasterListCountLoading: \(watchlistManager.isMasterListCountLoading)")
+            
+            // If still empty after sync, that's okay - user might not have any movies yet
+            if movieIds.isEmpty {
+                print("[WATCHLIST PERF] loadMasterlistMovies - no movies in masterlist (this is okay if user hasn't added any yet)")
                 await MainActor.run {
                     self.isLoadingMovies = false
                 }

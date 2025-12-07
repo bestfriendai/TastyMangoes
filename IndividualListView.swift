@@ -1,8 +1,8 @@
 //  IndividualListView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:57 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 16:55 (America/Los_Angeles - Pacific Time)
-//  Notes: Added swipe-left delete functionality to WatchlistProductCard. Same behavior as MasterlistMovieCard - swipe left reveals Delete button with confirmation.
+//  Last modified: 2025-12-06 at 11:38 (America/Los_Angeles - Pacific Time)
+//  Notes: Added swipe-left delete functionality to WatchlistProductCard. Same behavior as MasterlistMovieCard - swipe left reveals Delete button with confirmation. Added UserDidSignIn and WatchlistManagerDidUpdate notification listeners to refresh movies when user signs in or watchlist data changes.
 //
 //  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
 //  directly from work_cards_cache. All movie data comes from Supabase cache tables.
@@ -88,6 +88,15 @@ struct IndividualListView: View {
                 }
         }
         .onAppear {
+            loadMovies()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("UserDidSignIn"))) { _ in
+            // Refresh movies when user signs in
+            print("🔄 [IndividualListView] User signed in - refreshing movies for list \(listId)")
+            loadMovies()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("WatchlistManagerDidUpdate"))) { _ in
+            // Reload movies when watchlist manager updates
             loadMovies()
         }
     }

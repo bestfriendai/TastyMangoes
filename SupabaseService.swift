@@ -344,23 +344,71 @@ class SupabaseService: ObservableObject {
             throw SupabaseError.notConfigured
         }
         
-        let watchlistMovie = WatchlistMovie(
-            watchlistId: watchlistId,
-            movieId: movieId,
-            recommenderName: recommenderName,
-            recommendedAt: recommenderName != nil ? Date() : nil,
-            recommenderNotes: recommenderNotes
-        )
-        
         print("💾 SupabaseService: Saving watchlist item with recommended_by = \(recommenderName ?? "nil")")
         
-        let response: WatchlistMovie = try await client
-            .from("watchlist_movies")
-            .insert(watchlistMovie)
-            .select()
-            .single()
-            .execute()
-            .value
+        // Try to insert with recommender fields first
+        // If that fails (columns don't exist), fall back to basic insert
+        let response: WatchlistMovie
+        do {
+            let watchlistMovie = WatchlistMovie(
+                watchlistId: watchlistId,
+                movieId: movieId,
+                recommenderName: recommenderName,
+                recommendedAt: recommenderName != nil ? Date() : nil,
+                recommenderNotes: recommenderNotes
+            )
+            
+            response = try await client
+                .from("watchlist_movies")
+                .insert(watchlistMovie)
+                .select()
+                .single()
+                .execute()
+                .value
+        } catch {
+            // If recommender columns don't exist, insert without them
+            print("⚠️ SupabaseService: Failed to insert with recommender fields, trying basic insert: \(error)")
+            
+            // Create a minimal struct without recommender fields
+            struct BasicWatchlistMovieInsert: Codable {
+                let watchlist_id: UUID
+                let movie_id: String
+            }
+            
+            struct BasicWatchlistMovieResponse: Codable {
+                let id: UUID
+                let watchlist_id: UUID
+                let movie_id: String
+                let added_at: Date
+            }
+            
+            let basicMovie = BasicWatchlistMovieInsert(
+                watchlist_id: watchlistId,
+                movie_id: movieId
+            )
+            
+            // Insert basic movie
+            let basicResponse: BasicWatchlistMovieResponse = try await client
+                .from("watchlist_movies")
+                .insert(basicMovie)
+                .select()
+                .single()
+                .execute()
+                .value
+            
+            // Convert back to WatchlistMovie (without recommender fields)
+            response = WatchlistMovie(
+                id: basicResponse.id,
+                watchlistId: basicResponse.watchlist_id,
+                movieId: basicResponse.movie_id,
+                addedAt: basicResponse.added_at,
+                recommenderName: nil,
+                recommendedAt: nil,
+                recommenderNotes: nil
+            )
+            
+            print("⚠️ SupabaseService: Saved movie without recommender fields (migration 004_add_recommendation_fields.sql may not be applied to database)")
+        }
         
         print("✅ SupabaseService: Saved watchlist item - movieId: \(movieId), recommenderName: \(response.recommenderName ?? "nil")")
         

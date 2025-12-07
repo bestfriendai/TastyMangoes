@@ -1,8 +1,8 @@
 //  WatchlistManager.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-17 at 00:47 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
-//  Notes: Added movie card caching for instant watchlist display, batch fetch support, performance optimizations.
+//  Last modified: 2025-12-06 at 12:00 (America/Los_Angeles - Pacific Time)
+//  Notes: Added movie card caching for instant watchlist display, batch fetch support, performance optimizations. Added logging to debug masterlist sync issues.
 //
 //  TMDB USAGE: This manager NEVER calls TMDB. It only manages watchlist state and caches MovieCard
 //  data that was fetched via batch queries from work_cards_cache. All data comes from Supabase.
@@ -96,7 +96,18 @@ class WatchlistManager: ObservableObject {
     
     /// Get all movies in a list
     func getMoviesInList(listId: String) -> Set<String> {
-        return listMovies[listId] ?? []
+        let movies = listMovies[listId] ?? []
+        if listId == "masterlist" && movies.isEmpty {
+            // Fallback: check if masterlist exists as a UUID (for backward compatibility)
+            // Find masterlist by name in metadata
+            if let masterlistMeta = watchlistMetadata.values.first(where: { $0.name.lowercased() == "masterlist" && $0.id != "masterlist" }) {
+                if let uuidMovies = listMovies[masterlistMeta.id] {
+                    print("🔄 [WatchlistManager] Found masterlist movies under UUID \(masterlistMeta.id), count: \(uuidMovies.count)")
+                    return uuidMovies
+                }
+            }
+        }
+        return movies
     }
     
     /// Get cached movie card for a movie ID (for instant display)
@@ -569,12 +580,28 @@ class WatchlistManager: ObservableObject {
             let remoteData = try await SupabaseWatchlistAdapter.fetchAllWatchlistDataForCurrentUser()
             
             await MainActor.run {
+                print("🔄 [WatchlistManager] Syncing data from Supabase...")
+                print("  📋 [WatchlistManager] listMovies keys: \(remoteData.listMovies.keys.sorted())")
+                if let masterlistMovies = remoteData.listMovies["masterlist"] {
+                    print("  📽️ [WatchlistManager] Masterlist movies count: \(masterlistMovies.count)")
+                    print("  📽️ [WatchlistManager] Masterlist movie IDs: \(Array(masterlistMovies).sorted())")
+                } else {
+                    print("  ⚠️ [WatchlistManager] No 'masterlist' key found in listMovies")
+                }
+                
                 self.listMovies = remoteData.listMovies
                 self.movieLists = remoteData.movieLists
                 self.watchedMovies = remoteData.watchedMovies
                 self.movieRecommendations = remoteData.movieRecommendations
                 self.watchlistMetadata = remoteData.watchlistMetadata
                 self.nextListId = remoteData.nextListId
+                
+                // Verify masterlist after assignment
+                if let masterlistMovies = self.listMovies["masterlist"] {
+                    print("  ✅ [WatchlistManager] After assignment, masterlist has \(masterlistMovies.count) movies")
+                } else {
+                    print("  ⚠️ [WatchlistManager] After assignment, masterlist key not found")
+                }
                 
                 self.saveToCache()
                 
