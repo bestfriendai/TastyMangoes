@@ -86,6 +86,20 @@ struct SearchView: View {
                 }
             }
             .background(Color(hex: "#fdfdfd"))
+            .onAppear {
+                // Check for pending Mango query (race condition fix)
+                // This ensures queries aren't lost if notification fires before SearchView is ready
+                if let pendingQuery = filterState.pendingMangoQuery {
+                    print("🍋 [SearchView] Found pending Mango query: '\(pendingQuery)'")
+                    // Small delay to ensure tab navigation animation completes
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        viewModel.search(query: pendingQuery)
+                        // Clear the pending query after triggering search
+                        filterState.pendingMangoQuery = nil
+                        print("🍋 [SearchView] Triggered search for pending query and cleared it")
+                    }
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .mangoOpenMoviePage)) { notification in
                 // Auto-open movie page when Mango finds a single result
                 if let movieId = notification.userInfo?["movieId"] as? String {

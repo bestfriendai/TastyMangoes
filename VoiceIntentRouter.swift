@@ -278,10 +278,15 @@ enum VoiceIntentRouter {
                 print("🍋 Stored recommender '\(recommender)' in SearchFilterState for AddToListView")
             }
             
+            // Store pending query in SearchFilterState (reliable path for race condition fix)
+            SearchFilterState.shared.pendingMangoQuery = moviePhrase
+            print("🍋 Stored pending Mango query '\(moviePhrase)' in SearchFilterState")
+            
             // Mango speaks acknowledgment
             MangoSpeaker.shared.speak("Let me check on that for you.")
             
             // Post notification to trigger search (SearchViewModel will handle it)
+            // Keep notification for backward compatibility, but pendingMangoQuery is the reliable path
             NotificationCenter.default.post(
                 name: .mangoPerformMovieQuery,
                 object: moviePhrase

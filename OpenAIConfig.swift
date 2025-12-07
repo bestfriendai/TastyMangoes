@@ -1,8 +1,8 @@
 //  OpenAIConfig.swift
 //  Created on 2025-12-04 at 20:37 (America/Los_Angeles - Pacific Time)
 //  NOTE: Safe static config for OpenAI client. No secrets stored in Git.
-//  Updated by Claude on 2025-12-06 at 19:19 (America/Los_Angeles - Pacific Time)
-//  Changed to read API key from Secrets.xcconfig via Info.plist instead of environment variables
+//  Updated by Claude on 2025-12-06 at 21:20 (America/Los_Angeles - Pacific Time)
+//  Added trimmingCharacters to fix hidden whitespace in API key from xcconfig
 
 import Foundation
 
@@ -15,7 +15,7 @@ enum OpenAIConfig {
               !key.contains("your-") else {
             fatalError("OpenAI API Key not found. Did you set up Secrets.xcconfig?")
         }
-        return key
+        return key.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
     /// The default model used for classification
