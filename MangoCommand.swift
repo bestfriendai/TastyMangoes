@@ -75,16 +75,19 @@ final class MangoCommandParser {
         // - Simple names: "Sally recommends"
         // - Multi-word names: "The New York Times recommends"
         // - Patterns: "recommends", "suggested", "said to watch", "likes", "liked"
+        // - Reverse order: "Movie recommended by Name"
         
-        let patterns = [
+        let recommenderPatterns = [
             (pattern: #"^(.+?)\s+recommends\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
             (pattern: #"^(.+?)\s+suggested\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
             (pattern: #"^(.+?)\s+said\s+to\s+watch\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
             (pattern: #"^(.+?)\s+likes\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
-            (pattern: #"^(.+?)\s+liked\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2)
+            (pattern: #"^(.+?)\s+liked\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
+            // Reverse order: "Movie recommended by Name"
+            (pattern: #"^(.+?)\s+recommended\s+by\s+(.+)$"#, recommenderIndex: 2, movieIndex: 1)
         ]
         
-        for (pattern, recommenderIdx, movieIdx) in patterns {
+        for (pattern, recommenderIdx, movieIdx) in recommenderPatterns {
             let regex = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
             if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
                 if let recommenderRange = Range(match.range(at: recommenderIdx), in: text),
@@ -98,15 +101,51 @@ final class MangoCommandParser {
             }
         }
         
-        // Fallback: if no recommender pattern matched, try simple "add" pattern
+        // If no recommender pattern matched, try search command patterns
+        if movieTitle == nil {
+            let searchPatterns = [
+                #"^find\s+(.+)$"#,
+                #"^search\s+for\s+(.+)$"#,
+                #"^look\s+up\s+(.+)$"#
+            ]
+            
+            for pattern in searchPatterns {
+                let regex = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
+                    if let movieRange = Range(match.range(at: 1), in: text) {
+                        movieTitle = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
+                        break
+                    }
+                }
+            }
+        }
+        
+        // Try "the movie X" or "movie X" patterns
+        if movieTitle == nil {
+            let moviePrefixPatterns = [
+                #"^the\s+movie\s+(.+)$"#,
+                #"^movie\s+(.+)$"#
+            ]
+            
+            for pattern in moviePrefixPatterns {
+                let regex = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
+                    if let movieRange = Range(match.range(at: 1), in: text) {
+                        movieTitle = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
+                        break
+                    }
+                }
+            }
+        }
+        
+        // Fallback: if no pattern matched, try simple "add" pattern
         if movieTitle == nil {
             if let range = text.range(of: "add", options: .caseInsensitive) {
                 movieTitle = String(text[range.upperBound...]).trimmingCharacters(in: .whitespaces)
             }
         }
 
-        // Cleanup trailing filler words
-        movieTitle = movieTitle?.replacingOccurrences(of: "the movie", with: "", options: .caseInsensitive)
+        // Cleanup trailing filler words (only after extraction, don't strip legitimate title words)
         movieTitle = movieTitle?.replacingOccurrences(of: "to my watchlist", with: "", options: .caseInsensitive)
         movieTitle = movieTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         
@@ -116,6 +155,20 @@ final class MangoCommandParser {
         } else if let movie = movieTitle, !movie.isEmpty {
             return .movieSearch(query: movie, raw: text)
         } else {
+            // Bare movie title fallback: if utterance is 1-8 words and doesn't start with command words
+            let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let words = trimmedText.split(separator: " ").map { String($0) }
+            let wordCount = words.count
+            
+            // Command words that should NOT trigger bare title fallback
+            let commandWords = ["create", "sort", "delete", "remove", "move", "add", "find", "search", "look"]
+            let firstWord = words.first?.lowercased() ?? ""
+            
+            // If 1-8 words, doesn't start with command word, treat as movie search
+            if wordCount >= 1 && wordCount <= 8 && !commandWords.contains(firstWord) {
+                return .movieSearch(query: trimmedText, raw: text)
+            }
+            
             // No pattern matched - return unknown for LLM fallback
             return .unknown(raw: text)
         }
