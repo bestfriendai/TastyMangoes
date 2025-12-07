@@ -13,10 +13,19 @@ final class MangoSpeaker {
     private init() {}
     
     func speak(_ text: String) {
+        // Ensure audio session is active for playback
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️ [MangoSpeaker] Failed to configure audio session: \(error)")
+        }
+        
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = 0.47  // natural speaking rate
+        utterance.rate = 0.47
         synth.speak(utterance)
+        print("🗣 [MangoSpeaker] Speaking: '\(text)'")
     }
 }
 

@@ -1,8 +1,9 @@
 //  VoiceAnalyticsLogger.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude: 2025-12-06 at 21:55 (America/Los_Angeles - Pacific Time)
+//  Last modified by Claude: 2025-12-06 at 22:35 (America/Los_Angeles - Pacific Time)
 //  Notes: Added failure reason tracking (handler_result, result_count, error_message)
+//         Added markWatched case to mangoCommandTypeString
 
 import Foundation
 
@@ -138,6 +139,8 @@ class VoiceAnalyticsLogger {
             return "movie_search"
         case .createWatchlist:
             return "create_watchlist"
+        case .markWatched:
+            return "mark_watched"
         case .unknown:
             return "unknown"
         }

@@ -1,8 +1,9 @@
 //  VoiceIntentRouter.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 09:45 PST (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 20:26 (America/Los_Angeles - Pacific Time)
-//  Notes: Added handleSortListCommand - processes "sort this list by X" commands when invoked from WatchlistView. Added list context tracking (masterlist/customList) and sort notification system.
+//  Last modified by Claude: 2025-12-06 at 22:25 (America/Los_Angeles - Pacific Time)
+//  Notes: Added handleMarkWatchedCommand - processes "mark as watched/unwatched" commands
+//         when invoked from MoviePageView. Requires currentMovieId context.
 
 import Foundation
 
@@ -166,7 +167,23 @@ enum VoiceIntentRouter {
             return // Early return - no LLM call needed
         }
         
-        // Step 1.6: Handle "add this movie to <ListName>" command locally (no LLM needed)
+        // Step 1.6: Handle mark watched/unwatched command locally (no LLM needed)
+        // Only process if we have a current movie context (Mango invoked from MoviePageView)
+        if case .markWatched(let watched, _) = mangoCommand {
+            if let currentMovieId = getCurrentMovieId() {
+                await handleMarkWatchedCommand(watched: watched, movieId: currentMovieId)
+                // Don't clear movie context - user might want to do more actions
+                return // Early return - no LLM call needed
+            } else {
+                // No movie context - tell user they need to be on a movie page
+                await MainActor.run {
+                    MangoSpeaker.shared.speak("Please open a movie first, then tell me to mark it as watched.")
+                }
+                return
+            }
+        }
+        
+        // Step 1.7: Handle "add this movie to <ListName>" command locally (no LLM needed)
         // Only process if we have a current movie context (Mango invoked from MoviePageView)
         if let currentMovieId = getCurrentMovieId() {
             if await handleAddThisMovieToListCommand(transcript: text, currentMovieId: currentMovieId) {
@@ -176,7 +193,7 @@ enum VoiceIntentRouter {
             }
         }
         
-        // Step 1.7: Handle "sort this list by X" command locally (no LLM needed)
+        // Step 1.8: Handle "sort this list by X" command locally (no LLM needed)
         // Only process if we have a current list context (Mango invoked from WatchlistView)
         if let listContext = getCurrentListContext() {
             if await handleSortListCommand(transcript: text, listId: listContext.listId, listType: listContext.listType) {
@@ -325,6 +342,37 @@ enum VoiceIntentRouter {
                 userInfo: [
                     "listName": listName,
                     "listId": newWatchlist.id
+                ]
+            )
+        }
+    }
+    
+    /// Handle mark watched/unwatched command locally
+    private static func handleMarkWatchedCommand(watched: Bool, movieId: String) async {
+        let action = watched ? "watched" : "unwatched"
+        print("👁 [Mango] Marking movie \(movieId) as \(action)")
+        
+        await MainActor.run {
+            let watchlistManager = WatchlistManager.shared
+            
+            if watched {
+                watchlistManager.markAsWatched(movieId: movieId)
+            } else {
+                watchlistManager.markAsNotWatched(movieId: movieId)            }
+            
+            print("✅ [Mango] Marked movie \(movieId) as \(action)")
+            
+            // Speak confirmation
+            let confirmationText = watched ? "Marked as watched." : "Marked as unwatched."
+            MangoSpeaker.shared.speak(confirmationText)
+            
+            // Post notification for UI update
+            NotificationCenter.default.post(
+                name: NSNotification.Name("MangoMarkedWatched"),
+                object: nil,
+                userInfo: [
+                    "movieId": movieId,
+                    "watched": watched
                 ]
             )
         }
@@ -512,6 +560,5 @@ extension Notification.Name {
     static let mangoOpenMoviePage = Notification.Name("mangoOpenMoviePage")
     static let mangoPerformMovieQuery = Notification.Name("mangoPerformMovieQuery")
     static let mangoCreatedWatchlist = Notification.Name("MangoCreatedWatchlist")
+    static let mangoMarkedWatched = Notification.Name("MangoMarkedWatched")
 }
-
-

@@ -1,8 +1,9 @@
 //  MangoCommand.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 18:12 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 19:26 (America/Los_Angeles - Pacific Time)
-//  Notes: Added createWatchlist command parsing - detects "create a new list called X" patterns. Extracts list name and handles locally without LLM.
+//  Last modified by Claude: 2025-12-06 at 22:20 (America/Los_Angeles - Pacific Time)
+//  Notes: Added markWatched command - detects "mark as watched/unwatched" patterns.
+//         Requires currentMovieId context (Mango invoked from MoviePageView).
 
 import Foundation
 
@@ -10,11 +11,16 @@ enum MangoCommand {
     case recommenderSearch(recommender: String, movie: String, raw: String)
     case movieSearch(query: String, raw: String)
     case createWatchlist(listName: String, raw: String)
+    case markWatched(watched: Bool, raw: String)
     case unknown(raw: String)
     
     var raw: String {
         switch self {
-        case .recommenderSearch(_, _, let raw), .movieSearch(_, let raw), .createWatchlist(_, let raw), .unknown(let raw):
+        case .recommenderSearch(_, _, let raw),
+             .movieSearch(_, let raw),
+             .createWatchlist(_, let raw),
+             .markWatched(_, let raw),
+             .unknown(let raw):
             return raw
         }
     }
@@ -34,14 +40,14 @@ enum MangoCommand {
             return movie
         case .movieSearch(let query, _):
             return query
-        case .createWatchlist, .unknown:
+        case .createWatchlist, .markWatched, .unknown:
             return nil
         }
     }
     
     var isValid: Bool {
         switch self {
-        case .recommenderSearch, .movieSearch, .createWatchlist:
+        case .recommenderSearch, .movieSearch, .createWatchlist, .markWatched:
             return true
         case .unknown:
             return false
@@ -58,6 +64,11 @@ final class MangoCommandParser {
         // Check for create watchlist command first (before other patterns)
         if let listName = extractWatchlistName(from: text) {
             return .createWatchlist(listName: listName, raw: text)
+        }
+        
+        // Check for mark watched/unwatched command
+        if let watched = extractWatchedStatus(from: text) {
+            return .markWatched(watched: watched, raw: text)
         }
         
         // COMMON PATTERNS
@@ -161,7 +172,7 @@ final class MangoCommandParser {
             let wordCount = words.count
             
             // Command words that should NOT trigger bare title fallback
-            let commandWords = ["create", "sort", "delete", "remove", "move", "add", "find", "search", "look"]
+            let commandWords = ["create", "sort", "delete", "remove", "move", "add", "find", "search", "look", "mark", "watched", "unwatched"]
             let firstWord = words.first?.lowercased() ?? ""
             
             // If 1-8 words, doesn't start with command word, treat as movie search
@@ -172,6 +183,69 @@ final class MangoCommandParser {
             // No pattern matched - return unknown for LLM fallback
             return .unknown(raw: text)
         }
+    }
+    
+    /// Extract watched status from mark watched/unwatched commands
+    /// Returns true for "watched", false for "unwatched", nil if not a watched command
+    private func extractWatchedStatus(from text: String) -> Bool? {
+        let lower = text.lowercased()
+        
+        // Patterns for marking as WATCHED (returns true)
+        let watchedPatterns = [
+            "mark as watched",
+            "mark this as watched",
+            "mark it as watched",
+            // Speech recognition mishearings: "as" → "has"
+            "mark has watched",
+            "marked has watched",
+            "mark it has watched",
+            "i watched this",
+            "i've watched this",
+            "already watched",
+            "already seen this",
+            "i've seen this",
+            "i saw this",
+            "seen it",
+            "watched it",
+            "mark watched"
+        ]
+        
+        for pattern in watchedPatterns {
+            if lower.contains(pattern) {
+                return true
+            }
+        }
+        
+        // Patterns for marking as UNWATCHED (returns false)
+        let unwatchedPatterns = [
+            "mark as unwatched",
+            "mark this as unwatched",
+            "mark it as unwatched",
+            "haven't watched",
+            "havent watched",
+            "not watched",
+            "didn't watch",
+            "didnt watch",
+            "i did not watch this",
+            "i did not watch this movie",
+            "i didn't watch this",
+            "i didn't watch this movie",
+            "did not watch this",
+            "didn't watch this",
+            "haven't seen",
+            "havent seen",
+            "not seen",
+            "mark unwatched",
+            "unwatch"
+        ]
+        
+        for pattern in unwatchedPatterns {
+            if lower.contains(pattern) {
+                return false
+            }
+        }
+        
+        return nil
     }
     
     /// Extract watchlist name from create list commands
@@ -220,4 +294,3 @@ final class MangoCommandParser {
         return nil
     }
 }
-
