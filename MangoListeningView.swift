@@ -15,6 +15,7 @@ enum ListeningUIState {
 struct MangoListeningView: View {
     @ObservedObject private var speechRecognizer: SpeechRecognizer
     @Binding var isPresented: Bool
+    @Environment(\.dismiss) private var dismiss
     @State private var showTranscript: Bool = false
     @State private var hasReceivedFinalTranscript: Bool = false
     @State private var dismissTimer: Task<Void, Never>?
@@ -145,6 +146,7 @@ struct MangoListeningView: View {
         }
         .onAppear {
             print("🎤 MangoListeningView.onAppear - starting listening")
+            VoiceIntentRouter.resetActionCommandState()
             hasReceivedFinalTranscript = false
             dismissTimer?.cancel()
             dismissTimer = nil
@@ -318,6 +320,10 @@ struct MangoListeningView: View {
                     scheduleDismiss()
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoActionCommandCompleted)) { _ in
+            print("🎬 [MangoListeningView] Action command completed - dismissing without restart")
+            dismiss()
         }
     }
     
