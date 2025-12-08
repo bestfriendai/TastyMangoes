@@ -31,14 +31,20 @@ struct WatchlistDataSnapshot {
 @MainActor
 struct SupabaseWatchlistAdapter {
     static func fetchAllWatchlistDataForCurrentUser() async throws -> WatchlistDataSnapshot {
+        print("📋 [Watchlist] fetchAllWatchlistDataForCurrentUser called")
+        
         guard let userId = try await getCurrentUserId() else {
+            print("❌ [Watchlist] No user ID available - user not authenticated")
             throw SupabaseError.noSession
         }
+        
+        print("📋 [Watchlist] Fetching watchlists for user: \(userId)")
         
         let supabaseService = SupabaseService.shared
         
         // Fetch all watchlists for the user
         let watchlists = try await supabaseService.getUserWatchlists(userId: userId)
+        print("📋 [Watchlist] Found \(watchlists.count) watchlists in Supabase")
         
         // Build data structures
         var listMovies: [String: Set<String>] = [:]
@@ -247,28 +253,31 @@ struct SupabaseWatchlistAdapter {
             }
             
             // Add movie to masterlist watchlist
-            print("🔄 [SupabaseWatchlistAdapter] Adding movie \(movieId) to masterlist watchlist \(watchlistId)...")
+            print("📋 [Supabase] Inserting movie \(movieId) into watchlist \(watchlistId)")
             _ = try await supabaseService.addMovieToWatchlist(
                 watchlistId: watchlistId,
                 movieId: movieId,
                 recommenderName: recommenderName,
                 recommenderNotes: recommenderNotes
             )
-            print("✅ [SupabaseWatchlistAdapter] Successfully added movie \(movieId) to masterlist watchlist")
+            print("✅ [Supabase] Successfully inserted movie \(movieId) into watchlist \(watchlistId)")
             return
         }
         
         // Handle regular watchlists
         guard let watchlistId = UUID(uuidString: toListId) else {
+            print("❌ [Supabase] Invalid watchlist ID format: \(toListId)")
             throw SupabaseError.invalidResponse
         }
         
+        print("📋 [Supabase] Inserting movie \(movieId) into watchlist \(watchlistId)")
         _ = try await supabaseService.addMovieToWatchlist(
             watchlistId: watchlistId,
             movieId: movieId,
             recommenderName: recommenderName,
             recommenderNotes: recommenderNotes
         )
+        print("✅ [Supabase] Successfully inserted movie \(movieId) into watchlist \(watchlistId)")
     }
     
     static func removeMovie(
@@ -309,12 +318,19 @@ struct SupabaseWatchlistAdapter {
     }
     
     static func createWatchlist(name: String) async throws -> UUID {
+        print("📋 [Watchlist] Creating watchlist in Supabase: \(name)")
+        
         guard let userId = try await getCurrentUserId() else {
+            print("❌ [Watchlist] No user ID available - user not authenticated")
             throw SupabaseError.noSession
         }
         
+        print("📋 [Watchlist] Creating watchlist for user: \(userId)")
+        
         let supabaseService = SupabaseService.shared
         let watchlist = try await supabaseService.createWatchlist(userId: userId, name: name)
+        
+        print("📋 [Watchlist] Successfully created watchlist in Supabase: \(name) (ID: \(watchlist.id))")
         return watchlist.id
     }
     

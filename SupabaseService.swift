@@ -236,7 +236,10 @@ class SupabaseService: ObservableObject {
     // MARK: - Watchlist Operations
     
     func getUserWatchlists(userId: UUID) async throws -> [Watchlist] {
+        print("📋 [Watchlist] getUserWatchlists called for user: \(userId)")
+        
         guard let client = client else {
+            print("❌ [Watchlist] Supabase client not configured")
             throw SupabaseError.notConfigured
         }
         
@@ -249,11 +252,19 @@ class SupabaseService: ObservableObject {
             .execute()
             .value
         
+        print("📋 [Watchlist] Loaded \(response.count) watchlists from Supabase for user \(userId)")
+        for watchlist in response {
+            print("  📋 [Watchlist] - \(watchlist.name) (ID: \(watchlist.id))")
+        }
+        
         return response
     }
     
     func createWatchlist(userId: UUID, name: String) async throws -> Watchlist {
+        print("📋 [Watchlist] createWatchlist called: name=\(name), userId=\(userId)")
+        
         guard let client = client else {
+            print("❌ [Watchlist] Supabase client not configured")
             throw SupabaseError.notConfigured
         }
         
@@ -264,6 +275,7 @@ class SupabaseService: ObservableObject {
             sortOrder: 0
         )
         
+        print("📋 [Watchlist] Inserting watchlist into Supabase...")
         let response: Watchlist = try await client
             .from("watchlists")
             .insert(watchlist)
@@ -272,6 +284,7 @@ class SupabaseService: ObservableObject {
             .execute()
             .value
         
+        print("📋 [Watchlist] Successfully created watchlist in Supabase: \(name) (ID: \(response.id))")
         return response
     }
     
@@ -339,7 +352,10 @@ class SupabaseService: ObservableObject {
         recommenderName: String? = nil,
         recommenderNotes: String? = nil
     ) async throws -> WatchlistMovie {
+        print("📋 [Supabase] addMovieToWatchlist called: watchlistId=\(watchlistId), movieId=\(movieId), recommenderName=\(recommenderName ?? "nil")")
+        
         guard let client = client else {
+            print("❌ [Supabase] Client not configured")
             throw SupabaseError.notConfigured
         }
         
@@ -351,6 +367,7 @@ class SupabaseService: ObservableObject {
             recommenderNotes: recommenderNotes
         )
         
+        print("📋 [Supabase] Inserting into watchlist_movies table...")
         let response: WatchlistMovie = try await client
             .from("watchlist_movies")
             .insert(watchlistMovie)
@@ -359,6 +376,7 @@ class SupabaseService: ObservableObject {
             .execute()
             .value
         
+        print("✅ [Supabase] Successfully inserted movie \(movieId) into watchlist \(watchlistId)")
         return response
     }
     

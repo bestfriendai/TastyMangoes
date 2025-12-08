@@ -90,6 +90,7 @@ final class MangoCommandParser {
         
         let recommenderPatterns = [
             (pattern: #"^(.+?)\s+recommends\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
+            (pattern: #"^(.+?)\s+recommend\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2), // Singular "recommend"
             (pattern: #"^(.+?)\s+suggested\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
             (pattern: #"^(.+?)\s+said\s+to\s+watch\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
             (pattern: #"^(.+?)\s+likes\s+(.+)$"#, recommenderIndex: 1, movieIndex: 2),
@@ -98,6 +99,7 @@ final class MangoCommandParser {
             (pattern: #"^(.+?)\s+recommended\s+by\s+(.+)$"#, recommenderIndex: 2, movieIndex: 1)
         ]
         
+        var recommenderPatternMatched = false
         for (pattern, recommenderIdx, movieIdx) in recommenderPatterns {
             let regex = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
             if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
@@ -106,9 +108,57 @@ final class MangoCommandParser {
                     let rawRecommender = String(text[recommenderRange]).trimmingCharacters(in: .whitespaces)
                     // Normalize recommender name (e.g., "Kyo" -> "Keo", "hyatt" -> "Hayat")
                     recommender = RecommenderNormalizer.normalize(rawRecommender)
-                    movieTitle = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
+                    let extractedMovie = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
+                    
+                    // Even if recommender is nil (unknown name), still extract movie title
+                    // This handles cases like "Trying to recommend the movie China syndrome"
+                    // where speech recognition misheard the recommender name
+                    if !extractedMovie.isEmpty {
+                        movieTitle = extractedMovie
+                        recommenderPatternMatched = true
+                    }
                     break
                 }
+            }
+        }
+        
+        // If recommender pattern matched but recommender is nil, try to extract movie from "recommend/recommends [the movie] X" pattern
+        if recommenderPatternMatched && recommender == nil && movieTitle != nil {
+            // Try to extract just the movie title from patterns like:
+            // "recommend the movie X" -> "X"
+            // "recommends the movie X" -> "X"
+            // "recommend X" -> "X"
+            let recommendMoviePatterns = [
+                #"recommends?\s+(?:the\s+)?movie\s+(.+)$"#,
+                #"recommends?\s+(.+)$"#
+            ]
+            
+            for pattern in recommendMoviePatterns {
+                let regex = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
+                    if let movieRange = Range(match.range(at: 1), in: text) {
+                        let extracted = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
+                        if !extracted.isEmpty {
+                            movieTitle = extracted
+                            print("🍋 [MangoCommand] Extracted movie title from recommend pattern (no valid recommender): '\(extracted)'")
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Clean up "the movie" prefix from movieTitle if it was extracted from a recommender pattern
+        if recommenderPatternMatched, let movie = movieTitle {
+            // Remove "the movie" or "movie" prefix if present
+            let cleaned = movie.replacingOccurrences(
+                of: #"^(the\s+)?movie\s+"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            if !cleaned.isEmpty && cleaned != movie {
+                movieTitle = cleaned.trimmingCharacters(in: .whitespaces)
+                print("🍋 [MangoCommand] Cleaned 'the movie' prefix: '\(movie)' -> '\(movieTitle ?? "")'")
             }
         }
         
@@ -126,6 +176,30 @@ final class MangoCommandParser {
                     if let movieRange = Range(match.range(at: 1), in: text) {
                         movieTitle = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
                         break
+                    }
+                }
+            }
+        }
+        
+        // Try "recommend/recommends the movie X" patterns (when no recommender was found)
+        // This handles cases like "Trying to recommend the movie China syndrome"
+        // where speech recognition misheard the recommender name
+        if movieTitle == nil || (recommenderPatternMatched && recommender == nil) {
+            let recommendMoviePatterns = [
+                #".*?\s+recommends?\s+(?:the\s+)?movie\s+(.+)$"#, // "X recommends (the) movie Y"
+                #".*?\s+recommends?\s+(.+)$"# // "X recommends Y" (fallback)
+            ]
+            
+            for pattern in recommendMoviePatterns {
+                let regex = try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.count)) {
+                    if let movieRange = Range(match.range(at: 1), in: text) {
+                        let extracted = String(text[movieRange]).trimmingCharacters(in: .whitespaces)
+                        if !extracted.isEmpty {
+                            movieTitle = extracted
+                            print("🍋 [MangoCommand] Extracted movie from recommend pattern: '\(extracted)'")
+                            break
+                        }
                     }
                 }
             }

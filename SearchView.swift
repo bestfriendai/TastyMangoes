@@ -30,81 +30,78 @@ struct SearchView: View {
         filterState.appliedSelectedPlatforms.count + filterState.appliedSelectedGenres.count
     }
     
+    // Extract main content to help compiler type-check
+    @ViewBuilder
+    private var mainContent: some View {
+        if viewModel.searchQuery.isEmpty && !viewModel.hasSearched {
+            categoriesView
+        } else if let error = viewModel.error {
+            errorView(error: error)
+        } else if !viewModel.searchResults.isEmpty {
+            ZStack {
+                resultsListView
+                if viewModel.isSearching {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .padding(8)
+                                .background(Color.white.opacity(0.9))
+                                .cornerRadius(8)
+                                .shadow(radius: 2)
+                                .padding(.trailing, 20)
+                                .padding(.top, 8)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+        } else if viewModel.isSearching {
+            loadingView
+        } else if !viewModel.searchQuery.isEmpty && viewModel.hasSearched {
+            emptyStateView
+        } else {
+            categoriesView
+        }
+    }
+    
+    // Extract bottom button to help compiler
+    @ViewBuilder
+    private var bottomButton: some View {
+        if totalSelections > 0 || !viewModel.searchQuery.isEmpty {
+            VStack(spacing: 0) {
+                let buttonText = totalSelections > 0
+                    ? "Start Searching (\(totalSelections))"
+                    : "Start Searching"
+                Button(action: startSearching) {
+                    Text(buttonText)
+                        .font(.custom("Nunito-Bold", size: 16))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(hex: "#333333"))
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 16)
+                .background(Color.white)
+            }
+        } else {
+            Color.clear.frame(height: 0)
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Search Header
                 searchHeader
-                
-                // Content - Reordered to prevent flashing empty state
-                if viewModel.searchQuery.isEmpty && !viewModel.hasSearched {
-                    // Default: Show categories view when no search query and haven't searched
-                    categoriesView
-                } else if let error = viewModel.error {
-                    // Show error if there's one
-                    errorView(error: error)
-                } else if !viewModel.searchResults.isEmpty {
-                    // Show results - keep visible even while a new search is in progress
-                    ZStack {
-                        resultsListView
-                        
-                        // Subtle loading indicator overlay when searching with existing results
-                        if viewModel.isSearching {
-                            VStack {
-                                HStack {
-                                    Spacer()
-                                    ProgressView()
-                                        .padding(8)
-                                        .background(Color.white.opacity(0.9))
-                                        .cornerRadius(8)
-                                        .shadow(radius: 2)
-                                        .padding(.trailing, 20)
-                                        .padding(.top, 8)
-                                }
-                                Spacer()
-                            }
-                        }
-                    }
-                } else if viewModel.isSearching {
-                    // Only show full loading view when we have no results to display yet
-                    loadingView
-                } else if !viewModel.searchQuery.isEmpty && viewModel.hasSearched {
-                    // Only show empty state after search truly completes with no results
-                    emptyStateView
-                } else {
-                    // Fallback to categories
-                    categoriesView
-                }
+                mainContent
             }
             .background(Color(hex: "#fdfdfd"))
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Start Searching Button - show when selections > 0 OR search query is not empty
-                if totalSelections > 0 || !viewModel.searchQuery.isEmpty {
-                    VStack(spacing: 0) {
-                        Button(action: {
-                            startSearching()
-                        }) {
-                            // Show count if there are selections, otherwise just "Start Searching"
-                            let buttonText = totalSelections > 0
-                                ? "Start Searching (\(totalSelections))"
-                                : "Start Searching"
-                            Text(buttonText)
-                                .font(.custom("Nunito-Bold", size: 16))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .background(Color(hex: "#333333"))
-                                .cornerRadius(12)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                        .padding(.bottom, 16)
-                        .background(Color.white)
-                    }
-                } else {
-                    Color.clear.frame(height: 0)
-                }
+                bottomButton
             }
             .navigationDestination(isPresented: $navigateToResults) {
                 CategoryResultsView()
@@ -127,6 +124,19 @@ struct SearchView: View {
         }
         .sheet(isPresented: $showGenresSheet) {
             SearchGenresBottomSheet(isPresented: $showGenresSheet)
+        }
+        .onAppear {
+            // Check for pending Mango query when SearchView appears (fallback for race conditions)
+            if let pendingQuery = filterState.pendingMangoQuery, !pendingQuery.isEmpty {
+                print("🍋 [SearchView] onAppear - Found pending Mango query: '\(pendingQuery)'")
+                print("🍋 [SearchView] Triggering search for pending query")
+                viewModel.isMangoInitiatedSearch = true
+                viewModel.search(query: pendingQuery)
+                // Clear the pending query after processing
+                filterState.pendingMangoQuery = nil
+            } else {
+                print("🍋 [SearchView] onAppear - No pending Mango query")
+            }
         }
         .onChange(of: filterState.appliedSelectedPlatforms) { oldValue, newValue in
             // Re-search when applied filters change (only after "Show Results" is tapped)

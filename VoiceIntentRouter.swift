@@ -247,7 +247,7 @@ enum VoiceIntentRouter {
                         if let movie = intent.movieTitle, !movie.isEmpty,
                            let rawRecommender = intent.recommender, !rawRecommender.isEmpty {
                             // Normalize recommender name (e.g., "Kyo" -> "Keo", "hyatt" -> "Hayat")
-                            let recommender = RecommenderNormalizer.normalize(rawRecommender)
+                            let recommender = RecommenderNormalizer.normalize(rawRecommender) ?? rawRecommender.capitalized
                             finalCommand = .recommenderSearch(recommender: recommender, movie: movie, raw: text)
                             print("🤖 [LLM] Mapped to recommenderSearch: \(recommender) recommends \(movie)")
                         } else {
@@ -322,8 +322,16 @@ enum VoiceIntentRouter {
             // Mango speaks acknowledgment
             MangoSpeaker.shared.speak("Let me check on that for you.")
             
-            // Post notification to trigger search (SearchViewModel will handle it)
+            // Step 1: Navigate to Search tab first
+            print("🍋 Posting mangoNavigateToSearch notification to switch to Search tab")
+            NotificationCenter.default.post(
+                name: .mangoNavigateToSearch,
+                object: nil
+            )
+            
+            // Step 2: Post notification to trigger search (SearchViewModel will handle it)
             // Keep notification for backward compatibility, but pendingMangoQuery is the reliable path
+            print("🍋 Posting mangoPerformMovieQuery notification with query: '\(moviePhrase)'")
             NotificationCenter.default.post(
                 name: .mangoPerformMovieQuery,
                 object: moviePhrase
@@ -352,25 +360,47 @@ enum VoiceIntentRouter {
     private static func handleCreateWatchlistCommand(listName: String, rawText: String) async {
         print("📋 [Mango] Creating watchlist: '\(listName)'")
         
-        await MainActor.run {
-            // Create watchlist using existing WatchlistManager
-            let watchlistManager = WatchlistManager.shared
-            let newWatchlist = watchlistManager.createWatchlist(name: listName)
-            
+        let watchlistManager = WatchlistManager.shared
+        
+        // Create watchlist in Supabase
+        do {
+            let newWatchlist = try await watchlistManager.createWatchlistAsync(name: listName)
             print("✅ [Mango] Created watchlist: '\(newWatchlist.name)' (ID: \(newWatchlist.id))")
             
-            // Speak confirmation
-            MangoSpeaker.shared.speak("Created a new list called \(listName).")
-            
-            // Post notification for UI confirmation/toast
-            NotificationCenter.default.post(
-                name: NSNotification.Name("MangoCreatedWatchlist"),
-                object: nil,
-                userInfo: [
-                    "listName": listName,
-                    "listId": newWatchlist.id
-                ]
-            )
+            await MainActor.run {
+                // Speak confirmation
+                MangoSpeaker.shared.speak("Created a new list called \(listName).")
+                
+                // Post notification for UI confirmation/toast
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("MangoCreatedWatchlist"),
+                    object: nil,
+                    userInfo: [
+                        "listName": listName,
+                        "listId": newWatchlist.id
+                    ]
+                )
+            }
+        } catch {
+            print("❌ [Mango] Error creating watchlist: \(error)")
+            // Fallback to local-only creation
+            await MainActor.run {
+                let newWatchlist = watchlistManager.createWatchlist(name: listName)
+                print("⚠️ [Mango] Created watchlist locally only (Supabase sync failed): '\(newWatchlist.name)'")
+                
+                // Speak confirmation
+                MangoSpeaker.shared.speak("Created a new list called \(listName).")
+                
+                // Post notification for UI confirmation/toast
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("MangoCreatedWatchlist"),
+                    object: nil,
+                    userInfo: [
+                        "listName": listName,
+                        "listId": newWatchlist.id
+                    ]
+                )
+            }
         }
     }
     
@@ -603,10 +633,4 @@ enum VoiceIntentRouter {
     }
 }
 
-extension Notification.Name {
-    static let mangoNavigateToSearch = Notification.Name("mangoNavigateToSearch")
-    static let mangoOpenMoviePage = Notification.Name("mangoOpenMoviePage")
-    static let mangoPerformMovieQuery = Notification.Name("mangoPerformMovieQuery")
-    static let mangoCreatedWatchlist = Notification.Name("MangoCreatedWatchlist")
-    static let mangoMarkedWatched = Notification.Name("MangoMarkedWatched")
-}
+// Notification names are now defined in NotificationNames.swift

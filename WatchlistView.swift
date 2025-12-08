@@ -76,8 +76,15 @@ struct WatchlistView: View {
             .environmentObject(watchlistManager)
         }
         .onAppear {
-            loadLists()
-            loadMasterlistMovies()
+            print("📋 [WatchlistView] onAppear - syncing cache from Supabase...")
+            Task {
+                await watchlistManager.syncFromSupabase()
+                print("📋 [WatchlistView] Cache synced, loading lists and movies...")
+                await MainActor.run {
+                    loadLists()
+                    loadMasterlistMovies()
+                }
+            }
         }
         .onChange(of: watchlistManager.currentSortOption) { oldValue, newValue in
             // Reload lists when sort option changes (e.g., from YourListsView)
@@ -249,8 +256,13 @@ struct WatchlistView: View {
             // Other positions: List cards
             let listIndex = position - 1 // -1 because position 0 is "Create New"
             if listIndex < yourLists.count {
-                NavigationLink(destination: IndividualListView(listId: yourLists[listIndex].id, listName: yourLists[listIndex].name)) {
-                    SmallListCard(list: yourLists[listIndex])
+                let list = yourLists[listIndex]
+                // Use the list object directly to ensure correct navigation
+                NavigationLink(destination: IndividualListView(listId: list.id, listName: list.name)) {
+                    SmallListCard(list: list)
+                }
+                .onAppear {
+                    print("📋 [WatchlistView] Card at position \(position) (index \(listIndex)): \(list.name) (ID: \(list.id))")
                 }
             } else {
                 // Empty space
@@ -323,7 +335,16 @@ struct WatchlistView: View {
     private func loadLists() {
         // Load lists from WatchlistManager with current sort option
         // Use the shared sort option from WatchlistManager
-        yourLists = watchlistManager.getAllWatchlists(sortBy: watchlistManager.currentSortOption)
+        print("📋 [WatchlistView] Loading lists from cache...")
+        let allLists = watchlistManager.getAllWatchlists(sortBy: watchlistManager.currentSortOption)
+        // Filter out Masterlist by both ID and name (case-insensitive) as a safety measure
+        // This prevents any list named "Masterlist" from appearing in regular lists section
+        yourLists = allLists.filter { list in
+            let isMasterlistById = list.id == "masterlist" || list.id == "1"
+            let isMasterlistByName = list.name.lowercased() == "masterlist"
+            return !isMasterlistById && !isMasterlistByName
+        }
+        print("📋 [WatchlistView] Loaded \(yourLists.count) lists from cache (filtered out Masterlist)")
         loadMasterlistName()
     }
     
@@ -346,6 +367,7 @@ struct WatchlistView: View {
         Task {
             // Get movie IDs from masterlist
             let movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+            print("📋 [WatchlistView] Found \(movieIds.count) movies in masterlist cache")
             
             // Fetch movie cards from Supabase
             var fetchedMovies: [MasterlistMovie] = []

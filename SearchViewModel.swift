@@ -33,7 +33,7 @@ class SearchViewModel: ObservableObject {
     private var lastSearchedQuery: String = ""
     
     // Track if current search was initiated by Mango (for speech responses)
-    private var isMangoInitiatedSearch: Bool = false
+    var isMangoInitiatedSearch: Bool = false
     
     // Track last query for Mango speech responses
     var lastQuery: String? {
@@ -55,9 +55,18 @@ class SearchViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] note in
-            guard let query = note.object as? String else { return }
-            self?.isMangoInitiatedSearch = true
-            self?.search(query: query)
+            // Extract query from notification before async context
+            guard let query = note.object as? String else {
+                print("🍋 [SearchViewModel] mangoPerformMovieQuery notification received but no query string")
+                return
+            }
+            
+            // Execute on MainActor (closure is already on main queue, but ensure MainActor isolation)
+            MainActor.assumeIsolated {
+                print("🍋 [SearchViewModel] Received mangoPerformMovieQuery notification with query: '\(query)'")
+                self?.isMangoInitiatedSearch = true
+                self?.search(query: query)
+            }
         }
     }
     

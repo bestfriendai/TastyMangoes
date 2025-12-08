@@ -11,6 +11,8 @@ import SwiftUI
 struct TabBarView: View {
     @State private var selectedTab = 0   // Default to Home
     @ObservedObject private var filterState = SearchFilterState.shared
+    @StateObject private var mangoSpeechRecognizer = SpeechRecognizer()
+    @State private var showMangoListeningView = false
     
     // Computed property for selection count
     private var totalSelections: Int {
@@ -31,13 +33,23 @@ struct TabBarView: View {
             case 1:
                 SearchView()
             case 2:
-                // Placeholder for AI chat / Talk to Mango
+                // Talk to Mango - show background, listening view will be presented as fullScreenCover
                 Color(.systemBackground)
-                    .overlay(
-                        Text("Talk to Mango (Coming Soon)")
-                            .font(.title3)
-                            .foregroundColor(.gray)
-                    )
+                    .onAppear {
+                        // Automatically present MangoListeningView when tab 2 is selected
+                        if !showMangoListeningView {
+                            showMangoListeningView = true
+                        }
+                    }
+                    .onChange(of: selectedTab) { oldValue, newValue in
+                        // Dismiss listening view when switching away from tab 2
+                        if newValue != 2 {
+                            showMangoListeningView = false
+                        } else if oldValue != 2 {
+                            // Present when switching to tab 2 (only if coming from another tab)
+                            showMangoListeningView = true
+                        }
+                    }
             case 3:
                 WatchlistView()
             case 4:
@@ -52,17 +64,28 @@ struct TabBarView: View {
             // MARK: - Custom Tab Bar - anchored to bottom safe area
             // Only show when no selections are made
             if shouldShowTabBar {
-                CustomTabBar(selectedTab: $selectedTab)
+                CustomTabBar(selectedTab: $selectedTab, showMangoListeningView: $showMangoListeningView)
             } else {
                 Color.clear.frame(height: 0)
             }
         }
         .ignoresSafeArea(.keyboard)
+        .fullScreenCover(isPresented: $showMangoListeningView) {
+            MangoListeningView(
+                speechRecognizer: mangoSpeechRecognizer,
+                isPresented: $showMangoListeningView
+            )
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToSearch)) { _ in
+            print("🍋 [TabBarView] Received mangoNavigateToSearch notification - switching to Search tab")
+            selectedTab = 1
+        }
     }
 }
 
 struct CustomTabBar: View {
     @Binding var selectedTab: Int
+    @Binding var showMangoListeningView: Bool
     
     var body: some View {
         ZStack {
@@ -131,7 +154,9 @@ struct CustomTabBar: View {
                 Spacer()
                 
                 Button {
+                    // Switch to tab 2 and show listening view
                     selectedTab = 2
+                    showMangoListeningView = true
                 } label: {
                     ZStack {
                         // Prominent filled orange circular background with gradient

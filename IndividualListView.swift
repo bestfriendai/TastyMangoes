@@ -88,6 +88,20 @@ struct IndividualListView: View {
                 }
         }
         .onAppear {
+            print("📋 [IndividualListView] Loading movies for list: \(listName) (ID: \(listId))")
+            // Refresh cache from Supabase before loading to ensure we have latest data
+            Task {
+                print("📋 [IndividualListView] Syncing watchlist cache from Supabase...")
+                await watchlistManager.syncFromSupabase()
+                print("📋 [IndividualListView] Cache synced, loading movies...")
+                await MainActor.run {
+                    loadMovies()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("WatchlistManagerDidUpdate"))) { _ in
+            // Reload movies when watchlist manager updates
+            print("📋 [IndividualListView] WatchlistManagerDidUpdate notification received - reloading movies")
             loadMovies()
         }
     }
@@ -252,123 +266,46 @@ struct IndividualListView: View {
     private func loadMovies() {
         // Load movies for this list from watchlist manager
         let movieIds = watchlistManager.getMoviesInList(listId: listId)
+        print("📋 [IndividualListView] Found \(movieIds.count) movies in local cache for list \(listName)")
+        print("📋 [IndividualListView] Movie IDs: \(Array(movieIds).sorted())")
         
-        // For now, use mock data but filter by what's in the list
-        // In a real app, this would fetch movie details from an API
-        let allMovies = [
-            MasterlistMovie(
-                id: "1",
-                title: "Jurassic World: Reborn",
-                year: "2025",
-                genres: ["Action", "Sci-Fi"],
-                runtime: "2h 13m",
-                posterURL: nil,
-                tastyScore: 0.88,
-                aiScore: 5.5,
-                friendsCount: 3,
-                isWatched: false
-            ),
-            MasterlistMovie(
-                id: "2",
-                title: "Jurassic Park",
-                year: "1993",
-                genres: ["Action", "Sci-Fi"],
-                runtime: "2h 5m",
-                posterURL: nil,
-                tastyScore: 0.99,
-                aiScore: 7.2,
-                friendsCount: 3,
-                isWatched: false
-            ),
-            MasterlistMovie(
-                id: "3",
-                title: "Juror #2",
-                year: "2024",
-                genres: ["Thriller", "Drama"],
-                runtime: "1h 54min",
-                posterURL: nil,
-                tastyScore: 0.50,
-                aiScore: 3.4,
-                friendsCount: 3,
-                isWatched: false
-            ),
-            MasterlistMovie(
-                id: "4",
-                title: "Jurassic World: Dominion",
-                year: "2022",
-                genres: ["Action", "Sci-Fi"],
-                runtime: "1h 50m",
-                posterURL: nil,
-                tastyScore: 0.67,
-                aiScore: 6.8,
-                friendsCount: 3,
-                isWatched: false
-            ),
-            MasterlistMovie(
-                id: "5",
-                title: "Jurassic World",
-                year: "2015",
-                genres: ["Action", "Sci-Fi"],
-                runtime: "2h 20m",
-                posterURL: nil,
-                tastyScore: 0.95,
-                aiScore: 9.1,
-                friendsCount: 3,
-                isWatched: false
-            ),
-            MasterlistMovie(
-                id: "6",
-                title: "Jury Duty",
-                year: "2023",
-                genres: ["Comedy", "Thriller"],
-                runtime: "1h 40m",
-                posterURL: nil,
-                tastyScore: 0.75,
-                aiScore: 2.5,
-                friendsCount: 3,
-                isWatched: false
-            ),
-            MasterlistMovie(
-                id: "7",
-                title: "Jurassic Park III",
-                year: "2001",
-                genres: ["Action", "Sci-Fi"],
-                runtime: "1h 40m",
-                posterURL: nil,
-                tastyScore: 0.33,
-                aiScore: 0.8,
-                friendsCount: 3,
-                isWatched: false
-            ),
-            MasterlistMovie(
-                id: "8",
-                title: "Jurassic World: Fallen Kingdom",
-                year: "2018",
-                genres: ["Action", "Sci-Fi"],
-                runtime: "2h 8m",
-                posterURL: nil,
-                tastyScore: 0.24,
-                aiScore: 4.7,
-                friendsCount: 3,
-                isWatched: false
-            )
-        ]
-        
-        // Filter to only show movies in this list, and update watched status
-        movies = allMovies.filter { movieIds.contains($0.id) }.map { movie in
-            // Update watched status from watchlist manager
-            return MasterlistMovie(
-                id: movie.id,
-                title: movie.title,
-                year: movie.year,
-                genres: movie.genres,
-                runtime: movie.runtime,
-                posterURL: movie.posterURL,
-                tastyScore: movie.tastyScore,
-                aiScore: movie.aiScore,
-                friendsCount: movie.friendsCount,
-                isWatched: watchlistManager.isWatched(movieId: movie.id)
-            )
+        // Fetch real movie data from Supabase (not mock data)
+        Task {
+            var fetchedMovies: [MasterlistMovie] = []
+            
+            for movieId in movieIds {
+                print("📋 [IndividualListView] Fetching movie card for ID: \(movieId)")
+                do {
+                    // Try fetching from cache first
+                    if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: movieId) {
+                        let masterlistMovie = movieCard.toMasterlistMovie(
+                            isWatched: watchlistManager.isWatched(movieId: movieId),
+                            friendsCount: 0 // TODO: Implement friends count when available
+                        )
+                        fetchedMovies.append(masterlistMovie)
+                        print("✅ [IndividualListView] Loaded movie \(movieId) from cache")
+                    } else {
+                        // Fallback to get-movie-card function
+                        print("📋 [IndividualListView] Movie \(movieId) not in cache, fetching from get-movie-card...")
+                        let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                        let masterlistMovie = movieCard.toMasterlistMovie(
+                            isWatched: watchlistManager.isWatched(movieId: movieId),
+                            friendsCount: 0
+                        )
+                        fetchedMovies.append(masterlistMovie)
+                        print("✅ [IndividualListView] Loaded movie \(movieId) from get-movie-card")
+                    }
+                } catch {
+                    print("❌ [IndividualListView] Failed to fetch movie \(movieId): \(error)")
+                    print("❌ [IndividualListView] Error details: \(error.localizedDescription)")
+                    // Continue with other movies even if one fails
+                }
+            }
+            
+            await MainActor.run {
+                print("📋 [IndividualListView] Loaded \(fetchedMovies.count) movies from Supabase")
+                movies = fetchedMovies
+            }
         }
     }
     

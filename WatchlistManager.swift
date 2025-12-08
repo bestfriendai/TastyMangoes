@@ -7,6 +7,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Auth
 
 // MARK: - Watchlist Manager
 
@@ -185,8 +186,9 @@ class WatchlistManager: ObservableObject {
     
     // MARK: - List Management
     
-    /// Create a new watchlist
+    /// Create a new watchlist (local only - use createWatchlistAsync for Supabase sync)
     func createWatchlist(name: String) -> WatchlistItem {
+        print("📋 [Watchlist] Creating watchlist locally: \(name)")
         let listId = String(nextListId)
         nextListId += 1
         
@@ -203,6 +205,39 @@ class WatchlistManager: ObservableObject {
         // Notify observers that lists have changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
         
+        print("📋 [Watchlist] Created watchlist locally: \(name) (ID: \(listId))")
+        return watchlist
+    }
+    
+    /// Create a new watchlist and sync to Supabase
+    func createWatchlistAsync(name: String) async throws -> WatchlistItem {
+        print("📋 [Watchlist] Creating watchlist: \(name)")
+        
+        // Create in Supabase first
+        let supabaseWatchlistId = try await SupabaseWatchlistAdapter.createWatchlist(name: name)
+        print("📋 [Watchlist] Created watchlist in Supabase: \(name) (ID: \(supabaseWatchlistId.uuidString))")
+        
+        // Update local state with Supabase UUID
+        let listId = supabaseWatchlistId.uuidString
+        let watchlist = WatchlistItem(
+            id: listId,
+            name: name,
+            filmCount: 0,
+            thumbnailURL: nil
+        )
+        
+        watchlistMetadata[listId] = watchlist
+        listMovies[listId] = Set<String>() // Initialize empty set
+        
+        // Update nextListId to be higher than the UUID-based ID (if it's numeric)
+        if let numericId = Int(listId) {
+            nextListId = max(nextListId, numericId + 1)
+        }
+        
+        // Notify observers that lists have changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
+        print("📋 [Watchlist] Successfully created watchlist: \(name) (ID: \(listId))")
         return watchlist
     }
     
@@ -333,8 +368,18 @@ class WatchlistManager: ObservableObject {
     
     /// Sync watchlist data from Supabase
     func syncFromSupabase() async {
+        print("📋 [Watchlist] Starting sync from Supabase...")
+        
         do {
+            // Get current user ID for logging
+            if let userId = try? await SupabaseService.shared.getCurrentUser() {
+                print("📋 [Watchlist] Fetching watchlists for user: \(userId.id)")
+            }
+            
             let snapshot = try await SupabaseWatchlistAdapter.fetchAllWatchlistDataForCurrentUser()
+            
+            print("📋 [Watchlist] Loaded \(snapshot.watchlistMetadata.count) watchlists from Supabase")
+            print("📋 [Watchlist] Loaded \(snapshot.listMovies.values.reduce(0) { $0 + $1.count }) total movies across all lists")
             
             // Update all data structures
             listMovies = snapshot.listMovies
@@ -355,9 +400,10 @@ class WatchlistManager: ObservableObject {
             // Notify observers that lists have changed
             NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
             
-            print("✅ [WatchlistManager] Synced watchlist data from Supabase")
+            print("✅ [Watchlist] Synced watchlist data from Supabase - \(snapshot.watchlistMetadata.count) lists, nextListId: \(snapshot.nextListId)")
         } catch {
-            print("⚠️ [WatchlistManager] Failed to sync from Supabase: \(error.localizedDescription)")
+            print("❌ [Watchlist] Error syncing from Supabase: \(error)")
+            print("❌ [Watchlist] Error details: \(error.localizedDescription)")
         }
     }
     
