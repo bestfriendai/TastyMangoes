@@ -7,6 +7,14 @@
 import Foundation
 import Auth
 
+// MARK: - Movie Recommendation Data
+
+struct MovieRecommendationData {
+    let recommenderName: String?
+    let recommendedAt: Date?
+    let recommenderNotes: String?
+}
+
 // MARK: - Watchlist Data Snapshot
 
 struct WatchlistDataSnapshot {

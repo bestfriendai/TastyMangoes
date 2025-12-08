@@ -38,10 +38,6 @@ enum VoiceIntentRouter {
     private static var processedTranscripts: Set<String> = []
     private static let processedTranscriptsQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.processed")
     
-    // Track if an action command has completed (prevents processing additional transcripts)
-    private static var actionCommandCompleted = false
-    private static let actionCommandQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.actioncomplete")
-    
     // Current movie context - set when Mango is invoked from MoviePageView
     private static var currentMovieId: String? = nil
     private static let currentMovieIdQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.currentmovie")
@@ -54,12 +50,6 @@ enum VoiceIntentRouter {
     private static var currentListId: String? = nil
     private static var currentListType: ListType? = nil
     private static let currentListQueue = DispatchQueue(label: "com.tastymangoes.voiceintent.currentlist")
-    
-    /// Reset action command state (call when MangoListeningView appears)
-    static func resetActionCommandState() {
-        actionCommandQueue.sync { actionCommandCompleted = false }
-        print("🔄 [VoiceIntentRouter] Reset action command state")
-    }
     
     /// Set the current movie ID when Mango is invoked from MoviePageView
     static func setCurrentMovieId(_ movieId: String?) {
@@ -141,13 +131,6 @@ enum VoiceIntentRouter {
     
     /// Handle TalkToMango transcript - parse command and trigger search with LLM fallback
     static func handleTalkToMangoTranscript(_ text: String) async {
-        // Check if we already handled an action command this session
-        let alreadyCompleted = actionCommandQueue.sync { actionCommandCompleted }
-        if alreadyCompleted {
-            print("⚠️ [VoiceIntentRouter] Ignoring transcript after action command: '\(text)'")
-            return
-        }
-        
         // Prevent duplicate processing of the same transcript
         let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let alreadyProcessed = processedTranscriptsQueue.sync {
@@ -192,7 +175,27 @@ enum VoiceIntentRouter {
                 // Don't clear movie context - user might want to do more actions
                 return // Early return - no LLM call needed
             } else {
-                // No movie context - tell user they need to be on a movie page
+                // No movie context - log parse error
+                let eventId = await VoiceAnalyticsLogger.shared.log(
+                    utterance: text,
+                    mangoCommand: mangoCommand,
+                    llmUsed: false,
+                    finalCommand: mangoCommand,
+                    llmIntent: nil,
+                    llmError: nil
+                )
+                
+                // Update event with parse error
+                if let eventId = eventId {
+                    Task {
+                        await VoiceAnalyticsLogger.updateVoiceEventResult(
+                            eventId: eventId,
+                            result: "parse_error",
+                            errorMessage: "No movie context - user not on movie page"
+                        )
+                    }
+                }
+                
                 await MainActor.run {
                     MangoSpeaker.shared.speak("Please open a movie first, then tell me to mark it as watched.")
                 }
@@ -327,8 +330,8 @@ enum VoiceIntentRouter {
             )
         }
         
-        // Step 4: Log the interaction
-        await VoiceAnalyticsLogger.shared.log(
+        // Step 4: Log the interaction and store eventId for result tracking
+        let eventId = await VoiceAnalyticsLogger.shared.log(
             utterance: text,
             mangoCommand: mangoCommand,
             llmUsed: llmUsed,
@@ -336,6 +339,13 @@ enum VoiceIntentRouter {
             llmIntent: llmIntent,
             llmError: llmError
         )
+        
+        // Store eventId in SearchFilterState so SearchViewModel can update it after search completes
+        if let eventId = eventId {
+            await MainActor.run {
+                SearchFilterState.shared.pendingVoiceEventId = eventId
+            }
+        }
     }
     
     /// Handle create watchlist command locally
@@ -369,6 +379,16 @@ enum VoiceIntentRouter {
         let action = watched ? "watched" : "unwatched"
         print("👁 [Mango] Marking movie \(movieId) as \(action)")
         
+        // Log the command first to get eventId
+        let eventId = await VoiceAnalyticsLogger.shared.log(
+            utterance: "mark as \(action)",
+            mangoCommand: .markWatched(watched: watched, raw: "mark as \(action)"),
+            llmUsed: false,
+            finalCommand: .markWatched(watched: watched, raw: "mark as \(action)"),
+            llmIntent: nil,
+            llmError: nil
+        )
+        
         await MainActor.run {
             let watchlistManager = WatchlistManager.shared
             
@@ -379,15 +399,9 @@ enum VoiceIntentRouter {
             
             print("✅ [Mango] Marked movie \(movieId) as \(action)")
             
-            // Set flag to prevent processing additional transcripts after action command
-            actionCommandQueue.sync { actionCommandCompleted = true }
-            
             // Speak confirmation
             let confirmationText = watched ? "Marked as watched." : "Marked as unwatched."
             MangoSpeaker.shared.speak(confirmationText)
-            
-            // Dismiss the listening view after action command
-            NotificationCenter.default.post(name: .mangoActionCommandCompleted, object: nil)
             
             // Post notification for UI update
             NotificationCenter.default.post(
@@ -398,6 +412,17 @@ enum VoiceIntentRouter {
                     "watched": watched
                 ]
             )
+        }
+        
+        // Update voice event with success result
+        if let eventId = eventId {
+            Task {
+                await VoiceAnalyticsLogger.updateVoiceEventResult(
+                    eventId: eventId,
+                    result: "success",
+                    resultCount: 1
+                )
+            }
         }
     }
     
@@ -584,5 +609,4 @@ extension Notification.Name {
     static let mangoPerformMovieQuery = Notification.Name("mangoPerformMovieQuery")
     static let mangoCreatedWatchlist = Notification.Name("MangoCreatedWatchlist")
     static let mangoMarkedWatched = Notification.Name("MangoMarkedWatched")
-    static let mangoActionCommandCompleted = Notification.Name("MangoActionCommandCompleted")
 }

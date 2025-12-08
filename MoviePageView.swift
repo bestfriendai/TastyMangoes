@@ -1,12 +1,11 @@
 //  MoviePageView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:37 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-06 at 10:55 (America/Los_Angeles - Pacific Time)
-//  Notes: Updated Mango Tips text to "Mangoes tips coming soon". Added "More Info" section with Google search button at bottom of movie page. Removed all "See All" buttons from Cast & Crew, Reviews, Movie Clips, and Photos sections. Added photo expansion with zoom capability - tapping a photo opens full-screen zoomable view with pinch-to-zoom and double-tap to zoom.
+//  Last modified: 2025-11-17 at 03:13 (America/Los_Angeles - Pacific Time)
+//  Notes: Fixed horizontal tab bar pinning - tab bar now properly pins below header when scrolling up, and scrolls to sections when tabs are clicked. Updated MenuBottomSheet to match Figma design with correct review icon. Changed AddToListView presentation from fullScreenCover to sheet to match bottom sheet design. Added navigation to list functionality from toast notifications. Replaced deprecated NavigationLink with fullScreenCover for navigating to IndividualListView.
 
 import SwiftUI
 import UIKit
-import SafariServices
 
 // MARK: - Sections
 
@@ -44,15 +43,6 @@ struct MoviePageView: View {
     @State private var navigateToListId: String? = nil
     @State private var navigateToListName: String? = nil
     @State private var navigateToSearch = false
-    @State private var showGoogleSearch = false
-    @State private var selectedPhoto: TMDBImage? = nil
-    @State private var selectedPhotoIndex: Int = 0
-    
-    // Mango button state
-    @StateObject private var speechRecognizer = SpeechRecognizer()
-    @State private var showListeningView = false
-    @State private var isListening = false
-    @State private var animatePulse = false
     
     // Computed property to determine if pinned tab bar should show
     private var shouldShowPinnedTabBar: Bool {
@@ -300,9 +290,6 @@ struct MoviePageView: View {
                                     )
                                 }
                             )
-                        
-                        // More Info section
-                        moreInfoSection(movie)
                     }
                     .padding(.top, 24)
                     .padding(.horizontal, 16)
@@ -313,25 +300,15 @@ struct MoviePageView: View {
             .background(Color(hex: "#fdfdfd"))
             .navigationBarBackButtonHidden(true)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Pinned Bottom Action Buttons with Mango button
-                ZStack(alignment: .bottom) {
-                    VStack(spacing: 0) {
-                        Divider()
-                            .background(Color(hex: "#f3f3f3"))
-                        
-                        bottomActionButtons
-                            .padding(.top, 16)
-                            .padding(.bottom, 8)
-                            .background(Color.white)
-                    }
+                // Pinned Bottom Action Buttons
+                VStack(spacing: 0) {
+                    Divider()
+                        .background(Color(hex: "#f3f3f3"))
                     
-                    // Mango button - centered horizontally and overlapping buttons by ~18% (10px of 56px)
-                    HStack {
-                        Spacer()
-                        mangoButton
-                        Spacer()
-                    }
-                    .offset(y: -10) // Overlap by ~10px (18% of 56px button height)
+                    bottomActionButtons
+                        .padding(.top, 16)
+                        .padding(.bottom, 8)
+                        .background(Color.white)
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -407,17 +384,10 @@ struct MoviePageView: View {
             .sheet(isPresented: $showFriendsBottomSheet) {
                 FriendsBottomSheet(isPresented: $showFriendsBottomSheet)
             }
-            .fullScreenCover(isPresented: $showTrailerPlayer) {
-                if let movie = viewModel.movie,
-                   let videoId = movie.trailerYoutubeId,
-                   !videoId.isEmpty {
-                    TrailerPlayerSheet(
-                        videoId: videoId,
-                        movieTitle: movie.title,
-                        onDismiss: {
-                            showTrailerPlayer = false
-                        }
-                    )
+            .sheet(isPresented: $showTrailerPlayer) {
+                if let movie = viewModel.movie {
+                    let videoId = movie.trailerYoutubeId ?? ""
+                    TrailerPlayerSheet(videoId: videoId, movieTitle: movie.title)
                 }
             }
             .fullScreenCover(isPresented: $showIndividualList) {
@@ -427,32 +397,6 @@ struct MoviePageView: View {
                             .environmentObject(WatchlistManager.shared)
                     }
                 }
-            }
-            .fullScreenCover(isPresented: $showGoogleSearch) {
-                if let movie = viewModel.movie {
-                    GoogleSearchSheet(
-                        movieTitle: movie.title,
-                        movieYear: movie.releaseYear,
-                        onDismiss: {
-                            showGoogleSearch = false
-                        }
-                    )
-                }
-            }
-            .fullScreenCover(item: $selectedPhoto) { photo in
-                PhotoZoomView(
-                    images: Array(viewModel.movieImages.prefix(5)),
-                    currentIndex: selectedPhotoIndex,
-                    onDismiss: {
-                        selectedPhoto = nil
-                    },
-                    onPhotoChanged: { newIndex in
-                        // Only update the index, don't change selectedPhoto to avoid dismissal
-                        if newIndex >= 0 && newIndex < viewModel.movieImages.prefix(5).count {
-                            selectedPhotoIndex = newIndex
-                        }
-                    }
-                )
             }
             .onAppear {
                 scrollProxy = proxy
@@ -781,9 +725,16 @@ struct MoviePageView: View {
                 )
                 .cornerRadius(9999)
                 
-                Text("Mangoes tips coming soon")
-                    .font(.custom("Inter-Regular", size: 14))
-                    .foregroundColor(Color(hex: "#333333"))
+                HStack(spacing: 0) {
+                    Text("You've been into courtroom dramas lately, and your friends loved this one — Juror #2 might be your next binge. It's smart, tense, and full... ")
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#333333"))
+                    Text("Read More")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#b56900"))
+                        .underline()
+                }
+                .lineLimit(2)
             }
             
             // Watch On / Liked By cards (wired from Figma: CHANGE_TO → Expanded states)
@@ -975,6 +926,14 @@ struct MoviePageView: View {
                 }
                 
                 Spacer()
+                
+                Text("See All")
+                    .font(.custom("Inter-SemiBold", size: 14))
+                    .foregroundColor(Color(hex: "#FEA500"))
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "#FEA500"))
             }
             
             // Horizontal scrolling cast cards
@@ -1062,6 +1021,14 @@ struct MoviePageView: View {
                 }
                 
                 Spacer()
+                
+                Text("See All")
+                    .font(.custom("Inter-SemiBold", size: 14))
+                    .foregroundColor(Color(hex: "#FEA500"))
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "#FEA500"))
             }
             
             // Filter tabs
@@ -1312,6 +1279,16 @@ struct MoviePageView: View {
                 }
                 
                 Spacer()
+                
+                if !viewModel.movieVideos.isEmpty {
+                    Text("See All")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                }
             }
             
             // Horizontal scrolling movie clips
@@ -1350,17 +1327,24 @@ struct MoviePageView: View {
                 }
                 
                 Spacer()
+                
+                if !viewModel.movieImages.isEmpty {
+                    Text("See All")
+                        .font(.custom("Inter-SemiBold", size: 14))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#FEA500"))
+                }
             }
             
             // Horizontal scrolling photos
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     if !viewModel.movieImages.isEmpty {
-                        ForEach(Array(viewModel.movieImages.prefix(5).enumerated()), id: \.element.id) { index, image in
-                            MoviePagePhotoCard(image: image) {
-                                selectedPhoto = image
-                                selectedPhotoIndex = index
-                            }
+                        ForEach(viewModel.movieImages.prefix(5)) { image in
+                            MoviePagePhotoCard(image: image)
                         }
                     } else {
                         // Show loading placeholders while images are being fetched
@@ -1372,34 +1356,6 @@ struct MoviePageView: View {
                 .padding(.horizontal, 16)
             }
             .padding(.horizontal, -16)
-        }
-    }
-    
-    // MARK: - More Info Section
-    
-    private func moreInfoSection(_ movie: MovieDetail) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color(hex: "#FEA500"))
-                    .frame(width: 6, height: 6)
-                
-                Text("More Info")
-                    .font(.custom("Nunito-Bold", size: 20))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
-            }
-            
-            Button(action: {
-                showGoogleSearch = true
-            }) {
-                Text("Google")
-                    .font(.custom("Inter-SemiBold", size: 16))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color(hex: "#4285F4"))
-                    .cornerRadius(8)
-            }
         }
     }
     
@@ -1457,88 +1413,6 @@ struct MoviePageView: View {
         .padding(.horizontal, 16)
     }
     
-    // MARK: - Mango Button
-    
-    private var mangoButton: some View {
-        Button {
-            // Present listening view - same behavior as tab bar Mango
-            if !showListeningView {
-                print("🎤 User tapped TalkToMango button on MoviePageView")
-                // Set current movie context so "add this movie" commands work
-                VoiceIntentRouter.setCurrentMovieId(movieId)
-                showListeningView = true
-            } else {
-                print("⚠️ TalkToMango button tapped but view already showing - ignoring")
-            }
-        } label: {
-            ZStack {
-                // Prominent filled orange circular background with gradient
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(hex: "#FFA500"),
-                                Color(hex: "#FF8C00")
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 56, height: 56)
-                    .overlay(
-                        // Border with white opacity
-                        Circle()
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                            .frame(width: 56, height: 56)
-                    )
-                    .overlay(
-                        // Inner shadow/glow effect
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.4),
-                                        Color.clear
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .center
-                                )
-                            )
-                            .frame(width: 56, height: 56)
-                            .blendMode(.overlay)
-                    )
-                
-                // White mango logo icon inside the circle (matches Figma)
-                MangoLogoIcon(size: 28, color: .white)
-            }
-            .scaleEffect(animatePulse ? 1.06 : 1.0)
-            .shadow(
-                color: Color(hex: "#FFA500").opacity(animatePulse ? 0.6 : 0.4),
-                radius: animatePulse ? 16 : 12,
-                x: 0,
-                y: 4
-            )
-            .animation(
-                .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                value: animatePulse
-            )
-        }
-        .onAppear {
-            // Start pulse animation when button appears
-            animatePulse = true
-        }
-        .fullScreenCover(isPresented: $showListeningView) {
-            MangoListeningView(
-                speechRecognizer: speechRecognizer,
-                isPresented: $showListeningView
-            )
-            .onDisappear {
-                // Clear current movie context when listening view is dismissed
-                VoiceIntentRouter.setCurrentMovieId(nil)
-            }
-        }
-    }
-    
     // MARK: - Helper Functions
     
     // MARK: - Crew Position Data Structure
@@ -1551,63 +1425,69 @@ struct MoviePageView: View {
     private func getCrewPositions(from movie: MovieDetail) -> [CrewPosition] {
         guard let crew = movie.crew, !crew.isEmpty else { return [] }
         
-        // Define the specific roles we want to display (in order)
-        let targetRoles = [
-            "Director",
-            "Writer",
-            "Screenplay",
-            "Original Music Composer"
-        ]
-        
-        // Group crew by job title (keeping original job names, not normalized)
+        // Group crew by job title
         var positions: [String: [String]] = [:]
         
         for member in crew {
-            let job = normalizeJobTitleForDisplay(member.job)
-            // Only include if it's one of our target roles
-            if targetRoles.contains(job) {
-                if positions[job] == nil {
-                    positions[job] = []
-                }
-                positions[job]?.append(member.name)
+            let job = normalizeJobTitle(member.job)
+            if positions[job] == nil {
+                positions[job] = []
             }
+            positions[job]?.append(member.name)
         }
         
-        // Sort positions by target order (only include roles that exist)
-        let sortedPositions = targetRoles.compactMap { role -> CrewPosition? in
-            guard let names = positions[role], !names.isEmpty else {
-                return nil // Skip roles that don't exist
+        // Define priority order for display
+        let priorityOrder = [
+            "Director",
+            "Writer",
+            "Screenplay",
+            "Producer",
+            "Director of Photography",
+            "Cinematography",
+            "Composer",
+            "Original Music Composer",
+            "Music",
+            "Editor",
+            "Production Design",
+            "Costume Design",
+            "Makeup",
+            "Sound",
+            "Visual Effects"
+        ]
+        
+        // Sort positions by priority, then alphabetically
+        let sortedPositions = positions.sorted { first, second in
+            let firstIndex = priorityOrder.firstIndex(of: first.key) ?? Int.max
+            let secondIndex = priorityOrder.firstIndex(of: second.key) ?? Int.max
+            
+            if firstIndex != secondIndex {
+                return firstIndex < secondIndex
             }
-            return CrewPosition(
-                id: role,
-                job: role,
+            return first.key < second.key
+        }
+        
+        // Convert to CrewPosition array
+        return sortedPositions.map { job, names in
+            CrewPosition(
+                id: job,
+                job: job,
                 names: names.joined(separator: ", ")
             )
         }
-        
-        return sortedPositions
     }
     
-    private func normalizeJobTitleForDisplay(_ job: String) -> String {
+    private func normalizeJobTitle(_ job: String) -> String {
         // Normalize job titles for consistent display
-        // Keep "Screenplay" and "Original Music Composer" separate from other roles
-        let jobLower = job.lowercased()
         let normalized: String
-        
-        switch jobLower {
-        case "writer", "story":
+        switch job.lowercased() {
+        case "screenplay", "writer", "story":
             normalized = "Writer"
-        case "screenplay":
-            normalized = "Screenplay" // Keep separate from Writer
         case "director of photography", "cinematography":
             normalized = "Director of Photography"
-        case "original music composer":
-            normalized = "Original Music Composer" // Keep as-is
-        case "music", "composer":
-            // Normalize generic "Music" or "Composer" to "Original Music Composer"
-            normalized = "Original Music Composer"
+        case "original music composer", "music":
+            normalized = "Composer"
         default:
-            normalized = job // Keep original if not matched
+            normalized = job
         }
         return normalized
     }
@@ -1915,48 +1795,40 @@ private struct MovieClipCard: View {
 
 private struct MoviePagePhotoCard: View {
     let image: TMDBImage
-    let onTap: () -> Void
     
     var body: some View {
-        Button(action: onTap) {
-            AsyncImage(url: image.imageURL) { phase in
-                Group {
-                    switch phase {
-                    case .empty:
-                        // Loading placeholder
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(hex: "#E0E0E0"))
-                            .frame(width: 140, height: 210)
-                            .overlay(
-                                ProgressView()
-                            )
-                    case .success(let loadedImage):
-                        loadedImage
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 140, height: 210)
-                            .clipped()
-                            .cornerRadius(8)
-                    case .failure:
-                        // Error placeholder
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(hex: "#E0E0E0"))
-                            .frame(width: 140, height: 210)
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .foregroundColor(Color(hex: "#999999"))
-                            )
-                    @unknown default:
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(hex: "#E0E0E0"))
-                            .frame(width: 140, height: 210)
-                    }
-                }
+        AsyncImage(url: image.imageURL) { phase in
+            switch phase {
+            case .empty:
+                // Loading placeholder
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+                    .overlay(
+                        ProgressView()
+                    )
+            case .success(let loadedImage):
+                loadedImage
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 140, height: 210)
+                    .clipped()
+                    .cornerRadius(8)
+            case .failure:
+                // Error placeholder
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(Color(hex: "#999999"))
+                    )
+            @unknown default:
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#E0E0E0"))
+                    .frame(width: 140, height: 210)
             }
         }
-        .buttonStyle(PlainButtonStyle())
-        .frame(width: 140, height: 210)
-        .contentShape(Rectangle())
     }
 }
 
@@ -2168,476 +2040,6 @@ fileprivate struct TabBarPositionKey: PreferenceKey {
     
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
-    }
-}
-
-// MARK: - Google Search Sheet
-
-struct GoogleSearchSheet: UIViewControllerRepresentable {
-    let movieTitle: String
-    let movieYear: String?
-    let onDismiss: () -> Void
-    
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        // Construct Google search URL
-        var searchQuery = movieTitle
-        if let year = movieYear, !year.isEmpty {
-            searchQuery += " \(year) movie"
-        } else {
-            searchQuery += " movie"
-        }
-        
-        // URL encode the query
-        let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
-        let googleURL = URL(string: "https://www.google.com/search?q=\(encodedQuery)")!
-        
-        let config = SFSafariViewController.Configuration()
-        config.entersReaderIfAvailable = false
-        config.barCollapsingEnabled = false
-        
-        let safariVC = SFSafariViewController(url: googleURL, configuration: config)
-        
-        // Configure appearance
-        if #available(iOS 26.0, *) {
-            // Use new API if available in future iOS versions
-        } else {
-            safariVC.preferredBarTintColor = UIColor(hex: "#1a1a1a")
-            safariVC.preferredControlTintColor = .white
-        }
-        
-        // Set delegate to handle dismissal
-        safariVC.delegate = context.coordinator
-        
-        return safariVC
-    }
-    
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
-        // No updates needed
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onDismiss: onDismiss)
-    }
-    
-    class Coordinator: NSObject, SFSafariViewControllerDelegate {
-        let onDismiss: () -> Void
-        
-        init(onDismiss: @escaping () -> Void) {
-            self.onDismiss = onDismiss
-        }
-        
-        func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
-            onDismiss()
-        }
-    }
-}
-
-// MARK: - Photo Zoom View
-
-struct PhotoZoomView: View {
-    let images: [TMDBImage]
-    let currentIndex: Int
-    let onDismiss: () -> Void
-    let onPhotoChanged: (Int) -> Void
-    
-    @State private var currentImageIndex: Int
-    @State private var dragOffset: CGFloat = 0
-    @State private var isDragging = false
-    
-    init(images: [TMDBImage], currentIndex: Int, onDismiss: @escaping () -> Void, onPhotoChanged: @escaping (Int) -> Void) {
-        self.images = images
-        self.currentIndex = currentIndex
-        self.onDismiss = onDismiss
-        self.onPhotoChanged = onPhotoChanged
-        _currentImageIndex = State(initialValue: currentIndex)
-    }
-    
-    var currentImage: TMDBImage? {
-        guard currentImageIndex >= 0 && currentImageIndex < images.count else { return nil }
-        return images[currentImageIndex]
-    }
-    
-    var body: some View {
-        ZStack {
-            // Black background
-            Color.black
-                .ignoresSafeArea()
-            
-            if let image = currentImage {
-                // Zoomable image using UIKit wrapper
-                ZoomableImageView(imageURL: image.originalImageURL ?? image.imageURL)
-                    .offset(x: dragOffset)
-                    .opacity(isDragging ? 0.7 : 1.0)
-            }
-            
-            // Close button
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-                    .padding(.top, 16)
-                    .padding(.trailing, 16)
-                }
-                Spacer()
-            }
-            
-            // Photo counter (optional - shows "1 of 5")
-            if images.count > 1 {
-                VStack {
-                    HStack {
-                        Text("\(currentImageIndex + 1) of \(images.count)")
-                            .font(.custom("Inter-Regular", size: 14))
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(12)
-                            .padding(.top, 16)
-                            .padding(.leading, 16)
-                        Spacer()
-                    }
-                    Spacer()
-                }
-            }
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 20)
-                .onChanged { value in
-                    // Only respond to horizontal drags and when not zoomed
-                    if abs(value.translation.width) > abs(value.translation.height) * 2 {
-                        isDragging = true
-                        dragOffset = value.translation.width
-                    }
-                }
-                .onEnded { value in
-                    isDragging = false
-                    let threshold: CGFloat = 80
-                    
-                    // Only allow swipe navigation if it's a clear horizontal swipe
-                    if abs(value.translation.width) > threshold && abs(value.translation.width) > abs(value.translation.height) * 2 {
-                        if value.translation.width > 0 {
-                            // Swipe right - go to previous photo
-                            if currentImageIndex > 0 {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    currentImageIndex -= 1
-                                    onPhotoChanged(currentImageIndex)
-                                }
-                            } else {
-                                // Bounce back if at first image
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    dragOffset = 0
-                                }
-                            }
-                        } else {
-                            // Swipe left - go to next photo
-                            if currentImageIndex < images.count - 1 {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    currentImageIndex += 1
-                                    onPhotoChanged(currentImageIndex)
-                                }
-                            } else {
-                                // Bounce back if at last image
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    dragOffset = 0
-                                }
-                            }
-                        }
-                    } else {
-                        // Reset offset if swipe wasn't strong enough
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            dragOffset = 0
-                        }
-                    }
-                }
-        )
-        .onChange(of: currentIndex) { oldValue, newValue in
-            currentImageIndex = newValue
-        }
-    }
-}
-
-// MARK: - Zoomable Image View (UIKit wrapper)
-
-struct ZoomableImageView: UIViewControllerRepresentable {
-    let imageURL: URL?
-    
-    func makeUIViewController(context: Context) -> ZoomableImageViewController {
-        let controller = ZoomableImageViewController()
-        controller.imageURL = imageURL
-        return controller
-    }
-    
-    func updateUIViewController(_ uiViewController: ZoomableImageViewController, context: Context) {
-        // Reset zoom and load new image when URL changes
-        if uiViewController.imageURL != imageURL {
-            uiViewController.imageURL = imageURL
-            uiViewController.resetZoom()
-            if let url = imageURL {
-                Task { @MainActor in
-                    await uiViewController.loadImage(from: url)
-                }
-            }
-        }
-    }
-}
-
-class ZoomableImageViewController: UIViewController {
-    var imageURL: URL?
-    private var scrollView: UIScrollView!
-    private var imageView: UIImageView!
-    
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return .portrait
-    }
-    
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-        return .portrait
-    }
-    
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        
-        view.backgroundColor = .black
-        
-        // Setup scroll view
-        scrollView = UIScrollView()
-        scrollView.delegate = self
-        scrollView.minimumZoomScale = 1.0
-        scrollView.maximumZoomScale = 4.0
-        scrollView.showsHorizontalScrollIndicator = false
-        scrollView.showsVerticalScrollIndicator = false
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(scrollView)
-        
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
-        
-        // Setup image view
-        imageView = UIImageView()
-        imageView.contentMode = .scaleAspectFit
-        imageView.clipsToBounds = true
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.addSubview(imageView)
-        
-        // Load image
-        if let url = imageURL {
-            Task { @MainActor in
-                await loadImage(from: url)
-            }
-        }
-        
-        // Double tap to zoom
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        view.addGestureRecognizer(doubleTap)
-    }
-    
-    @MainActor
-    func loadImage(from url: URL) async {
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            if let image = UIImage(data: data) {
-                // Fix image orientation to ensure it displays correctly
-                let orientedImage = image.fixedOrientation()
-                imageView.image = orientedImage
-                DispatchQueue.main.async {
-                    self.updateImageViewConstraints()
-                }
-            }
-        } catch {
-            print("Failed to load image: \(error)")
-        }
-    }
-    
-    private func updateImageViewConstraints() {
-        guard let image = imageView.image, scrollView.bounds.width > 0, scrollView.bounds.height > 0 else { return }
-        
-        // Remove existing constraints
-        NSLayoutConstraint.deactivate(imageView.constraints)
-        imageView.removeFromSuperview()
-        scrollView.addSubview(imageView)
-        
-        let imageSize = image.size
-        let viewSize = scrollView.bounds.size
-        
-        let widthScale = viewSize.width / imageSize.width
-        let heightScale = viewSize.height / imageSize.height
-        let minScale = min(widthScale, heightScale)
-        
-        let scaledWidth = imageSize.width * minScale
-        let scaledHeight = imageSize.height * minScale
-        
-        // Set frame directly for better control - center it initially
-        let boundsSize = scrollView.bounds.size
-        var imageFrame = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
-        
-        // Center horizontally if image is smaller than bounds
-        if scaledWidth < boundsSize.width {
-            imageFrame.origin.x = (boundsSize.width - scaledWidth) / 2
-        }
-        
-        // Center vertically if image is smaller than bounds
-        if scaledHeight < boundsSize.height {
-            imageFrame.origin.y = (boundsSize.height - scaledHeight) / 2
-        }
-        
-        imageView.frame = imageFrame
-        imageView.translatesAutoresizingMaskIntoConstraints = true
-        
-        // Set content size to match image size (not bounds size)
-        scrollView.contentSize = CGSize(width: scaledWidth, height: scaledHeight)
-        scrollView.zoomScale = scrollView.minimumZoomScale
-        
-        // Reset content offset
-        scrollView.contentOffset = .zero
-        
-        // Force layout
-        view.layoutIfNeeded()
-        scrollView.layoutIfNeeded()
-        
-        // Ensure proper centering
-        scrollViewDidZoom(scrollView)
-    }
-    
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        if imageView.image != nil {
-            updateImageViewConstraints()
-        }
-    }
-    
-    func resetZoom() {
-        scrollView.setZoomScale(scrollView.minimumZoomScale, animated: false)
-        scrollView.contentOffset = .zero
-    }
-    
-    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-        if scrollView.zoomScale > scrollView.minimumZoomScale {
-            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
-        } else {
-            let point = gesture.location(in: imageView)
-            let zoomScale = scrollView.maximumZoomScale
-            let zoomRect = CGRect(
-                x: point.x - scrollView.bounds.width / (2 * zoomScale),
-                y: point.y - scrollView.bounds.height / (2 * zoomScale),
-                width: scrollView.bounds.width / zoomScale,
-                height: scrollView.bounds.height / zoomScale
-            )
-            scrollView.zoom(to: zoomRect, animated: true)
-        }
-    }
-}
-
-extension ZoomableImageViewController: UIScrollViewDelegate {
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        return imageView
-    }
-    
-    func scrollViewDidZoom(_ scrollView: UIScrollView) {
-        // Center the image view when zooming or when content size changes
-        let boundsSize = scrollView.bounds.size
-        var frameToCenter = imageView.frame
-        
-        // Horizontally center if image is smaller than bounds
-        if frameToCenter.size.width < boundsSize.width {
-            frameToCenter.origin.x = (boundsSize.width - frameToCenter.size.width) / 2
-        } else {
-            frameToCenter.origin.x = 0
-        }
-        
-        // Vertically center if image is smaller than bounds
-        if frameToCenter.size.height < boundsSize.height {
-            frameToCenter.origin.y = (boundsSize.height - frameToCenter.size.height) / 2
-        } else {
-            frameToCenter.origin.y = 0
-        }
-        
-        imageView.frame = frameToCenter
-    }
-}
-
-// MARK: - UIImage Extension for Orientation Fix
-
-extension UIImage {
-    func fixedOrientation() -> UIImage {
-        // If the image is already correctly oriented, return it
-        if imageOrientation == .up {
-            return self
-        }
-        
-        // Calculate the proper transformation
-        var transform = CGAffineTransform.identity
-        
-        switch imageOrientation {
-        case .down, .downMirrored:
-            transform = transform.translatedBy(x: size.width, y: size.height)
-            transform = transform.rotated(by: .pi)
-        case .left, .leftMirrored:
-            transform = transform.translatedBy(x: size.width, y: 0)
-            transform = transform.rotated(by: .pi / 2)
-        case .right, .rightMirrored:
-            transform = transform.translatedBy(x: 0, y: size.height)
-            transform = transform.rotated(by: -.pi / 2)
-        default:
-            break
-        }
-        
-        switch imageOrientation {
-        case .upMirrored, .downMirrored:
-            transform = transform.translatedBy(x: size.width, y: 0)
-            transform = transform.scaledBy(x: -1, y: 1)
-        case .leftMirrored, .rightMirrored:
-            transform = transform.translatedBy(x: size.height, y: 0)
-            transform = transform.scaledBy(x: -1, y: 1)
-        default:
-            break
-        }
-        
-        // Create a new image context
-        guard let cgImage = self.cgImage,
-              let colorSpace = cgImage.colorSpace else {
-            return self
-        }
-        
-        let ctx = CGContext(
-            data: nil,
-            width: Int(size.width),
-            height: Int(size.height),
-            bitsPerComponent: cgImage.bitsPerComponent,
-            bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: cgImage.bitmapInfo.rawValue
-        )
-        
-        guard let context = ctx else {
-            return self
-        }
-        
-        context.concatenate(transform)
-        
-        switch imageOrientation {
-        case .left, .leftMirrored, .right, .rightMirrored:
-            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size.height, height: size.width))
-        default:
-            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size.width, height: size.height))
-        }
-        
-        guard let cgimg = context.makeImage() else {
-            return self
-        }
-        
-        return UIImage(cgImage: cgimg)
     }
 }
 

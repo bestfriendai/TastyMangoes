@@ -123,43 +123,6 @@ struct MovieDetail: Codable, Identifiable {
     }
 }
 
-// MARK: - Helper Extension
-
-extension MovieDetail {
-    /// Creates a copy of MovieDetail with updated crew
-    func withCrew(_ crew: [CrewMember]?) -> MovieDetail {
-        MovieDetail(
-            id: self.id,
-            title: self.title,
-            originalTitle: self.originalTitle,
-            overview: self.overview,
-            releaseDate: self.releaseDate,
-            posterPath: self.posterPath,
-            backdropPath: self.backdropPath,
-            runtime: self.runtime,
-            genres: self.genres,
-            director: self.director,
-            rating: self.rating,
-            tastyScore: self.tastyScore,
-            aiScore: self.aiScore,
-            criticsScore: self.criticsScore,
-            audienceScore: self.audienceScore,
-            trailerURL: self.trailerURL,
-            trailerYoutubeId: self.trailerYoutubeId,
-            trailerDuration: self.trailerDuration,
-            cast: self.cast,
-            crew: crew,
-            budget: self.budget,
-            revenue: self.revenue,
-            tagline: self.tagline,
-            status: self.status,
-            voteAverage: self.voteAverage,
-            voteCount: self.voteCount,
-            popularity: self.popularity
-        )
-    }
-}
-
 // MARK: - Supporting Models
 
 struct Genre: Codable, Identifiable {

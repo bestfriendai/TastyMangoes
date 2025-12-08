@@ -1,8 +1,8 @@
 //  ManageListBottomSheet.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-17 at 02:27 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-05 at 19:54 (America/Los_Angeles - Pacific Time)
-//  Notes: Added onDeleteComplete callback to DeleteListBottomSheet to dismiss ManageListBottomSheet after deletion, returning user to main watchlist view.
+//  Last modified: 2025-11-17 at 03:44 (America/Los_Angeles - Pacific Time)
+//  Notes: Created Manage List bottom sheet with Edit, Manage, Duplicate List, and Delete options matching Figma design. Implemented Edit, Manage, and Duplicate functionality. Fixed deprecated NavigationLink by using fullScreenCover for navigation.
 
 import SwiftUI
 
@@ -85,11 +85,7 @@ struct ManageListBottomSheet: View {
             DeleteListBottomSheet(
                 isPresented: $showDeleteConfirmation,
                 listId: listId,
-                listName: listName,
-                onDeleteComplete: {
-                    // Dismiss the ManageListBottomSheet after deletion
-                    dismiss()
-                }
+                listName: listName
             )
             .environmentObject(watchlistManager)
         }

@@ -4,8 +4,10 @@
 //  Last modified by Claude: 2025-12-06 at 22:35 (America/Los_Angeles - Pacific Time)
 //  Notes: Added failure reason tracking (handler_result, result_count, error_message)
 //         Added markWatched case to mangoCommandTypeString
+//         Added updateVoiceEventResult method and modified log to return UUID
 
 import Foundation
+import Supabase
 
 /// Result of handling a voice command
 enum VoiceHandlerResult: String {
@@ -20,12 +22,31 @@ enum VoiceHandlerResult: String {
 class VoiceAnalyticsLogger {
     static let shared = VoiceAnalyticsLogger()
     
-    private init() {}
+    var supabaseClient: SupabaseClient?
+    
+    private init() {
+        setupSupabaseClient()
+    }
+    
+    private func setupSupabaseClient() {
+        guard let url = URL(string: SupabaseConfig.supabaseURL),
+              !SupabaseConfig.supabaseAnonKey.isEmpty else {
+            print("⚠️ [VoiceAnalytics] Supabase not configured. Voice event logging disabled.")
+            return
+        }
+        
+        self.supabaseClient = SupabaseClient(
+            supabaseURL: url,
+            supabaseKey: SupabaseConfig.supabaseAnonKey
+        )
+    }
     
     // Track if we've seen a 404 (function not deployed) to avoid spam
     private var hasSeen404 = false
     
     /// Log a voice interaction event (initial parse phase)
+    /// Returns the UUID of the created event, or nil if logging failed
+    @discardableResult
     func log(
         utterance: String,
         mangoCommand: MangoCommand,
@@ -36,97 +57,125 @@ class VoiceAnalyticsLogger {
         handlerResult: VoiceHandlerResult? = nil,
         resultCount: Int? = nil,
         errorMessage: String? = nil
-    ) async {
+    ) async -> UUID? {
+        guard let client = supabaseClient else {
+            print("⚠️ [VoiceAnalytics] Supabase client not available, skipping log")
+            return nil
+        }
+        
+        let eventId = UUID()
+        
         // Don't block UI - fire and forget
         Task {
             do {
-                let event = VoiceEventLog(
+                // Get current user ID if available
+                var userId: UUID? = nil
+                if let user = try? await SupabaseService.shared.getCurrentUser() {
+                    userId = user.id
+                }
+                
+                // Create a Codable struct for the insert
+                struct VoiceEventInsert: Codable {
+                    let id: String
+                    let user_id: String?
+                    let utterance: String
+                    let mango_command_type: String
+                    let mango_command_raw: String
+                    let mango_command_movie_title: String?
+                    let mango_command_recommender: String?
+                    let llm_used: Bool
+                    let final_command_type: String
+                    let final_command_raw: String
+                    let final_command_movie_title: String?
+                    let final_command_recommender: String?
+                    let llm_intent: String?
+                    let llm_movie_title: String?
+                    let llm_recommender: String?
+                    let llm_error: String?
+                    let handler_result: String?
+                    let result_count: Int?
+                    let error_message: String?
+                }
+                
+                let eventData = VoiceEventInsert(
+                    id: eventId.uuidString,
+                    user_id: userId?.uuidString,
                     utterance: utterance,
-                    mangoCommandType: mangoCommandTypeString(mangoCommand),
-                    mangoCommandRaw: mangoCommand.raw,
-                    mangoCommandMovieTitle: mangoCommand.movieTitle,
-                    mangoCommandRecommender: mangoCommand.recommender,
-                    llmUsed: llmUsed,
-                    finalCommandType: mangoCommandTypeString(finalCommand),
-                    finalCommandRaw: finalCommand.raw,
-                    finalCommandMovieTitle: finalCommand.movieTitle,
-                    finalCommandRecommender: finalCommand.recommender,
-                    llmIntent: llmIntent?.intent,
-                    llmMovieTitle: llmIntent?.movieTitle,
-                    llmRecommender: llmIntent?.recommender,
-                    llmError: llmError?.localizedDescription,
-                    handlerResult: handlerResult?.rawValue,
-                    resultCount: resultCount,
-                    errorMessage: errorMessage
+                    mango_command_type: mangoCommandTypeString(mangoCommand),
+                    mango_command_raw: mangoCommand.raw,
+                    mango_command_movie_title: mangoCommand.movieTitle,
+                    mango_command_recommender: mangoCommand.recommender,
+                    llm_used: llmUsed,
+                    final_command_type: mangoCommandTypeString(finalCommand),
+                    final_command_raw: finalCommand.raw,
+                    final_command_movie_title: finalCommand.movieTitle,
+                    final_command_recommender: finalCommand.recommender,
+                    llm_intent: llmIntent?.intent,
+                    llm_movie_title: llmIntent?.movieTitle,
+                    llm_recommender: llmIntent?.recommender,
+                    llm_error: llmError?.localizedDescription,
+                    handler_result: handlerResult?.rawValue,
+                    result_count: resultCount,
+                    error_message: errorMessage
                 )
                 
-                try await SupabaseService.shared.logVoiceEvent(event)
-                print("📊 [VoiceAnalytics] Logged voice event to Supabase")
-            } catch SupabaseError.functionNotFound {
-                if !hasSeen404 {
-                    print("⚠️ [VoiceAnalytics] log-voice-event function not found (404). Skipping analytics logging for this session.")
-                    hasSeen404 = true
-                }
+                try await client
+                    .from("voice_utterance_events")
+                    .insert(eventData)
+                    .execute()
+                
+                print("📊 [VoiceAnalytics] Logged voice event \(eventId) to Supabase")
             } catch {
                 print("⚠️ [VoiceAnalytics] Failed to log voice event: \(error.localizedDescription)")
             }
         }
+        
+        return eventId
     }
     
-    /// Log search result after search completes (called from SearchViewModel)
-    func logSearchResult(
-        query: String,
-        resultCount: Int,
-        error: Error? = nil
+    // Note: logSearchResult method removed - use updateVoiceEventResult instead
+    
+    /// Updates a voice event with its handler result
+    /// - Parameters:
+    ///   - eventId: The UUID of the voice event to update
+    ///   - result: One of: "success", "no_results", "ambiguous", "network_error", "parse_error"
+    ///   - resultCount: Number of results (for searches)
+    ///   - errorMessage: Optional error details
+    static func updateVoiceEventResult(
+        eventId: UUID,
+        result: String,
+        resultCount: Int? = nil,
+        errorMessage: String? = nil
     ) async {
-        // Determine handler result
-        let handlerResult: VoiceHandlerResult
-        let errorMessage: String?
-        
-        if let error = error {
-            handlerResult = .networkError
-            errorMessage = error.localizedDescription
-        } else if resultCount == 0 {
-            handlerResult = .noResults
-            errorMessage = nil
-        } else if resultCount >= 10 {
-            handlerResult = .ambiguous
-            errorMessage = nil
-        } else {
-            handlerResult = .success
-            errorMessage = nil
+        guard let client = shared.supabaseClient else {
+            print("⚠️ [VoiceAnalytics] Supabase client not available, skipping update")
+            return
         }
-        
-        print("📊 [VoiceAnalytics] Search result: \(handlerResult.rawValue) (\(resultCount) results)")
         
         Task {
             do {
-                let event = VoiceEventLog(
-                    utterance: query,
-                    mangoCommandType: "movie_search",
-                    mangoCommandRaw: query,
-                    mangoCommandMovieTitle: query,
-                    mangoCommandRecommender: nil,
-                    llmUsed: false,
-                    finalCommandType: "search_result",
-                    finalCommandRaw: query,
-                    finalCommandMovieTitle: query,
-                    finalCommandRecommender: nil,
-                    llmIntent: nil,
-                    llmMovieTitle: nil,
-                    llmRecommender: nil,
-                    llmError: nil,
-                    handlerResult: handlerResult.rawValue,
-                    resultCount: resultCount,
-                    errorMessage: errorMessage
+                // Create a Codable struct for the update
+                struct VoiceEventUpdate: Codable {
+                    let handler_result: String
+                    let result_count: Int?
+                    let error_message: String?
+                }
+                
+                let updateData = VoiceEventUpdate(
+                    handler_result: result,
+                    result_count: resultCount,
+                    error_message: errorMessage
                 )
                 
-                try await SupabaseService.shared.logVoiceEvent(event)
-                print("📊 [VoiceAnalytics] Logged search result to Supabase")
-            } catch SupabaseError.functionNotFound {
-                // Already logged warning, silently skip
+                try await client
+                    .from("voice_utterance_events")
+                    .update(updateData)
+                    .eq("id", value: eventId.uuidString)
+                    .execute()
+                
+                print("✅ [VoiceAnalytics] Updated event \(eventId) with result: \(result)")
             } catch {
-                print("⚠️ [VoiceAnalytics] Failed to log search result: \(error.localizedDescription)")
+                print("❌ [VoiceAnalytics] Failed to update event result: \(error)")
             }
         }
     }

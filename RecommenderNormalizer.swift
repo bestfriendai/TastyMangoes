@@ -1,66 +1,94 @@
 //  RecommenderNormalizer.swift
 //  Created automatically by Cursor Assistant
-//  Created on: 2025-12-06 at 17:38 (America/Los_Angeles - Pacific Time)
-//  Notes: Normalizes recommender names from voice input using alias lookup table
+//  Created on: 2025-01-15 at 14:30 (America/Los_Angeles - Pacific Time)
+//  Notes: Normalizes recommender names from speech recognition, handling common mishearings and variations
 
 import Foundation
 
 struct RecommenderNormalizer {
     
-    /// Maps lowercase aliases to canonical names
-    private static let aliases: [String: String] = [
-        // Keo
+    /// Known recommenders and their variations/mishearings
+    private static let recommenderMappings: [String: String] = [
+        // Keo variations
         "keo": "Keo",
-        "kia": "Keo",
         "kio": "Keo",
+        "geo": "Keo",
+        "ceo": "Keo",
+        "theo": "Keo",
+        "leo": "Keo",
         "keyo": "Keo",
-        "key oh": "Keo",
+        "kyro": "Keo",
+        "cairo": "Keo",
+        "keyhole": "Keo",
         "kayo": "Keo",
-        "kyo": "Keo",
+        "ko": "Keo",
+        "key oh": "Keo",
+        "key-oh": "Keo",
         
-        // Kailan
+        // Kailan variations
         "kailan": "Kailan",
-        "kylan": "Kailan",
-        "kaelyn": "Kailan",
+        "kaylan": "Kailan",
         "kailyn": "Kailan",
         "cailin": "Kailan",
+        "caitlin": "Kailan",
+        "kalen": "Kailan",
         "kaylen": "Kailan",
-        "kay lan": "Kailan",
+        "kylan": "Kailan",
+        "kaylon": "Kailan",
+        "ki-lan": "Kailan",
+        "kai-lan": "Kailan",
+        "kai lan": "Kailan",
+        "island": "Kailan",  // Apple sometimes hears "Kailan" as "island"
+        "Highland": "Kailan",
+        "kyle and": "Kailan",
+        "kyle in": "Kailan",
         
-        // Hayat
+        // Hayat variations
         "hayat": "Hayat",
         "hyatt": "Hayat",
-        "hi yat": "Hayat",
-        "hayot": "Hayat",
-        "hi-yat": "Hayat",
-        
-        // Publications
-        "wsj": "The Wall Street Journal",
-        "wall street journal": "The Wall Street Journal",
-        "the wall street journal": "The Wall Street Journal",
-        "nyt": "The New York Times",
-        "nytimes": "The New York Times",
-        "new york times": "The New York Times",
-        "the new york times": "The New York Times"
+        "high at": "Hayat",
+        "hi at": "Hayat",
+        "ayat": "Hayat",
+        "hey yacht": "Hayat",
+        "hi yacht": "Hayat",
     ]
     
-    /// Normalize a recommender name from voice input
-    /// - Parameter raw: The raw recommender name from speech-to-text
-    /// - Returns: Canonical spelling if found in aliases, otherwise title-cased input
-    static func normalize(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lowercased = trimmed.lowercased()
+    /// Attempts to normalize a recommender name from speech input
+    /// - Parameter input: The raw speech recognition text
+    /// - Returns: The normalized recommender name, or nil if no match found
+    static func normalize(_ input: String) -> String? {
+        let lowercased = input.lowercased().trimmingCharacters(in: .whitespaces)
         
-        // Check alias table first
-        if let canonical = aliases[lowercased] {
-            return canonical
+        // Direct lookup
+        if let match = recommenderMappings[lowercased] {
+            return match
         }
         
-        // Fallback: title-case each word
-        return trimmed
-            .split(separator: " ")
-            .map { $0.capitalized }
-            .joined(separator: " ")
+        // Check if input contains any known variation
+        for (variation, normalized) in recommenderMappings {
+            if lowercased.contains(variation) {
+                return normalized
+            }
+        }
+        
+        // No match found - return original with capitalization
+        // This allows for new recommenders not in the mapping
+        if !input.isEmpty {
+            return input.capitalized
+        }
+        
+        return nil
+    }
+    
+    /// Checks if the input matches a known recommender
+    static func isKnownRecommender(_ input: String) -> Bool {
+        let lowercased = input.lowercased().trimmingCharacters(in: .whitespaces)
+        return recommenderMappings[lowercased] != nil || 
+               recommenderMappings.values.map({ $0.lowercased() }).contains(lowercased)
+    }
+    
+    /// Returns all known recommender names (normalized)
+    static var knownRecommenders: [String] {
+        Array(Set(recommenderMappings.values)).sorted()
     }
 }
-

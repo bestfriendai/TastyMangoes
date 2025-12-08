@@ -4,39 +4,26 @@
 //  Originally created by Cursor Assistant on 2025-11-14
 //  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
 //  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
-//  Modified by Cursor Assistant on 2025-12-03 at 09:39 PST
-//  Modified by Claude on 2025-12-06 at 22:05 (America/Los_Angeles - Pacific Time)
 //
 //  Changes made by Claude (2025-12-02):
 //  - Reordered content logic to keep previous results visible while searching
-//  - Only show loading view when there are no results to display yet
+//  - Only show loading view when there are no results to display
 //  - Only show empty state after search truly completes with no results
 //  - This prevents the distracting flash of "Oops! No movies found" while typing
-//
-//  Changes made by Cursor Assistant (2025-12-03):
-//  - Fixed mic button to show instant UI feedback (shows .requesting state immediately)
-//  - Updated overlay to show ListeningIndicator for both .requesting and .listening states
-//  - Added proper stopListening reason tracking
-//  - Added explicit search trigger when recording finishes (onChange of state to .processing)
-//  - Added debug logging for transcript changes and search queries
-//
-//  Changes made by Claude (2025-12-06):
-//  - Added isMangoInitiated: true to pendingMangoQuery search call for voice analytics
 
 import SwiftUI
 
 struct SearchView: View {
-    @ObservedObject private var viewModel = SearchViewModel.shared
+    @StateObject private var viewModel = SearchViewModel()
     // Use @ObservedObject for singleton to avoid recreating state
     @ObservedObject private var filterState = SearchFilterState.shared
+    @StateObject private var speechRecognizer = SpeechRecognizer()
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
     @State private var showGenresSheet = false
     @State private var navigateToResults = false
     @State private var selectedFilterType: SearchFiltersBottomSheet.FilterType? = nil
     @FocusState private var isSearchFocused: Bool  // Added by Claude for keyboard management
-    @State private var autoOpenMovieId: String? = nil  // For auto-opening single result from Mango
-    @State private var showAutoOpenMovie = false  // Controls fullScreenCover for auto-open
     
     // Computed property for selection count (use applied filters for display)
     private var totalSelections: Int {
@@ -90,46 +77,6 @@ struct SearchView: View {
                 }
             }
             .background(Color(hex: "#fdfdfd"))
-            .onAppear {
-                // Check for pending Mango query (race condition fix)
-                // This ensures queries aren't lost if notification fires before SearchView is ready
-                if let pendingQuery = filterState.pendingMangoQuery {
-                    print("🍋 [SearchView] Found pending Mango query: '\(pendingQuery)'")
-                    // Small delay to ensure tab navigation animation completes
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        viewModel.search(query: pendingQuery, isMangoInitiated: true)
-                        // Clear the pending query after triggering search
-                        filterState.pendingMangoQuery = nil
-                        print("🍋 [SearchView] Triggered search for pending query and cleared it")
-                    }
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .mangoOpenMoviePage)) { notification in
-                // Auto-open movie page when Mango finds a single result
-                if let movieId = notification.userInfo?["movieId"] as? String {
-                    autoOpenMovieId = movieId
-                    showAutoOpenMovie = true
-                }
-            }
-            .onChange(of: viewModel.searchResults) { oldResults, newResults in
-                // Mango speaks when search results update (only when search is complete)
-                guard let query = viewModel.lastQuery, !viewModel.isSearching else { return }
-                
-                if newResults.isEmpty {
-                    MangoSpeaker.shared.speak("I couldn't find anything for \(query).")
-                } else if newResults.count == 1 {
-                    MangoSpeaker.shared.speak("I found one movie for \(query).")
-                } else {
-                    MangoSpeaker.shared.speak("I found \(newResults.count) matches for \(query).")
-                }
-            }
-            .fullScreenCover(isPresented: $showAutoOpenMovie) {
-                if let movieId = autoOpenMovieId {
-                    NavigationStack {
-                        MoviePageView(movieId: movieId)
-                    }
-                }
-            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // Start Searching Button - show when selections > 0 OR search query is not empty
                 if totalSelections > 0 || !viewModel.searchQuery.isEmpty {
@@ -214,7 +161,46 @@ struct SearchView: View {
                 // If they were applied, the onChange handlers above will trigger search
             }
         }
-        // Voice recognition removed - use TalkToMango center button for voice input
+        .onChange(of: speechRecognizer.transcript) { oldValue, newValue in
+            // Update search text when transcript changes
+            if !newValue.isEmpty {
+                let parsed = parseVoiceCommand(newValue)
+                viewModel.searchQuery = parsed.query
+                filterState.searchQuery = parsed.query
+                
+                if let recommender = parsed.recommender {
+                    filterState.detectedRecommender = recommender
+                    print("🎤 Detected recommendation: '\(parsed.query)' from '\(recommender)'")
+                    print("🎤 Stored recommender in filterState: \(recommender)")
+                } else {
+                    // Clear recommender if no pattern detected
+                    filterState.detectedRecommender = nil
+                }
+                // Search will be triggered automatically by the onChange(of: viewModel.searchQuery) modifier
+            }
+        }
+        .overlay(alignment: .top) {
+            if case .listening = speechRecognizer.state {
+                ListeningIndicator(
+                    transcript: speechRecognizer.transcript,
+                    onStop: {
+                        Task {
+                            speechRecognizer.stopListening()
+                        }
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut, value: speechRecognizer.state)
+            }
+        }
+        .onDisappear {
+            // Stop microphone when navigating away
+            if case .listening = speechRecognizer.state {
+                Task {
+                    speechRecognizer.stopListening()
+                }
+            }
+        }
     }
     
     // MARK: - Actions
@@ -334,7 +320,22 @@ struct SearchView: View {
                         }
                     }
                     
-                    // Mic button removed - use TalkToMango center button for voice input
+                    Button(action: {
+                        Task {
+                            switch speechRecognizer.state {
+                            case .listening:
+                                speechRecognizer.stopListening()
+                            case .idle, .error:
+                                await speechRecognizer.startListening()
+                            default:
+                                break
+                            }
+                        }
+                    }) {
+                        Image(systemName: speechRecognizer.state == .listening ? "stop.circle.fill" : "mic.fill")
+                            .foregroundColor(speechRecognizer.state == .listening ? .red : Color(hex: "#666666"))
+                            .frame(width: 20, height: 20)
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
@@ -636,6 +637,14 @@ struct SearchView: View {
                                 SearchMovieCard(movie: movie)
                             }
                             .buttonStyle(PlainButtonStyle())
+                            .simultaneousGesture(TapGesture().onEnded {
+                                // Stop speech recognizer when navigating to movie detail
+                                if case .listening = speechRecognizer.state {
+                                    Task {
+                                        speechRecognizer.stopListening()
+                                    }
+                                }
+                            })
                         }
                     }
                     .padding(.horizontal, 20)
@@ -682,6 +691,14 @@ struct SearchView: View {
                             SearchMovieCard(movie: movie)
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .simultaneousGesture(TapGesture().onEnded {
+                            // Stop speech recognizer when navigating to movie detail
+                            if case .listening = speechRecognizer.state {
+                                Task {
+                                    speechRecognizer.stopListening()
+                                }
+                            }
+                        })
                     }
                 }
                 .padding(.horizontal, 20)

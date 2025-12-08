@@ -26,7 +26,7 @@ extension MovieCard {
             )
         }
         
-        // Convert crew - start with director from MovieCard, then fetch full crew from works_meta
+        // Convert crew (we only have director in MovieCard, so create minimal crew)
         var crewMembers: [CrewMember] = []
         if let directorName = director {
             crewMembers.append(CrewMember(
@@ -37,9 +37,6 @@ extension MovieCard {
                 profilePath: nil
             ))
         }
-        
-        // Fetch full crew data from works_meta (async, but we'll handle it in MovieDetailService)
-        // For now, crew will be populated separately in MovieDetailService
         
         // Parse release date
         let releaseDateString = releaseDate ?? ""

@@ -53,7 +53,8 @@ class SearchFilterState: ObservableObject {
     
     @Published var searchQuery: String = "" // Track search query for tab bar visibility
     @Published var detectedRecommender: String? = nil // Store recommender from voice command
-    @Published var pendingMangoQuery: String? = nil // Store pending Mango query for race condition fix
+    @Published var pendingMangoQuery: String? = nil // Store pending Mango query (reliable path for race condition fix)
+    var pendingVoiceEventId: UUID? = nil // Store voice event ID for result tracking
     
     // MARK: - Computed Properties (using applied filters)
     
