@@ -1,7 +1,11 @@
 //  SelfHealingVoiceService.swift
-//  Created automatically by Cursor Assistant
-//  Created on: 2025-01-15 at 18:00 (America/Los_Angeles - Pacific Time)
-//  Notes: Self-healing voice system that analyzes failed voice commands using OpenAI and logs pattern suggestions to Supabase
+//  TastyMangoes
+//
+//  Created by Cursor Assistant on 2025-12-07 at 21:12 (America/Los_Angeles - Pacific Time)
+//  Last modified by Claude on 2025-12-07 at 22:55 (America/Los_Angeles - Pacific Time)
+//  Notes: Self-healing voice system that analyzes failed voice commands using OpenAI
+//         and logs pattern suggestions to Supabase for review in the dashboard.
+//         Merged Cursor's Supabase SDK usage with Claude's trigger detection logic.
 
 import Foundation
 import Supabase
@@ -12,11 +16,11 @@ struct PatternSuggestion: Codable {
     let utterance: String
     let original_command_type: String?
     let suggested_intent: String?
-    let suggested_pattern: String?  // Store first pattern, or comma-separated
+    let suggested_pattern: String?
     let confidence: Double?
     let source: String  // "llm"
     let status: String  // "pending"
-    let voice_event_id: String?  // Link to original event if available (UUID as string)
+    let voice_event_id: String?
     
     enum CodingKeys: String, CodingKey {
         case utterance
@@ -33,7 +37,7 @@ struct PatternSuggestion: Codable {
 // MARK: - LLM Self-Healing Response
 
 private struct SelfHealingResponse: Codable {
-    let intent: String  // "markWatched" | "markUnwatched" | "addToWatchlist" | "removeFromWatchlist" | "search" | "unknown"
+    let intent: String
     let confidence: Double
     let reasoning: String
     let suggested_patterns: [String]
@@ -72,6 +76,62 @@ class SelfHealingVoiceService {
         )
     }
     
+    // MARK: - Trigger Detection (Added by Claude)
+    
+    /// Action words that suggest the user wanted to perform an action, not search
+    private static let actionWords: Set<String> = [
+        "watch", "watched", "watching",
+        "add", "added", "adding",
+        "mark", "marked", "marking",
+        "remove", "removed", "removing",
+        "delete", "deleted", "deleting",
+        "move", "moved", "moving",
+        "save", "saved", "saving",
+        "rate", "rated", "rating",
+        "actually", "didn't", "did not", "haven't", "have not",
+        "unwatched", "unwatch", "seen", "unseen"
+    ]
+    
+    /// Check if utterance contains action words
+    static func containsActionWords(_ utterance: String) -> Bool {
+        let lowercased = utterance.lowercased()
+        return actionWords.contains { lowercased.contains($0) }
+    }
+    
+    /// Determine if self-healing should be triggered based on the command result
+    /// Trigger conditions:
+    /// 1. handler_result is "no_results" AND utterance contains action words
+    /// 2. mango_command_type is "movie_search" but utterance has action words
+    static func shouldTriggerSelfHealing(
+        utterance: String,
+        commandType: MangoCommand,
+        handlerResult: VoiceHandlerResult?
+    ) -> Bool {
+        let hasActionWords = containsActionWords(utterance)
+        
+        // Condition 1: No results but looks like an action
+        if handlerResult == .noResults && hasActionWords {
+            print("🔄 [SelfHealing] Trigger: no_results + action words detected")
+            return true
+        }
+        
+        // Condition 2: Classified as movie_search but has action words
+        if case .movieSearch = commandType, hasActionWords {
+            print("🔄 [SelfHealing] Trigger: movie_search with action words detected")
+            return true
+        }
+        
+        // Condition 3: Unknown command with action words
+        if case .unknown = commandType, hasActionWords {
+            print("🔄 [SelfHealing] Trigger: unknown command with action words detected")
+            return true
+        }
+        
+        return false
+    }
+    
+    // MARK: - Main Entry Point
+    
     /// Analyzes a failed voice utterance and logs pattern suggestions to Supabase
     /// - Parameters:
     ///   - utterance: The original voice utterance that failed
@@ -103,6 +163,7 @@ class SelfHealingVoiceService {
             )
             
             print("🔧 [SelfHealing] OpenAI analysis - Intent: \(analysis.intent), Confidence: \(analysis.confidence)")
+            print("🔧 [SelfHealing] Reasoning: \(analysis.reasoning)")
             print("🔧 [SelfHealing] Suggested patterns: \(analysis.suggested_patterns)")
             
             // Log to Supabase
@@ -117,7 +178,7 @@ class SelfHealingVoiceService {
             
         } catch {
             print("❌ [SelfHealing] Failed to analyze utterance: \(error.localizedDescription)")
-            // Still log to Supabase with minimal data
+            // Still log to Supabase with minimal data so we can see the failed utterance
             await logPatternSuggestion(
                 utterance: utterance,
                 originalCommandType: commandType,
@@ -129,6 +190,29 @@ class SelfHealingVoiceService {
         }
     }
     
+    /// Convenience method that takes MangoCommand directly
+    /// Call this from VoiceIntentRouter when trigger conditions are met
+    func handleFailedCommand(
+        utterance: String,
+        originalCommand: MangoCommand,
+        handlerResult: VoiceHandlerResult?,
+        screen: String = "Unknown",
+        movieContext: String? = nil,
+        voiceEventId: UUID? = nil
+    ) async {
+        let commandType = commandTypeString(originalCommand)
+        
+        await analyzeAndLogPattern(
+            utterance: utterance,
+            commandType: commandType,
+            screen: screen,
+            movieContext: movieContext,
+            voiceEventId: voiceEventId
+        )
+    }
+    
+    // MARK: - OpenAI Analysis
+    
     /// Calls OpenAI to analyze the failed utterance
     private func analyzeWithOpenAI(utterance: String, context: String) async throws -> SelfHealingResponse {
         guard OpenAIClient.isConfigured else {
@@ -139,7 +223,6 @@ class SelfHealingVoiceService {
             throw OpenAIError.invalidURL
         }
         
-        // Construct system prompt
         let systemPrompt = """
         You are analyzing a failed voice command in a movie recommendation app called "Mango".
         
@@ -150,29 +233,36 @@ class SelfHealingVoiceService {
         
         Respond with ONLY a single JSON object, no prose, using this exact format:
         {
-          "intent": "markWatched" | "markUnwatched" | "addToWatchlist" | "removeFromWatchlist" | "search" | "unknown",
+          "intent": "markWatched" | "markUnwatched" | "addToWatchlist" | "removeFromWatchlist" | "movieSearch" | "recommenderSearch" | "createWatchlist" | "unknown",
           "confidence": 0.0-1.0,
-          "reasoning": "brief explanation",
+          "reasoning": "brief explanation of why you think this is the intent",
           "suggested_patterns": ["pattern1", "pattern2", ...] // lowercase phrases that should trigger this intent
         }
         
-        Intent rules:
-        - "markWatched": User wants to mark a movie as watched (e.g., "mark as watched", "I watched this", "seen it")
-        - "markUnwatched": User wants to mark a movie as unwatched (e.g., "mark as unwatched", "haven't seen", "not watched")
-        - "addToWatchlist": User wants to add a movie to a watchlist (e.g., "add to list", "save this", "put in my list")
-        - "removeFromWatchlist": User wants to remove a movie from a watchlist (e.g., "remove from list", "delete from list", "take out")
-        - "search": User wants to search for a movie (e.g., "find", "look for", "search for")
-        - "unknown": Cannot determine intent
+        Intent definitions:
+        - "markWatched": User wants to mark a movie as watched (e.g., "I watched this", "mark as watched", "seen it", "just saw this")
+        - "markUnwatched": User wants to mark a movie as NOT watched (e.g., "I didn't watch this", "mark as unwatched", "haven't seen it", "actually I haven't watched this")
+        - "addToWatchlist": User wants to add a movie to a watchlist (e.g., "add to my list", "save this", "put in my watchlist")
+        - "removeFromWatchlist": User wants to remove a movie from a list (e.g., "remove from list", "delete this", "take off my list")
+        - "movieSearch": User wants to search for a movie by title
+        - "recommenderSearch": User wants to search with attribution (e.g., "Keo recommends X", "my friend said to watch X")
+        - "createWatchlist": User wants to create a new list (e.g., "create a list called X", "make new watchlist")
+        - "unknown": Cannot determine intent with reasonable confidence
         
-        Suggested patterns should be lowercase phrases that would help the parser recognize this intent in the future.
-        Examples:
-        - For "markWatched": ["mark as watched", "mark watched", "i watched this", "seen it", "watched it"]
-        - For "addToWatchlist": ["add to list", "save this", "put in list", "add to my list"]
+        Suggested patterns should be:
+        - Lowercase phrases that would help the local parser recognize this intent
+        - Flexible enough to catch variations (e.g., "i watched" catches "I watched this", "I watched it", etc.)
+        - Common speech recognition mishearings (e.g., "mark has watched" instead of "mark as watched")
+        
+        Examples of good patterns:
+        - For "markWatched": ["i watched", "mark as watched", "mark watched", "seen it", "just saw"]
+        - For "markUnwatched": ["i didn't watch", "haven't watched", "haven't seen", "mark as unwatched", "actually i didn't"]
+        - For "addToWatchlist": ["add to", "save this", "put in my", "add this to"]
         """
         
         let userMessage = "Analyze this failed command: \"\(utterance)\""
         
-        // Use the same request structure as OpenAIClient
+        // Request structures
         struct ChatCompletionRequest: Codable {
             let model: String
             let messages: [ChatMessage]
@@ -261,6 +351,8 @@ class SelfHealingVoiceService {
         return analysis
     }
     
+    // MARK: - Supabase Logging
+    
     /// Logs the pattern suggestion to Supabase
     private func logPatternSuggestion(
         utterance: String,
@@ -276,14 +368,13 @@ class SelfHealingVoiceService {
         }
         
         do {
-            // Combine patterns into a single string (comma-separated, or first pattern)
+            // Combine patterns into a single string (comma-separated)
             let patternString: String?
             if suggestedPatterns.isEmpty {
                 patternString = nil
             } else if suggestedPatterns.count == 1 {
                 patternString = suggestedPatterns.first
             } else {
-                // Store first pattern, or comma-separated if needed
                 patternString = suggestedPatterns.joined(separator: ", ")
             }
             
@@ -306,10 +397,28 @@ class SelfHealingVoiceService {
             print("✅ [SelfHealing] Logged pattern suggestion to Supabase")
             print("   Utterance: '\(utterance)'")
             print("   Suggested Intent: \(suggestedIntent ?? "none")")
+            print("   Confidence: \(confidence.map { String(format: "%.2f", $0) } ?? "none")")
             print("   Patterns: \(patternString ?? "none")")
             
         } catch {
             print("❌ [SelfHealing] Failed to log pattern suggestion: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - Helpers
+    
+    private func commandTypeString(_ command: MangoCommand) -> String {
+        switch command {
+        case .recommenderSearch:
+            return "recommender_search"
+        case .movieSearch:
+            return "movie_search"
+        case .createWatchlist:
+            return "create_watchlist"
+        case .markWatched:
+            return "mark_watched"
+        case .unknown:
+            return "unknown"
         }
     }
 }
