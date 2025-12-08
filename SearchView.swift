@@ -102,6 +102,7 @@ struct SearchView: View {
             .background(Color(hex: "#fdfdfd"))
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 bottomButton
+                    .background(Color.white) // Ensure white background extends to edge
             }
             .navigationDestination(isPresented: $navigateToResults) {
                 CategoryResultsView()
@@ -643,18 +644,15 @@ struct SearchView: View {
                     // Movie cards
                     LazyVStack(spacing: 12) {
                         ForEach(viewModel.searchResults) { movie in
-                            NavigationLink(destination: MovieDetailView(movie: movie)) {
-                                SearchMovieCard(movie: movie)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .simultaneousGesture(TapGesture().onEnded {
-                                // Stop speech recognizer when navigating to movie detail
-                                if case .listening = speechRecognizer.state {
-                                    Task {
-                                        speechRecognizer.stopListening()
+                            SearchMovieCard(movie: movie)
+                                .onTapGesture {
+                                    // Stop speech recognizer when navigating to movie detail
+                                    if case .listening = speechRecognizer.state {
+                                        Task {
+                                            speechRecognizer.stopListening()
+                                        }
                                     }
                                 }
-                            })
                         }
                     }
                     .padding(.horizontal, 20)
@@ -770,10 +768,10 @@ struct SearchMovieCard: View {
                     // Tasty Score
                     if let tastyScore = movie.tastyScore {
                         HStack(spacing: 4) {
-                            // Use mango icon if available, otherwise use star
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(Color(hex: "#FEA500"))
+                            Image("TastyScoreIcon")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 12, height: 12)
                             
                             Text("\(Int(tastyScore * 100))%")
                                 .font(.custom("Inter-SemiBold", size: 14))

@@ -23,6 +23,11 @@ struct WatchlistView: View {
     @State private var showFilterSheet = false
     @State private var showManageList = false
     @State private var showCreateWatchlistSheet = false
+    @State private var showMoviePage = false
+    @State private var selectedMovieId: Int? = nil
+    @State private var showDeleteConfirmation = false
+    @State private var movieToDelete: String? = nil
+    @State private var otherListsContainingMovie: [String] = []
     
     @EnvironmentObject private var watchlistManager: WatchlistManager
     
@@ -30,6 +35,9 @@ struct WatchlistView: View {
     @State private var masterlistName: String = "Masterlist"
     @State private var masterlistMovies: [MasterlistMovie] = []
     @State private var isLoadingMovies: Bool = false
+    @State private var watchedMovies: [MasterlistMovie] = []
+    @State private var isLoadingWatchedMovies: Bool = false
+    @State private var isWatchedSectionExpanded: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -46,6 +54,11 @@ struct WatchlistView: View {
                     
                     // Your Lists Section
                     yourListsSection
+                        .padding(.top, 24)
+                        .padding(.horizontal, 16)
+                    
+                    // Watched Section
+                    watchedSection
                         .padding(.top, 24)
                         .padding(.horizontal, 16)
                     
@@ -75,6 +88,59 @@ struct WatchlistView: View {
             }
             .environmentObject(watchlistManager)
         }
+        .fullScreenCover(isPresented: $showMoviePage) {
+            if let movieId = selectedMovieId, movieId > 0 {
+                NavigationStack {
+                    MoviePageView(movieId: movieId)
+                }
+            } else {
+                // Fallback: show error view if invalid ID
+                ZStack {
+                    Color(hex: "#fdfdfd")
+                        .ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 48))
+                            .foregroundColor(Color(hex: "#999999"))
+                        Text("Unable to load movie")
+                            .font(.custom("Inter-Regular", size: 16))
+                            .foregroundColor(Color(hex: "#666666"))
+                        Button("Close") {
+                            showMoviePage = false
+                        }
+                        .font(.custom("Inter-SemiBold", size: 16))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: "#FEA500"))
+                        .cornerRadius(8)
+                    }
+                }
+            }
+        }
+        .alert("Delete from All Lists?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                movieToDelete = nil
+                otherListsContainingMovie = []
+            }
+            Button("Delete", role: .destructive) {
+                if let movieId = movieToDelete {
+                    removeMovieFromMasterlist(movieId: movieId)
+                }
+                movieToDelete = nil
+                otherListsContainingMovie = []
+            }
+        } message: {
+            if !otherListsContainingMovie.isEmpty {
+                let listNames = otherListsContainingMovie.compactMap { listId in
+                    watchlistManager.getWatchlist(listId: listId)?.name
+                }
+                let listNamesText = listNames.joined(separator: ", ")
+                Text("This movie is also in: \(listNamesText). Deleting from Masterlist will remove it from all your lists.")
+            } else {
+                Text("This will delete the movie from all your lists.")
+            }
+        }
         .onAppear {
             print("📋 [WatchlistView] onAppear - syncing cache from Supabase...")
             Task {
@@ -83,6 +149,7 @@ struct WatchlistView: View {
                 await MainActor.run {
                     loadLists()
                     loadMasterlistMovies()
+                    loadWatchedMovies()
                 }
             }
         }
@@ -95,6 +162,7 @@ struct WatchlistView: View {
             loadLists()
             loadMasterlistName() // Also reload masterlist name in case it was edited
             loadMasterlistMovies() // Reload movies when watchlist changes
+            loadWatchedMovies() // Reload watched movies when watchlist changes
         }
         }
     }
@@ -272,6 +340,87 @@ struct WatchlistView: View {
         }
     }
     
+    // MARK: - Watched Section
+    
+    private var watchedSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section Header with Chevron - same style as Masterlist
+            HStack {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(hex: "#FEA500"))
+                        .frame(width: 6, height: 6)
+                    
+                    Text(watchedCountText)
+                        .font(.custom("Nunito-Bold", size: 20))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        isWatchedSectionExpanded.toggle()
+                    }
+                    if isWatchedSectionExpanded && watchedMovies.isEmpty {
+                        loadWatchedMovies()
+                    }
+                }) {
+                    Image(systemName: isWatchedSectionExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Color(hex: "#666666"))
+                        .frame(width: 28, height: 28)
+                }
+            }
+            
+            // Watched Movies List (shown when expanded)
+            if isWatchedSectionExpanded {
+                if isLoadingWatchedMovies {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding()
+                        Spacer()
+                    }
+                } else if watchedMovies.isEmpty {
+                    Text("No watched movies yet")
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#666666"))
+                        .padding(.vertical, 16)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(watchedMovies) { movie in
+                            MasterlistMovieCard(movie: movie)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    // Open movie page - safely convert movie ID
+                                    guard let movieId = Int(movie.id), movieId > 0 else {
+                                        print("⚠️ [WatchlistView] Invalid movie ID '\(movie.id)' - cannot open movie page")
+                                        return
+                                    }
+                                    
+                                    print("📋 [WatchlistView] Opening movie page for ID: \(movieId) (movie: \(movie.title))")
+                                    selectedMovieId = movieId
+                                    showMoviePage = true
+                                }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private var watchedCountText: String {
+        // Use the loaded movies count if available, otherwise show 0
+        let watchedCount = watchedMovies.count
+        
+        if watchedCount > 0 {
+            return "Watched (\(watchedCount))"
+        } else {
+            return "Watched"
+        }
+    }
+    
     // MARK: - Masterlist Section
     
     private var masterlistSection: some View {
@@ -283,7 +432,7 @@ struct WatchlistView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("\(masterlistName) (\(masterlistMovies.count))")
+                    Text(masterlistCountText)
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
@@ -321,12 +470,48 @@ struct WatchlistView: View {
                 .cornerRadius(8)
             }
             
-            // Movie List
+            // Movie List with Swipe Actions
             VStack(spacing: 0) {
                 ForEach(masterlistMovies) { movie in
-                    MasterlistMovieCard(movie: movie)
+                    SwipeableMasterlistMovieCard(
+                        movie: movie,
+                        onTap: {
+                            // Open movie page - safely convert movie ID
+                            guard let movieId = Int(movie.id), movieId > 0 else {
+                                print("⚠️ [WatchlistView] Invalid movie ID '\(movie.id)' - cannot open movie page")
+                                return
+                            }
+                            
+                            print("📋 [WatchlistView] Opening movie page for ID: \(movieId) (movie: \(movie.title))")
+                            selectedMovieId = movieId
+                            showMoviePage = true
+                        },
+                        onDelete: {
+                            handleMasterlistDelete(movieId: movie.id)
+                        }
+                    )
                 }
             }
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
+    private var masterlistCountText: String {
+        // Get the actual count from WatchlistManager to avoid showing "0" while loading
+        let movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+        let actualCount = movieIds.count
+        
+        // If we're loading and haven't populated movies yet, use the count from manager
+        // Otherwise use the loaded movies count
+        let displayCount = (isLoadingMovies && masterlistMovies.isEmpty) ? actualCount : masterlistMovies.count
+        
+        // Only show count if we have movies or if we know the count from the manager
+        if displayCount > 0 || (!isLoadingMovies && actualCount > 0) {
+            return "\(masterlistName) (\(displayCount))"
+        } else {
+            // Show just the name without count while loading or if empty
+            return masterlistName
         }
     }
     
@@ -390,6 +575,119 @@ struct WatchlistView: View {
             await MainActor.run {
                 self.masterlistMovies = fetchedMovies
                 self.isLoadingMovies = false
+            }
+        }
+    }
+    
+    private func handleMasterlistDelete(movieId: String) {
+        print("🗑️ [WatchlistView] handleMasterlistDelete called for movie: \(movieId)")
+        
+        // Check if movie exists in other lists
+        let allLists = watchlistManager.getListsForMovie(movieId: movieId)
+        print("🗑️ [WatchlistView] Movie \(movieId) is in lists: \(allLists)")
+        
+        let otherLists = allLists.filter { $0 != "masterlist" && $0 != "1" }
+        print("🗑️ [WatchlistView] Other lists (excluding masterlist): \(otherLists)")
+        
+        if !otherLists.isEmpty {
+            // Movie is in other lists - show confirmation
+            print("🗑️ [WatchlistView] Movie is in other lists - showing confirmation alert")
+            otherListsContainingMovie = Array(otherLists)
+            movieToDelete = movieId
+            showDeleteConfirmation = true
+        } else {
+            // Movie is only in masterlist - delete directly
+            print("🗑️ [WatchlistView] Movie is only in masterlist - deleting directly")
+            removeMovieFromMasterlist(movieId: movieId)
+        }
+    }
+    
+    private func removeMovieFromMasterlist(movieId: String) {
+        // Get all lists containing this movie
+        let allListsContainingMovie = watchlistManager.getListsForMovie(movieId: movieId)
+        
+        // Remove movie from masterlist
+        watchlistManager.removeMovieFromList(movieId: movieId, listId: "masterlist")
+        
+        // Remove from all other lists as well
+        for listId in allListsContainingMovie {
+            if listId != "masterlist" && listId != "1" {
+                watchlistManager.removeMovieFromList(movieId: movieId, listId: listId)
+            }
+        }
+        
+        // Remove from local array
+        masterlistMovies.removeAll { $0.id == movieId }
+        
+        // Sync with Supabase - remove from all lists
+        Task {
+            do {
+                // Remove from masterlist
+                try await SupabaseWatchlistAdapter.removeMovie(
+                    movieId: movieId,
+                    fromListId: "masterlist"
+                )
+                print("✅ [WatchlistView] Removed movie \(movieId) from masterlist in Supabase")
+                
+                // Remove from all other lists
+                for listId in allListsContainingMovie {
+                    if listId != "masterlist" && listId != "1" {
+                        try await SupabaseWatchlistAdapter.removeMovie(
+                            movieId: movieId,
+                            fromListId: listId
+                        )
+                        print("✅ [WatchlistView] Removed movie \(movieId) from list \(listId) in Supabase")
+                    }
+                }
+            } catch {
+                print("❌ [WatchlistView] Failed to remove movie \(movieId) from Supabase: \(error)")
+            }
+        }
+    }
+    
+    private func loadWatchedMovies() {
+        guard !isLoadingWatchedMovies else { return }
+        isLoadingWatchedMovies = true
+        
+        Task {
+            // Get all watched movie IDs from WatchlistManager
+            // Note: We need to access the watchedMovies dictionary
+            // Since it's private, we'll get all movies from all lists and filter by watched status
+            var watchedMovieIds: Set<String> = []
+            
+            // Get all movies from all lists
+            let allListIds = watchlistManager.getAllWatchlists().map { $0.id } + ["masterlist"]
+            for listId in allListIds {
+                let movieIds = watchlistManager.getMoviesInList(listId: listId)
+                for movieId in movieIds {
+                    if watchlistManager.isWatched(movieId: movieId) {
+                        watchedMovieIds.insert(movieId)
+                    }
+                }
+            }
+            
+            print("📋 [WatchlistView] Found \(watchedMovieIds.count) watched movies")
+            
+            // Fetch movie cards from Supabase
+            var fetchedMovies: [MasterlistMovie] = []
+            
+            for movieId in watchedMovieIds {
+                do {
+                    let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                    let masterlistMovie = movieCard.toMasterlistMovie(
+                        isWatched: true, // All movies in this list are watched
+                        friendsCount: 0
+                    )
+                    fetchedMovies.append(masterlistMovie)
+                } catch {
+                    print("⚠️ Failed to fetch watched movie card for ID \(movieId): \(error)")
+                    // Continue with other movies even if one fails
+                }
+            }
+            
+            await MainActor.run {
+                self.watchedMovies = fetchedMovies
+                self.isLoadingWatchedMovies = false
             }
         }
     }
@@ -524,18 +822,145 @@ struct SmallListCard: View {
     }
 }
 
+// MARK: - Swipeable Masterlist Movie Card
+
+struct SwipeableMasterlistMovieCard: View {
+    let movie: MasterlistMovie
+    let onTap: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging: Bool = false
+    @State private var initialDragLocation: CGPoint? = nil
+    
+    // Show delete button when swiped halfway (about -80 points for a typical card width)
+    private let showDeleteButtonThreshold: CGFloat = -80
+    // Snap to halfway position when swiped past threshold
+    private let snapToDeletePosition: CGFloat = -80
+    // Minimum horizontal movement before activating swipe (prevents interference with scrolling)
+    private let horizontalActivationThreshold: CGFloat = 30
+    // Minimum ratio of horizontal to vertical movement to activate swipe
+    private let horizontalVerticalRatio: CGFloat = 2.0
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .trailing) {
+                // Delete button background - always visible when swiped
+                if dragOffset < -20 {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            print("🗑️ [SwipeableMasterlistMovieCard] Delete button tapped for movie: \(movie.id)")
+                            // Immediately call onDelete (don't wait for animation)
+                            onDelete()
+                            // Then animate out
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                dragOffset = -geometry.size.width
+                            }
+                        }) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 60, height: 60)
+                                .background(Color.red)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .zIndex(10) // Ensure button is above other elements
+                        .padding(.trailing, 16)
+                    }
+                    .zIndex(5) // Ensure delete button area is above card
+                }
+                
+                // Movie card
+                MasterlistMovieCard(movie: movie)
+                    .offset(x: dragOffset)
+                    .allowsHitTesting(dragOffset == 0) // Disable card taps when swiped
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onChanged { value in
+                                // Store initial location on first change
+                                if initialDragLocation == nil {
+                                    initialDragLocation = value.startLocation
+                                }
+                                
+                                let horizontalMovement = abs(value.translation.width)
+                                let verticalMovement = abs(value.translation.height)
+                                
+                                // Only activate if:
+                                // 1. Horizontal movement exceeds threshold
+                                // 2. Horizontal movement is at least 2x the vertical movement
+                                // 3. Swiping left (negative width)
+                                // 4. We haven't already started dragging OR we're continuing a horizontal drag
+                                let isHorizontalIntent = horizontalMovement > horizontalActivationThreshold &&
+                                                       horizontalMovement > verticalMovement * horizontalVerticalRatio &&
+                                                       value.translation.width < 0
+                                
+                                if isHorizontalIntent {
+                                    if !isDragging {
+                                        isDragging = true
+                                    }
+                                    // Limit swipe to about halfway
+                                    let maxSwipe = -geometry.size.width * 0.5
+                                    dragOffset = max(maxSwipe, value.translation.width)
+                                } else if !isDragging {
+                                    // Don't interfere with scrolling - reset everything
+                                    dragOffset = 0
+                                    initialDragLocation = nil
+                                }
+                            }
+                            .onEnded { value in
+                                let horizontalMovement = abs(value.translation.width)
+                                let verticalMovement = abs(value.translation.height)
+                                
+                                if isDragging && horizontalMovement > verticalMovement * horizontalVerticalRatio {
+                                    // If swiped past threshold, snap to delete position
+                                    if value.translation.width < showDeleteButtonThreshold {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            dragOffset = snapToDeletePosition
+                                        }
+                                    } else {
+                                        // Not far enough - snap back
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            dragOffset = 0
+                                        }
+                                    }
+                                } else {
+                                    // Vertical swipe or not enough horizontal - snap back
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        dragOffset = 0
+                                    }
+                                }
+                                isDragging = false
+                                initialDragLocation = nil
+                            }
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // Only handle tap if not currently dragging and card is not swiped
+                        if !isDragging && dragOffset == 0 {
+                            onTap()
+                        } else if dragOffset != 0 {
+                            // Snap back if swiped
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                dragOffset = 0
+                            }
+                            isDragging = false
+                        }
+                    }
+            }
+        }
+        .frame(height: 120) // Approximate height of MasterlistMovieCard
+    }
+}
+
 // MARK: - Masterlist Movie Card
 
 struct MasterlistMovieCard: View {
     let movie: MasterlistMovie
     @EnvironmentObject private var watchlistManager: WatchlistManager
-    @State private var showMoviePage = false
     
     var body: some View {
-        Button(action: {
-            // Wire up NAVIGATE connection: Product Card → Movie Page
-            showMoviePage = true
-        }) {
             HStack(spacing: 12) {
             // Poster
             MoviePosterImage(
@@ -616,22 +1041,11 @@ struct MasterlistMovieCard: View {
             
             // Action Buttons
             HStack(spacing: 8) {
-                // Delete/Trash (with checkmark if watched)
-                Button(action: {
-                    // Delete or mark as watched
-                }) {
-                    ZStack {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color(hex: "#666666"))
-                        
-                        if movie.isWatched {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(Color(hex: "#648d00"))
-                                .offset(x: 8, y: -8)
-                        }
-                    }
+                // Watched indicator (checkmark if watched)
+                if movie.isWatched {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color(hex: "#648d00"))
                 }
                 
                 // Menu
@@ -650,13 +1064,6 @@ struct MasterlistMovieCard: View {
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1)
         .padding(.bottom, 8)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .fullScreenCover(isPresented: $showMoviePage) {
-            NavigationStack {
-                MoviePageView(movieId: movie.id)
-            }
-        }
     }
 }
 

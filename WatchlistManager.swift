@@ -156,17 +156,23 @@ class WatchlistManager: ObservableObject {
     /// Mark a movie as watched
     func markAsWatched(movieId: String) {
         watchedMovies[movieId] = true
+        // Notify observers that watched status changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
     }
     
     /// Mark a movie as not watched
     func markAsNotWatched(movieId: String) {
         watchedMovies[movieId] = false
+        // Notify observers that watched status changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
     }
     
     /// Toggle watched status
     func toggleWatched(movieId: String) {
         let currentStatus = isWatched(movieId: movieId)
         watchedMovies[movieId] = !currentStatus
+        // Notify observers that watched status changed
+        NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
     }
     
     /// Check if a movie is watched

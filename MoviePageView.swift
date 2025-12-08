@@ -17,7 +17,7 @@ private enum MovieSection: String, CaseIterable, Identifiable {
     // Keeping similar case commented out would break Swift - removed from allCases filter instead
     case getSmarter = "Get Smarter"
     case clips = "Movie Clips"
-    case photos = "Photos"
+    case photos = "Stills"
     
     var id: String { rawValue }
 }
@@ -43,6 +43,10 @@ struct MoviePageView: View {
     @State private var navigateToListId: String? = nil
     @State private var navigateToListName: String? = nil
     @State private var navigateToSearch = false
+    @State private var showMangoListeningView = false
+    @StateObject private var mangoSpeechRecognizer = SpeechRecognizer()
+    @State private var showPosterCarousel = false
+    @State private var selectedImageIndex = 0
     
     // Computed property to determine if pinned tab bar should show
     private var shouldShowPinnedTabBar: Bool {
@@ -274,7 +278,7 @@ struct MoviePageView: View {
                                 }
                             )
                         
-                        // Photos section
+                        // Stills section
                         photosSection
                             .id(MovieSection.photos.id)
                             .background(
@@ -395,6 +399,31 @@ struct MoviePageView: View {
                     NavigationStack {
                         IndividualListView(listId: listId, listName: listName)
                             .environmentObject(WatchlistManager.shared)
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showMangoListeningView) {
+                MangoListeningView(
+                    speechRecognizer: mangoSpeechRecognizer,
+                    isPresented: $showMangoListeningView
+                )
+            }
+            .fullScreenCover(isPresented: $showPosterCarousel) {
+                if let movie = viewModel.movie {
+                    // Calculate safe index using selectedImageIndex directly
+                    let posterCount = movie.posterURL != nil ? 1 : 0
+                    let backdropCount = movie.backdropURL != nil ? 1 : 0
+                    let maxIndex = posterCount + backdropCount + viewModel.movieImages.count - 1
+                    let safeIndex = min(max(selectedImageIndex, 0), max(0, maxIndex))
+                    
+                    PosterCarouselView(
+                        movie: movie,
+                        movieImages: viewModel.movieImages,
+                        initialIndex: safeIndex,
+                        isPresented: $showPosterCarousel
+                    )
+                    .onAppear {
+                        print("🖼️ [MoviePageView] Creating carousel - selectedImageIndex: \(selectedImageIndex), safeIndex: \(safeIndex), maxIndex: \(maxIndex)")
                     }
                 }
             }
@@ -615,34 +644,41 @@ struct MoviePageView: View {
     
     private func posterAndScoresSection(_ movie: MovieDetail) -> some View {
         HStack(alignment: .bottom, spacing: 16) {
-            // Poster Image
-            if let posterURL = movie.posterURL {
-                AsyncImage(url: posterURL) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(Color(hex: "#333333"))
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        Rectangle()
-                            .fill(Color(hex: "#333333"))
-                    @unknown default:
-                        Rectangle()
-                            .fill(Color(hex: "#333333"))
+            // Poster Image - tappable to expand
+            Button(action: {
+                // Set initial index to poster (0)
+                selectedImageIndex = 0
+                showPosterCarousel = true
+            }) {
+                if let posterURL = movie.posterURL {
+                    AsyncImage(url: posterURL) { phase in
+                        switch phase {
+                        case .empty:
+                            Rectangle()
+                                .fill(Color(hex: "#333333"))
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        case .failure:
+                            Rectangle()
+                                .fill(Color(hex: "#333333"))
+                        @unknown default:
+                            Rectangle()
+                                .fill(Color(hex: "#333333"))
+                        }
                     }
-                }
-                .frame(width: 84, height: 124)
-                .cornerRadius(8)
-                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-            } else {
-                Rectangle()
-                    .fill(Color(hex: "#333333"))
                     .frame(width: 84, height: 124)
                     .cornerRadius(8)
+                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                } else {
+                    Rectangle()
+                        .fill(Color(hex: "#333333"))
+                        .frame(width: 84, height: 124)
+                        .cornerRadius(8)
+                }
             }
+            .buttonStyle(PlainButtonStyle())
             
             // Scores Section
             HStack(spacing: 0) {
@@ -1311,7 +1347,7 @@ struct MoviePageView: View {
         }
     }
     
-    // MARK: - Photos Section
+    // MARK: - Stills Section
     
     private var photosSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1321,7 +1357,7 @@ struct MoviePageView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    Text("Photos")
+                    Text("Stills")
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
@@ -1343,8 +1379,31 @@ struct MoviePageView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     if !viewModel.movieImages.isEmpty {
-                        ForEach(viewModel.movieImages.prefix(5)) { image in
-                            MoviePagePhotoCard(image: image)
+                        ForEach(Array(viewModel.movieImages.prefix(5).enumerated()), id: \.offset) { displayIndex, image in
+                            MoviePagePhotoCard(
+                                image: image,
+                                onTap: {
+                                    // Calculate index in carousel array
+                                    // Carousel order: [poster (if exists), backdrop (if exists), ...photos]
+                                    // The displayed images are prefix(5) of movieImages, so displayIndex matches the position
+                                    var photosStartIndex = 0
+                                    if viewModel.movie?.posterURL != nil {
+                                        photosStartIndex += 1 // Poster takes index 0
+                                    }
+                                    if viewModel.movie?.backdropURL != nil {
+                                        photosStartIndex += 1 // Backdrop takes next index
+                                    }
+                                    // Now photosStartIndex is where photos begin in the carousel
+                                    // displayIndex is the position in the displayed prefix(5) array, which matches movieImages
+                                    let carouselIndex = photosStartIndex + displayIndex
+                                    
+                                    print("🖼️ [MoviePageView] Tapped still - displayIndex: \(displayIndex), carouselIndex: \(carouselIndex)")
+                                    print("🖼️ [MoviePageView] Poster exists: \(viewModel.movie?.posterURL != nil), Backdrop exists: \(viewModel.movie?.backdropURL != nil), photosStartIndex: \(photosStartIndex)")
+                                    
+                                    selectedImageIndex = carouselIndex
+                                    showPosterCarousel = true
+                                }
+                            )
                         }
                     } else {
                         // Show loading placeholders while images are being fetched
@@ -1365,50 +1424,108 @@ struct MoviePageView: View {
         let isWatched = WatchlistManager.shared.isWatched(movieId: movieId)
         let isInWatchlist = !WatchlistManager.shared.getListsForMovie(movieId: movieId).isEmpty
         
-        return HStack(spacing: 12) {
-            // Mark as Watched button (wired from Figma: CHANGE_TO → Active state, OVERLAY → Rate Bottom Sheet)
-            Button(action: {
-                // First toggle watched status (CHANGE_TO connection - changes button state)
-                WatchlistManager.shared.toggleWatched(movieId: movieId)
-                // Then show rate bottom sheet (per Figma prototype connection)
-                showRateBottomSheet = true
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: isWatched ? "popcorn.fill" : "popcorn")
-                        .font(.system(size: 16, weight: .medium))
-                    Text(isWatched ? "Watched" : "Mark as Watched")
-                        .font(.custom("Inter-SemiBold", size: 14))
+        return ZStack(alignment: .bottom) {
+            HStack(spacing: 12) {
+                // Mark as Watched button (wired from Figma: CHANGE_TO → Active state, OVERLAY → Rate Bottom Sheet)
+                Button(action: {
+                    // Only show rating sheet when marking as watched (not when un-watching)
+                    let wasWatched = isWatched
+                    // Toggle watched status (CHANGE_TO connection - changes button state)
+                    WatchlistManager.shared.toggleWatched(movieId: movieId)
+                    // Show rate bottom sheet only when marking as watched (per Figma prototype connection)
+                    if !wasWatched {
+                        showRateBottomSheet = true
+                    }
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: isWatched ? "popcorn.fill" : "popcorn")
+                            .font(.system(size: 16, weight: .medium))
+                        Text(isWatched ? "Watched" : "Mark as Watched")
+                            .font(.custom("Inter-SemiBold", size: 14))
+                    }
+                    .foregroundColor(isWatched ? Color(hex: "#648d00") : Color(hex: "#333333"))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(isWatched ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(isWatched ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
+                    )
                 }
-                .foregroundColor(isWatched ? Color(hex: "#648d00") : Color(hex: "#333333"))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(isWatched ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isWatched ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
-                )
+                
+                // Spacer for center button
+                Spacer()
+                    .frame(width: 56)
+                
+                Button(action: {
+                    showAddToList = true
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: isInWatchlist ? "checkmark.circle.fill" : "list.bullet.rectangle")
+                            .font(.system(size: 16, weight: .medium))
+                        Text(isInWatchlist ? "In Watchlist" : "Add to Watchlist")
+                            .font(.custom("Inter-SemiBold", size: 14))
+                    }
+                    .foregroundColor(isInWatchlist ? Color(hex: "#648d00") : Color(hex: "#333333"))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(isInWatchlist ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(isInWatchlist ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
+                    )
+                }
             }
             
+            // Mango button - universal functionality, elevated 50% above buttons
             Button(action: {
-                showAddToList = true
+                showMangoListeningView = true
             }) {
-                HStack(spacing: 8) {
-                    Image(systemName: isInWatchlist ? "checkmark.circle.fill" : "list.bullet.rectangle")
-                        .font(.system(size: 16, weight: .medium))
-                    Text(isInWatchlist ? "In Watchlist" : "Add to Watchlist")
-                        .font(.custom("Inter-SemiBold", size: 14))
+                ZStack {
+                    // Prominent filled orange circular background with gradient (matches tab bar)
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(hex: "#FFA500"),
+                                    Color(hex: "#FF8C00")
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            // Border with white opacity
+                            Circle()
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                .frame(width: 56, height: 56)
+                        )
+                        .overlay(
+                            // Inner shadow/glow effect
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.4),
+                                            Color.clear
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .center
+                                    )
+                                )
+                                .frame(width: 56, height: 56)
+                                .blendMode(.overlay)
+                        )
+                    
+                    // White mango logo icon inside the circle (matches tab bar)
+                    MangoLogoIcon(size: 28, color: .white)
                 }
-                .foregroundColor(isInWatchlist ? Color(hex: "#648d00") : Color(hex: "#333333"))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(isInWatchlist ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isInWatchlist ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
-                )
+                .shadow(color: Color(hex: "#FFA500").opacity(0.4), radius: 12, x: 0, y: 4)
             }
+            .offset(y: -28) // Elevate 50% above buttons (56/2 = 28)
         }
         .padding(.horizontal, 16)
     }
@@ -1795,40 +1912,44 @@ private struct MovieClipCard: View {
 
 private struct MoviePagePhotoCard: View {
     let image: TMDBImage
+    let onTap: () -> Void
     
     var body: some View {
-        AsyncImage(url: image.imageURL) { phase in
-            switch phase {
-            case .empty:
-                // Loading placeholder
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(hex: "#E0E0E0"))
-                    .frame(width: 140, height: 210)
-                    .overlay(
-                        ProgressView()
-                    )
-            case .success(let loadedImage):
-                loadedImage
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 140, height: 210)
-                    .clipped()
-                    .cornerRadius(8)
-            case .failure:
-                // Error placeholder
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(hex: "#E0E0E0"))
-                    .frame(width: 140, height: 210)
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(Color(hex: "#999999"))
-                    )
-            @unknown default:
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(hex: "#E0E0E0"))
-                    .frame(width: 140, height: 210)
+        Button(action: onTap) {
+            AsyncImage(url: image.imageURL) { phase in
+                switch phase {
+                case .empty:
+                    // Loading placeholder
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#E0E0E0"))
+                        .frame(width: 140, height: 210)
+                        .overlay(
+                            ProgressView()
+                        )
+                case .success(let loadedImage):
+                    loadedImage
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 140, height: 210)
+                        .clipped()
+                        .cornerRadius(8)
+                case .failure:
+                    // Error placeholder
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#E0E0E0"))
+                        .frame(width: 140, height: 210)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(Color(hex: "#999999"))
+                        )
+                @unknown default:
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(hex: "#E0E0E0"))
+                        .frame(width: 140, height: 210)
+                }
             }
         }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

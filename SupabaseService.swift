@@ -6,7 +6,6 @@
 
 import Foundation
 import Supabase
-import Auth
 import Combine
 
 @MainActor

@@ -41,7 +41,7 @@ struct RateBottomSheet: View {
                 
                 // Star Rating
                 HStack(spacing: 8) {
-                    ForEach(1...10, id: \.self) { rating in
+                    ForEach(1...5, id: \.self) { rating in
                         Button(action: {
                             selectedRating = rating
                         }) {
@@ -55,7 +55,7 @@ struct RateBottomSheet: View {
                 
                 // Rating Label
                 if selectedRating > 0 {
-                    Text("\(selectedRating) / 10")
+                    Text("\(selectedRating) / 5")
                         .font(.custom("Nunito-Bold", size: 18))
                         .foregroundColor(Color(hex: "#1a1a1a"))
                 }
@@ -89,7 +89,7 @@ struct RateBottomSheet: View {
     
     private func submitRating() {
         // TODO: Save rating to backend/database
-        print("Rating submitted: \(selectedRating)/10 for movie \(movieId)")
+        print("Rating submitted: \(selectedRating)/5 for movie \(movieId)")
         
         // Show toast notification
         showToast = true

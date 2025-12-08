@@ -19,9 +19,9 @@ struct TabBarView: View {
         filterState.selectedPlatforms.count + filterState.selectedGenres.count
     }
     
-    // Show tab bar only when no selections are made AND no search query
+    // Show tab bar always - it should be pinned at the bottom on all screens
     private var shouldShowTabBar: Bool {
-        totalSelections == 0 && filterState.searchQuery.isEmpty
+        true // Always show the tab bar
     }
     
     var body: some View {
@@ -64,7 +64,11 @@ struct TabBarView: View {
             // MARK: - Custom Tab Bar - anchored to bottom safe area
             // Only show when no selections are made
             if shouldShowTabBar {
-                CustomTabBar(selectedTab: $selectedTab, showMangoListeningView: $showMangoListeningView)
+                VStack(spacing: 0) {
+                    // No separator - just the tab bar
+                    CustomTabBar(selectedTab: $selectedTab, showMangoListeningView: $showMangoListeningView)
+                }
+                .background(Color.white.ignoresSafeArea(edges: .top)) // Extend white background upward to cover any separator
             } else {
                 Color.clear.frame(height: 0)
             }
@@ -89,24 +93,10 @@ struct CustomTabBar: View {
     
     var body: some View {
         ZStack {
-            // Tab bar background with gradient top border
-            VStack(spacing: 0) {
-                // Gradient border at top
-                LinearGradient(
-                    colors: [
-                        Color(red: 255/255, green: 237/255, blue: 204/255),
-                        Color(red: 255/255, green: 237/255, blue: 204/255)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 1)
-                
-                // White background
-                Color.white
-                    .frame(height: 60)
-            }
-            .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: -2)
+            // Tab bar background - white background extends fully
+            Color.white
+                .frame(height: 60)
+                .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: -2)
             
             // Tab items
             HStack(spacing: 0) {

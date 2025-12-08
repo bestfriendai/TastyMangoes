@@ -20,6 +20,13 @@ struct IndividualListView: View {
     @State private var showAddMoviesSheet = false
     @State private var movies: [MasterlistMovie] = []
     @StateObject private var filterState = WatchlistFilterState.shared
+    @State private var showMoviePage = false
+    @State private var selectedMovieId: Int? = nil
+    
+    // Helper to safely convert movie ID
+    private func safeMovieId(from movieId: String) -> Int? {
+        return Int(movieId)
+    }
     
     var body: some View {
         ZStack {
@@ -45,7 +52,7 @@ struct IndividualListView: View {
                             .padding(.top, 12)
                     }
                     
-                    // Movie List (Product Cards)
+                    // Movie List (Product Cards) with Swipe Actions
                     VStack(spacing: 12) {
                         // Create New Watchlist Card (if empty)
                         if movies.isEmpty {
@@ -57,12 +64,23 @@ struct IndividualListView: View {
                             .buttonStyle(.plain)
                         }
                         
-                        // Movie Cards
+                        // Movie Cards with Swipe Actions
                         ForEach(movies) { movie in
-                            NavigationLink(destination: MoviePageView(movieId: Int(movie.id) ?? 0)) {
-                                WatchlistProductCard(movie: movie)
-                            }
-                            .buttonStyle(.plain)
+                            SwipeableMovieCard(
+                                movie: movie,
+                                onTap: {
+                                    // Only set movieId if we can safely convert it to a valid Int
+                                    if let movieId = safeMovieId(from: movie.id), movieId > 0 {
+                                        selectedMovieId = movieId
+                                        showMoviePage = true
+                                    } else {
+                                        print("⚠️ [IndividualListView] Invalid movie ID '\(movie.id)' - cannot open movie page")
+                                    }
+                                },
+                                onDelete: {
+                                    removeMovie(movieId: movie.id)
+                                }
+                            )
                         }
                     }
                     .padding(.horizontal, 16)
@@ -86,6 +104,36 @@ struct IndividualListView: View {
                     // Reload movies after adding
                     loadMovies()
                 }
+        }
+        .fullScreenCover(isPresented: $showMoviePage) {
+            if let movieId = selectedMovieId, movieId > 0 {
+                NavigationStack {
+                    MoviePageView(movieId: movieId)
+                }
+            } else {
+                // Fallback: show error or loading state
+                ZStack {
+                    Color(hex: "#fdfdfd")
+                        .ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 48))
+                            .foregroundColor(Color(hex: "#999999"))
+                        Text("Unable to load movie")
+                            .font(.custom("Inter-Regular", size: 16))
+                            .foregroundColor(Color(hex: "#666666"))
+                        Button("Close") {
+                            showMoviePage = false
+                        }
+                        .font(.custom("Inter-SemiBold", size: 16))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: "#FEA500"))
+                        .cornerRadius(8)
+                    }
+                }
+            }
         }
         .onAppear {
             print("📋 [IndividualListView] Loading movies for list: \(listName) (ID: \(listId))")
@@ -334,6 +382,153 @@ struct IndividualListView: View {
         selectedMovieIds.removeAll()
         isSelectionMode = false
     }
+    
+    private func removeMovie(movieId: String) {
+        // Remove movie from the list
+        watchlistManager.removeMovieFromList(movieId: movieId, listId: listId)
+        
+        // Remove from local array
+        movies.removeAll { $0.id == movieId }
+        
+        // Sync with Supabase
+        Task {
+            do {
+                try await SupabaseWatchlistAdapter.removeMovie(
+                    movieId: movieId,
+                    fromListId: listId
+                )
+                print("✅ [IndividualListView] Removed movie \(movieId) from list \(listId) in Supabase")
+            } catch {
+                print("❌ [IndividualListView] Failed to remove movie \(movieId) from Supabase: \(error)")
+            }
+        }
+    }
+}
+
+// MARK: - Swipeable Movie Card
+
+struct SwipeableMovieCard: View {
+    let movie: MasterlistMovie
+    let onTap: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging: Bool = false
+    @State private var initialDragLocation: CGPoint? = nil
+    
+    // Show delete button when swiped halfway (about -80 points for a typical card width)
+    private let showDeleteButtonThreshold: CGFloat = -80
+    // Snap to halfway position when swiped past threshold
+    private let snapToDeletePosition: CGFloat = -80
+    // Minimum horizontal movement before activating swipe (prevents interference with scrolling)
+    private let horizontalActivationThreshold: CGFloat = 30
+    // Minimum ratio of horizontal to vertical movement to activate swipe
+    private let horizontalVerticalRatio: CGFloat = 2.0
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .trailing) {
+                // Delete button background - always visible when swiped
+                if dragOffset < -20 {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            // Confirm delete - animate out and call delete
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                dragOffset = -geometry.size.width
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                onDelete()
+                            }
+                        }) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 60, height: 60)
+                                .background(Color.red)
+                                .clipShape(Circle())
+                        }
+                        .padding(.trailing, 16)
+                    }
+                }
+                
+                // Movie card
+                WatchlistProductCard(movie: movie)
+                    .offset(x: dragOffset)
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onChanged { value in
+                                // Store initial location on first change
+                                if initialDragLocation == nil {
+                                    initialDragLocation = value.startLocation
+                                }
+                                
+                                let horizontalMovement = abs(value.translation.width)
+                                let verticalMovement = abs(value.translation.height)
+                                
+                                // Only activate if:
+                                // 1. Horizontal movement exceeds threshold
+                                // 2. Horizontal movement is at least 2x the vertical movement
+                                // 3. Swiping left (negative width)
+                                // 4. We haven't already started dragging OR we're continuing a horizontal drag
+                                let isHorizontalIntent = horizontalMovement > horizontalActivationThreshold &&
+                                                       horizontalMovement > verticalMovement * horizontalVerticalRatio &&
+                                                       value.translation.width < 0
+                                
+                                if isHorizontalIntent {
+                                    if !isDragging {
+                                        isDragging = true
+                                    }
+                                    // Limit swipe to about halfway
+                                    let maxSwipe = -geometry.size.width * 0.5
+                                    dragOffset = max(maxSwipe, value.translation.width)
+                                } else if !isDragging {
+                                    // Don't interfere with scrolling - reset everything
+                                    dragOffset = 0
+                                    initialDragLocation = nil
+                                }
+                            }
+                            .onEnded { value in
+                                let horizontalMovement = abs(value.translation.width)
+                                let verticalMovement = abs(value.translation.height)
+                                
+                                if isDragging && horizontalMovement > verticalMovement * horizontalVerticalRatio {
+                                    // If swiped past threshold, snap to delete position
+                                    if value.translation.width < showDeleteButtonThreshold {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            dragOffset = snapToDeletePosition
+                                        }
+                                    } else {
+                                        // Not far enough - snap back
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            dragOffset = 0
+                                        }
+                                    }
+                                } else {
+                                    // Vertical swipe or not enough horizontal - snap back
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        dragOffset = 0
+                                    }
+                                }
+                                isDragging = false
+                                initialDragLocation = nil
+                            }
+                    )
+                    .onTapGesture {
+                        if dragOffset == 0 {
+                            onTap()
+                        } else {
+                            // Snap back if swiped
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                dragOffset = 0
+                            }
+                            isDragging = false
+                        }
+                    }
+            }
+        }
+        .frame(height: 144) // Approximate height of WatchlistProductCard
+    }
 }
 
 // MARK: - Watchlist Product Card
@@ -375,9 +570,10 @@ struct WatchlistProductCard: View {
                     // Tasty Score
                     if let tastyScore = movie.tastyScore {
                         HStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(Color(hex: "#FEA500"))
+                            Image("TastyScoreIcon")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 12, height: 12)
                             
                             Text("\(Int(tastyScore * 100))%")
                                 .font(.custom("Inter-SemiBold", size: 14))
