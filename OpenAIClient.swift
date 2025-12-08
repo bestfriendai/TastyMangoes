@@ -1,7 +1,9 @@
 //  OpenAIClient.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
+//  Updated by Claude on 2025-12-06 at 21:30 (America/Los_Angeles - Pacific Time)
 //  Notes: OpenAI client for LLM fallback when MangoCommand parser fails
+//  Removed debug logging for API key after fixing whitespace issue
 
 import Foundation
 
@@ -216,4 +218,3 @@ enum OpenAIError: LocalizedError {
         }
     }
 }
-

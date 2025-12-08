@@ -33,7 +33,7 @@ class SearchViewModel: ObservableObject {
     private var lastSearchedQuery: String = ""
     
     // Track if current search was initiated by Mango (for speech responses)
-    private var isMangoInitiatedSearch: Bool = false
+    var isMangoInitiatedSearch: Bool = false
     
     // Track last query for Mango speech responses
     var lastQuery: String? {
@@ -51,13 +51,22 @@ class SearchViewModel: ObservableObject {
     init() {
         // Listen for Mango-initiated queries
         NotificationCenter.default.addObserver(
-            forName: .mangoPerformMovieQuery,
+            forName: Notification.Name.mangoPerformMovieQuery,
             object: nil,
             queue: .main
         ) { [weak self] note in
-            guard let query = note.object as? String else { return }
-            self?.isMangoInitiatedSearch = true
-            self?.search(query: query)
+            // Extract query from notification before async context
+            guard let query = note.object as? String else {
+                print("🍋 [SearchViewModel] mangoPerformMovieQuery notification received but no query string")
+                return
+            }
+            
+            // Execute on MainActor (closure is already on main queue, but ensure MainActor isolation)
+            MainActor.assumeIsolated {
+                print("🍋 [SearchViewModel] Received mangoPerformMovieQuery notification with query: '\(query)'")
+                self?.isMangoInitiatedSearch = true
+                self?.search(query: query)
+            }
         }
     }
     
@@ -244,6 +253,41 @@ class SearchViewModel: ObservableObject {
             
             print("✅ Found \(searchResults.count) movies from Supabase for '\(query)'")
             
+            // Update voice event with search results if this was a Mango-initiated search
+            if isMangoInitiatedSearch, let eventId = SearchFilterState.shared.pendingVoiceEventId {
+                Task {
+                    let result: String
+                    if searchResults.isEmpty {
+                        result = "no_results"
+                    } else if searchResults.count >= 10 {
+                        result = "ambiguous"
+                    } else {
+                        result = "success"
+                    }
+                    
+                    await VoiceAnalyticsLogger.updateVoiceEventResult(
+                        eventId: eventId,
+                        result: result,
+                        resultCount: searchResults.count
+                    )
+                    
+                    // Trigger self-healing if needed (for search commands)
+                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    await VoiceIntentRouter.checkAndTriggerSelfHealingForSearch(
+                        utterance: utterance,
+                        commandType: "movie_search",
+                        result: result,
+                        voiceEventId: eventId
+                    )
+                    
+                    // Clear the eventId and utterance after updating
+                    await MainActor.run {
+                        SearchFilterState.shared.pendingVoiceEventId = nil
+                        SearchFilterState.shared.pendingVoiceUtterance = nil
+                    }
+                }
+            }
+            
             // Reset Mango flag after search completes (speech will be handled by SearchView onChange)
             isMangoInitiatedSearch = false
             
@@ -251,7 +295,7 @@ class SearchViewModel: ObservableObject {
             if searchResults.count == 1, let singleMovie = searchResults.first {
                 print("🍋 Single result found - posting notification to open movie page")
                 NotificationCenter.default.post(
-                    name: .mangoOpenMoviePage,
+                    name: Notification.Name.mangoOpenMoviePage,
                     object: nil,
                     userInfo: ["movieId": singleMovie.id]
                 )
@@ -269,6 +313,32 @@ class SearchViewModel: ObservableObject {
             hasSearched = true
             lastSearchedQuery = query
             print("❌ Search error: \(searchError.localizedDescription)")
+            
+            // Update voice event with error if this was a Mango-initiated search
+            if isMangoInitiatedSearch, let eventId = SearchFilterState.shared.pendingVoiceEventId {
+                Task {
+                    await VoiceAnalyticsLogger.updateVoiceEventResult(
+                        eventId: eventId,
+                        result: "network_error",
+                        errorMessage: searchError.localizedDescription
+                    )
+                    
+                    // Trigger self-healing if needed (for network errors with action words)
+                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    await VoiceIntentRouter.checkAndTriggerSelfHealingForSearch(
+                        utterance: utterance,
+                        commandType: "movie_search",
+                        result: "network_error",
+                        voiceEventId: eventId
+                    )
+                    
+                    // Clear the eventId and utterance after updating
+                    await MainActor.run {
+                        SearchFilterState.shared.pendingVoiceEventId = nil
+                        SearchFilterState.shared.pendingVoiceUtterance = nil
+                    }
+                }
+            }
         }
         
         isSearching = false

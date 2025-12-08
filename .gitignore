@@ -8,3 +8,9 @@ DerivedData/
 ClaudeAPIKey.swift
 Config/Secrets.xcconfig
 Secrets.xcconfig
+
+# Secrets
+Secrets.xcconfig
+
+# Xcode user data
+xcuserdata/

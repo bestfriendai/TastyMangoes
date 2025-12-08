@@ -26,9 +26,13 @@ struct AddToListView: View {
     @State private var showCreateWatchlistSheet = false
     @State private var recommenderName: String = ""
     
-    // Count should show number of movies being added (always 1)
+    // Count should show number of lists selected (including Masterlist)
     var selectedCount: Int {
-        return 1 // Always 1 movie being added
+        // Masterlist is always included, plus any other selected lists
+        var count = selectedListIds.count
+        // Masterlist is always selected (even if disabled), so count it
+        count += 1 // Masterlist is always included
+        return count
     }
     
     var body: some View {
@@ -108,9 +112,13 @@ struct AddToListView: View {
             
             loadWatchlists()
             filterWatchlists()
-            // Pre-select lists that already contain this movie
+            // Pre-select lists that already contain this movie (from local cache)
             let existingLists = watchlistManager.getListsForMovie(movieId: movieId)
             selectedListIds = existingLists
+            print("📋 [AddToListView] Pre-selected lists from local cache: \(existingLists)")
+            
+            // Note: Masterlist is always selected but not in selectedListIds (it's disabled)
+            // It will be automatically included in submitSelections()
             
             // Pre-fill recommender if provided (check both parameter and filterState)
             if let prefilled = prefilledRecommender ?? filterState.detectedRecommender {
@@ -312,24 +320,96 @@ struct AddToListView: View {
     }
     
     private func submitSelections() {
-        // If no lists selected, default to Masterlist
+        // Build list of all lists to add to
+        // Masterlist is always selected (even if disabled), so always include it
         var listsToAddTo = selectedListIds
-        if listsToAddTo.isEmpty {
-            listsToAddTo.insert("masterlist")
-        }
+        listsToAddTo.insert("masterlist") // Always include Masterlist
         
-        // Add to all selected lists (including Masterlist if nothing selected)
+        // Add to all selected lists (including Masterlist)
         let trimmedRecommender = recommenderName.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalRecommender = trimmedRecommender.isEmpty ? nil : trimmedRecommender
         
-        print("💾 AddToListView: Saving movie '\(movieTitle)' to \(listsToAddTo.count) list(s) with recommender: \(finalRecommender ?? "nil")")
+        // Log selected lists with names
+        let listNames = listsToAddTo.compactMap { listId -> String? in
+            if listId == "masterlist" {
+                return "Masterlist"
+            }
+            return watchlists.first(where: { $0.id == listId })?.name ?? listId
+        }
+        print("📋 [AddToListView] Selected lists: \(listNames.joined(separator: ", "))")
+        print("💾 AddToListView: Saving movie '\(movieTitle)' (ID: \(movieId)) to \(listsToAddTo.count) list(s) with recommender: \(finalRecommender ?? "nil")")
         
-        for listId in listsToAddTo {
-            _ = watchlistManager.addMovieToList(
-                movieId: movieId,
-                listId: listId,
-                recommenderName: finalRecommender
-            )
+        // Save to Supabase for each list
+        Task {
+            var successCount = 0
+            var failureCount = 0
+            var skippedCount = 0
+            
+            for listId in listsToAddTo {
+                let listName = listId == "masterlist" ? "Masterlist" : (watchlists.first(where: { $0.id == listId })?.name ?? listId)
+                print("📋 [AddToListView] Processing list: \(listName) (\(listId))")
+                
+                do {
+                    // Check if movie exists in Supabase first (don't rely on stale local cache)
+                    print("📋 [AddToListView] Checking if movie \(movieId) is in list \(listName) (\(listId))")
+                    
+                    // Try to save to Supabase first - Supabase will handle duplicates via UNIQUE constraint
+                    // If it's a duplicate, Supabase will throw an error which we'll catch
+                    print("📋 [Supabase] Inserting movie \(movieId) into watchlist \(listId)")
+                    try await SupabaseWatchlistAdapter.addMovie(
+                        movieId: movieId,
+                        toListId: listId,
+                        recommenderName: finalRecommender,
+                        recommenderNotes: nil
+                    )
+                    print("✅ [Supabase] Successfully inserted movie \(movieId) into watchlist \(listId)")
+                    
+                    // Only update local cache if Supabase save succeeded
+                    let localSuccess = watchlistManager.addMovieToList(
+                        movieId: movieId,
+                        listId: listId,
+                        recommenderName: finalRecommender
+                    )
+                    
+                    if !localSuccess {
+                        print("⚠️ [AddToListView] Movie already in local cache for \(listName), but Supabase save succeeded - cache was stale")
+                    }
+                    
+                    successCount += 1
+                } catch {
+                    // Check if error is due to duplicate (UNIQUE constraint violation)
+                    let errorDescription = error.localizedDescription.lowercased()
+                    if errorDescription.contains("unique") || errorDescription.contains("duplicate") || errorDescription.contains("already exists") {
+                        print("⚠️ [AddToListView] Movie already exists in Supabase for \(listName) (\(listId)) - skipping")
+                        // Update local cache to match Supabase
+                        _ = watchlistManager.addMovieToList(
+                            movieId: movieId,
+                            listId: listId,
+                            recommenderName: finalRecommender
+                        )
+                        skippedCount += 1
+                    } else {
+                        print("❌ [Supabase] Failed to insert movie \(movieId) into watchlist \(listId): \(error)")
+                        print("❌ [Supabase] Error details: \(error.localizedDescription)")
+                        failureCount += 1
+                        // Still save locally for UI feedback, but mark as needing sync
+                        _ = watchlistManager.addMovieToList(
+                            movieId: movieId,
+                            listId: listId,
+                            recommenderName: finalRecommender
+                        )
+                    }
+                }
+            }
+            
+            print("💾 [AddToListView] Save complete: \(successCount) succeeded, \(skippedCount) skipped (already exists), \(failureCount) failed out of \(listsToAddTo.count) lists")
+            
+            // Refresh cache from Supabase after saving to ensure UI shows correct data
+            if successCount > 0 || skippedCount > 0 {
+                print("🔄 [AddToListView] Refreshing watchlist cache from Supabase...")
+                await WatchlistManager.shared.syncFromSupabase()
+                print("✅ [AddToListView] Cache refreshed from Supabase")
+            }
         }
         
         // Clear detected recommender now that we've used it

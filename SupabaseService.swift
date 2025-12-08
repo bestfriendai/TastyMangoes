@@ -2,8 +2,7 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:45 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:20 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
-//  Notes: Added batch watchlist movie cards fetch (no TMDB calls), TMDB call logging, performance optimizations.
+//  Notes: Supabase service layer for database operations - updated to match revised schema with watch_history and user_ratings
 
 import Foundation
 import Supabase
@@ -237,7 +236,10 @@ class SupabaseService: ObservableObject {
     // MARK: - Watchlist Operations
     
     func getUserWatchlists(userId: UUID) async throws -> [Watchlist] {
+        print("📋 [Watchlist] getUserWatchlists called for user: \(userId)")
+        
         guard let client = client else {
+            print("❌ [Watchlist] Supabase client not configured")
             throw SupabaseError.notConfigured
         }
         
@@ -250,11 +252,19 @@ class SupabaseService: ObservableObject {
             .execute()
             .value
         
+        print("📋 [Watchlist] Loaded \(response.count) watchlists from Supabase for user \(userId)")
+        for watchlist in response {
+            print("  📋 [Watchlist] - \(watchlist.name) (ID: \(watchlist.id))")
+        }
+        
         return response
     }
     
     func createWatchlist(userId: UUID, name: String) async throws -> Watchlist {
+        print("📋 [Watchlist] createWatchlist called: name=\(name), userId=\(userId)")
+        
         guard let client = client else {
+            print("❌ [Watchlist] Supabase client not configured")
             throw SupabaseError.notConfigured
         }
         
@@ -265,6 +275,7 @@ class SupabaseService: ObservableObject {
             sortOrder: 0
         )
         
+        print("📋 [Watchlist] Inserting watchlist into Supabase...")
         let response: Watchlist = try await client
             .from("watchlists")
             .insert(watchlist)
@@ -273,6 +284,7 @@ class SupabaseService: ObservableObject {
             .execute()
             .value
         
+        print("📋 [Watchlist] Successfully created watchlist in Supabase: \(name) (ID: \(response.id))")
         return response
     }
     
@@ -340,7 +352,10 @@ class SupabaseService: ObservableObject {
         recommenderName: String? = nil,
         recommenderNotes: String? = nil
     ) async throws -> WatchlistMovie {
+        print("📋 [Supabase] addMovieToWatchlist called: watchlistId=\(watchlistId), movieId=\(movieId), recommenderName=\(recommenderName ?? "nil")")
+        
         guard let client = client else {
+            print("❌ [Supabase] Client not configured")
             throw SupabaseError.notConfigured
         }
         
@@ -352,8 +367,7 @@ class SupabaseService: ObservableObject {
             recommenderNotes: recommenderNotes
         )
         
-        print("💾 SupabaseService: Saving watchlist item with recommended_by = \(recommenderName ?? "nil")")
-        
+        print("📋 [Supabase] Inserting into watchlist_movies table...")
         let response: WatchlistMovie = try await client
             .from("watchlist_movies")
             .insert(watchlistMovie)
@@ -362,8 +376,7 @@ class SupabaseService: ObservableObject {
             .execute()
             .value
         
-        print("✅ SupabaseService: Saved watchlist item - movieId: \(movieId), recommenderName: \(response.recommenderName ?? "nil")")
-        
+        print("✅ [Supabase] Successfully inserted movie \(movieId) into watchlist \(watchlistId)")
         return response
     }
     
@@ -453,24 +466,19 @@ class SupabaseService: ObservableObject {
     
     // MARK: - User Rating Operations
     
-    func addOrUpdateRating(userId: UUID, movieId: String, rating: Int, reviewText: String?, feedbackSource: String = "quick_star") async throws -> UserRating {
+    func addOrUpdateRating(userId: UUID, movieId: String, rating: Int, reviewText: String?) async throws -> UserRating {
         guard let client = client else {
             throw SupabaseError.notConfigured
         }
         
-        // Create UserRating struct - the Supabase Swift client will encode this properly
-        // The upsert will automatically handle conflicts based on the UNIQUE constraint
-        // on (user_id, movie_id). If a row exists, it updates; if not, it inserts.
         let userRating = UserRating(
             userId: userId,
             movieId: movieId,
             rating: rating,
-            reviewText: reviewText,
-            feedbackSource: feedbackSource
+            reviewText: reviewText
         )
         
-        print("💾 Upserting rating to user_ratings: user_id=\(userId.uuidString), movie_id=\(movieId), rating=\(rating), feedback_source=\(feedbackSource)")
-        
+        // Use upsert to handle duplicates (UNIQUE constraint)
         let response: UserRating = try await client
             .from("user_ratings")
             .upsert(userRating)
@@ -479,7 +487,6 @@ class SupabaseService: ObservableObject {
             .execute()
             .value
         
-        print("✅ Successfully upserted rating: id=\(response.id), rating=\(response.rating)")
         return response
     }
     
@@ -549,12 +556,6 @@ class SupabaseService: ObservableObject {
     /// If the movie doesn't exist, it will trigger ingestion automatically
     /// Accepts tmdbId as String or Int
     func fetchMovieCard(tmdbId: String) async throws -> MovieCard {
-        // NOTE: This calls the Supabase get-movie-card function, which may trigger TMDB ingestion
-        // if the movie is not in work_cards_cache. This should only be used as a fallback when
-        // fetchMovieCardFromCache() returns nil. Watchlist/Masterlist should never call this.
-        // Search results may use this for movies not yet ingested.
-        print("[TMDB CALL] fetchMovieCard called for tmdbId=\(tmdbId) - may trigger TMDB ingestion if not cached")
-        
         guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/get-movie-card") else {
             throw SupabaseError.invalidResponse
         }
@@ -578,11 +579,6 @@ class SupabaseService: ObservableObject {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
-            // Handle 404 gracefully (function not deployed yet)
-            if httpResponse.statusCode == 404 {
-                throw SupabaseError.functionNotFound
-            }
-            
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
@@ -611,156 +607,52 @@ class SupabaseService: ObservableObject {
         return try await fetchMovieCard(tmdbId: String(tmdbId))
     }
     
-    // MARK: - Direct Cache Reads (Performance Optimized, No TMDB Calls)
-    
-    /// Fetches a movie card directly from work_cards_cache (no TMDB calls, no function calls)
-    /// This reads pre-built cards directly from the cache table, never triggers ingestion.
-    /// Use this for watchlist and movie detail views when the movie should already be in cache.
-    /// Returns nil if movie is not in cache - caller should handle fallback appropriately.
+    /// Fetches a movie card directly from work_cards_cache table (no edge function call)
+    /// Returns nil if the movie is not in the cache
     func fetchMovieCardFromCache(tmdbId: String) async throws -> MovieCard? {
         guard let client = client else {
             throw SupabaseError.notConfigured
         }
         
-        // Get work_id for this tmdb_id
-        struct WorkLookup: Codable {
+        // First, find the work_id from tmdb_id
+        struct Work: Codable {
             let workId: Int
+            
             enum CodingKeys: String, CodingKey {
                 case workId = "work_id"
             }
         }
         
-        let workLookups: [WorkLookup] = try await client
+        let works: [Work] = try await client
             .from("works")
             .select("work_id")
             .eq("tmdb_id", value: tmdbId)
             .execute()
             .value
         
-        guard let work = workLookups.first else {
-            return nil // Movie not in database
+        guard let work = works.first else {
+            // Movie not found in works table
+            return nil
         }
         
-        // Read from work_cards_cache directly (no function call, no TMDB)
-        struct CachedCardRow: Codable {
+        // Now fetch from work_cards_cache
+        struct CacheEntry: Codable {
             let payload: MovieCard
         }
         
-        let cachedCard: CachedCardRow? = try? await client
+        let cacheEntries: [CacheEntry] = try await client
             .from("work_cards_cache")
             .select("payload")
             .eq("work_id", value: work.workId)
-            .single()
             .execute()
             .value
         
-        return cachedCard?.payload
-    }
-    
-    // MARK: - Voice Analytics Logging
-    
-    /// Log a voice interaction event to Supabase
-    func logVoiceEvent(_ event: VoiceEventLog) async throws {
-        guard let url = URL(string: "\(SupabaseConfig.supabaseURL)/functions/v1/log-voice-event") else {
-            throw SupabaseError.invalidResponse
+        guard let cacheEntry = cacheEntries.first else {
+            // Not in cache
+            return nil
         }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(SupabaseConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let encoder = JSONEncoder()
-        request.httpBody = try encoder.encode(event)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw SupabaseError.invalidResponse
-        }
-        
-        guard (200...299).contains(httpResponse.statusCode) else {
-            // Handle 404 gracefully (function not deployed yet)
-            if httpResponse.statusCode == 404 {
-                throw SupabaseError.functionNotFound
-            }
-            
-            if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
-               let errorMessage = errorData["error"] {
-                throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
-            }
-            throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]))
-        }
-    }
-    
-    // MARK: - Batch Watchlist Movie Cards (Performance Optimized)
-    
-    /// Fetches all movie cards for watchlist in a single query (no TMDB calls, reads from work_cards_cache)
-    /// This is optimized for watchlist display - reads pre-built cards directly, never triggers ingestion.
-    /// This is the ONLY method watchlist views should use - it guarantees no TMDB calls.
-    /// Returns empty array if no movies found in cache (should not happen for valid watchlist movies).
-    func fetchWatchlistMovieCardsBatch(movieIds: [String]) async throws -> [MovieCard] {
-        let startTime = Date()
-        print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - starting batch fetch for \(movieIds.count) movies")
-        
-        guard let client = client else {
-            throw SupabaseError.notConfigured
-        }
-        
-        guard !movieIds.isEmpty else {
-            print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - no movies to fetch, returning empty array")
-            return []
-        }
-        
-        // Query works table to get work_ids (tmdb_id is stored as TEXT)
-        struct WorkIdLookup: Codable {
-            let workId: Int
-            let tmdbId: String
-            
-            enum CodingKeys: String, CodingKey {
-                case workId = "work_id"
-                case tmdbId = "tmdb_id"
-            }
-        }
-        
-        let workLookups: [WorkIdLookup] = try await client
-            .from("works")
-            .select("work_id, tmdb_id")
-            .in("tmdb_id", values: movieIds) // tmdb_id is TEXT, so use strings directly
-            .execute()
-            .value
-        
-        guard !workLookups.isEmpty else {
-            print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - no works found for tmdb_ids")
-            return []
-        }
-        
-        let workIds = workLookups.map { $0.workId }
-        
-        // Query work_cards_cache table directly (pre-built cards, no TMDB calls)
-        // The payload field is JSONB and should decode directly to MovieCard
-        struct CachedCardRow: Codable {
-            let workId: Int
-            let payload: MovieCard
-            
-            enum CodingKeys: String, CodingKey {
-                case workId = "work_id"
-                case payload
-            }
-        }
-        
-        let cachedCardRows: [CachedCardRow] = try await client
-            .from("work_cards_cache")
-            .select("work_id, payload")
-            .in("work_id", values: workIds)
-            .execute()
-            .value
-        
-        let fetchTime = Date().timeIntervalSince(startTime) * 1000
-        print("[WATCHLIST PERF] fetchWatchlistMovieCardsBatch - Supabase query completed in \(Int(fetchTime))ms, returned \(cachedCardRows.count) movies")
-        
-        // Extract MovieCard from payload (JSONB decodes automatically)
-        return cachedCardRows.map { $0.payload }
+        return cacheEntry.payload
     }
     
     // MARK: - Similar Movies
@@ -813,11 +705,6 @@ class SupabaseService: ObservableObject {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
-            // Handle 404 gracefully (function not deployed yet)
-            if httpResponse.statusCode == 404 {
-                throw SupabaseError.functionNotFound
-            }
-            
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
@@ -996,11 +883,6 @@ class SupabaseService: ObservableObject {
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
-            // Handle 404 gracefully (function not deployed yet)
-            if httpResponse.statusCode == 404 {
-                throw SupabaseError.functionNotFound
-            }
-            
             if let errorData = try? JSONDecoder().decode([String: String].self, from: data),
                let errorMessage = errorData["error"] {
                 throw SupabaseError.networkError(NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
@@ -1085,7 +967,6 @@ enum SupabaseError: LocalizedError {
     case invalidResponse
     case networkError(Error)
     case profileNotFound
-    case functionNotFound
     
     var errorDescription: String? {
         switch self {
@@ -1095,8 +976,6 @@ enum SupabaseError: LocalizedError {
             return "User profile not found. Please try signing up again."
         case .noSession:
             return "No active session found."
-        case .functionNotFound:
-            return "Supabase function not found (404). Function may not be deployed."
         case .invalidResponse:
             return "Invalid response from server."
         case .networkError(let error):

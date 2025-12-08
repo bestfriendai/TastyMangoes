@@ -1,7 +1,8 @@
 //  AuthManager.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:50 (America/Los_Angeles - Pacific Time)
-//  Notes: Authentication manager for handling user sign up, sign in, and sign out
+//  Last modified: 2025-12-06 at 11:38 (America/Los_Angeles - Pacific Time)
+//  Notes: Authentication manager for handling user sign up, sign in, and sign out. Added watchlist sync from Supabase after sign-in and sign-out notifications.
 
 import Foundation
 import SwiftUI
@@ -104,6 +105,15 @@ class AuthManager: ObservableObject {
             if let user = try await supabaseService.getCurrentUser() {
                 currentUser = try await supabaseService.getProfile(userId: user.id)
             }
+            
+            // Sync watchlists from Supabase after successful sign-in
+            await WatchlistManager.shared.syncFromSupabase()
+            
+            // Post notification to refresh watchlist views
+            NotificationCenter.default.post(
+                name: Notification.Name("UserDidSignIn"),
+                object: nil
+            )
         } catch {
             errorMessage = error.localizedDescription
             throw error
@@ -120,6 +130,13 @@ class AuthManager: ObservableObject {
             try await supabaseService.signOut()
             isAuthenticated = false
             currentUser = nil
+            
+            // Clear watchlist data when signing out
+            // The WatchlistManager will reload from cache or Supabase when user signs back in
+            NotificationCenter.default.post(
+                name: Notification.Name("UserDidSignOut"),
+                object: nil
+            )
         } catch {
             errorMessage = error.localizedDescription
             throw error

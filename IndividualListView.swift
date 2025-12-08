@@ -1,11 +1,8 @@
 //  IndividualListView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:57 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
-//  Notes: Optimized loading: cache-first display, single batch Supabase query, no TMDB calls.
-//
-//  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
-//  directly from work_cards_cache. All movie data comes from Supabase cache tables.
+//  Last modified: 2025-11-17 at 03:22 (America/Los_Angeles - Pacific Time)
+//  Notes: Built individual list view (Manage List) with movie selection, drag handles, and management actions. Updated to match Figma design with hero section, search, filters, and Product Card format. Added filter state tracking and active filter badges. Added "Add movies to list" functionality for empty lists.
 
 import SwiftUI
 
@@ -62,7 +59,7 @@ struct IndividualListView: View {
                         
                         // Movie Cards
                         ForEach(movies) { movie in
-                            NavigationLink(destination: MoviePageView(movieId: movie.id)) {
+                            NavigationLink(destination: MoviePageView(movieId: Int(movie.id) ?? 0)) {
                                 WatchlistProductCard(movie: movie)
                             }
                             .buttonStyle(.plain)
@@ -91,6 +88,20 @@ struct IndividualListView: View {
                 }
         }
         .onAppear {
+            print("📋 [IndividualListView] Loading movies for list: \(listName) (ID: \(listId))")
+            // Refresh cache from Supabase before loading to ensure we have latest data
+            Task {
+                print("📋 [IndividualListView] Syncing watchlist cache from Supabase...")
+                await watchlistManager.syncFromSupabase()
+                print("📋 [IndividualListView] Cache synced, loading movies...")
+                await MainActor.run {
+                    loadMovies()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("WatchlistManagerDidUpdate"))) { _ in
+            // Reload movies when watchlist manager updates
+            print("📋 [IndividualListView] WatchlistManagerDidUpdate notification received - reloading movies")
             loadMovies()
         }
     }
@@ -253,68 +264,47 @@ struct IndividualListView: View {
     // MARK: - Helper Methods
     
     private func loadMovies() {
-        let startTime = Date()
-        print("[WATCHLIST PERF] IndividualListView.loadMovies - starting for listId=\(listId)")
-        
-        // Step 1: Load from cache immediately (instant display)
-        let cachedMovies = watchlistManager.getCachedMovieCardsForList(listId: listId)
-        if !cachedMovies.isEmpty {
-            let cacheTime = Date().timeIntervalSince(startTime) * 1000
-            print("[WATCHLIST PERF] IndividualListView.loadMovies - using cached items: \(cachedMovies.count) (took \(Int(cacheTime))ms)")
-            movies = cachedMovies
-        }
-        
-        // Step 2: Refresh from Supabase in background
+        // Load movies for this list from watchlist manager
         let movieIds = watchlistManager.getMoviesInList(listId: listId)
+        print("📋 [IndividualListView] Found \(movieIds.count) movies in local cache for list \(listName)")
+        print("📋 [IndividualListView] Movie IDs: \(Array(movieIds).sorted())")
         
-        guard !movieIds.isEmpty else {
-            print("[WATCHLIST PERF] IndividualListView.loadMovies - no movies in list")
-            return
-        }
-        
+        // Fetch real movie data from Supabase (not mock data)
         Task {
-            let refreshStartTime = Date()
-            print("[WATCHLIST PERF] IndividualListView.loadMovies - fetching from Supabase...")
+            var fetchedMovies: [MasterlistMovie] = []
             
-            do {
-                // Use batch fetch - single Supabase query, no TMDB calls
-                let movieIdsArray = Array(movieIds)
-                let movieCards = try await SupabaseService.shared.fetchWatchlistMovieCardsBatch(movieIds: movieIdsArray)
-                
-                // Convert to MasterlistMovie and cache them
-                var fetchedMovies: [MasterlistMovie] = []
-                for movieCard in movieCards {
-                    // Log that we're using cached data (no TMDB call)
-                    print("[WATCHLIST CARD] Using work_cards_cache for tmdbId=\(movieCard.tmdbId) (no TMDB call)")
-                    
-                    let masterlistMovie = movieCard.toMasterlistMovie(
-                        isWatched: watchlistManager.isWatched(movieId: movieCard.tmdbId),
-                        friendsCount: 0 // TODO: Implement friends count when available
-                    )
-                    fetchedMovies.append(masterlistMovie)
-                    // Cache it for next time
-                    watchlistManager.cacheMovieCard(masterlistMovie)
-                }
-                
-                let refreshTime = Date().timeIntervalSince(refreshStartTime) * 1000
-                print("[WATCHLIST PERF] IndividualListView.loadMovies - Supabase response received (\(Int(refreshTime))ms)")
-                
-                await MainActor.run {
-                    // Merge with existing (don't clear if refresh has fewer items)
-                    var moviesById: [String: MasterlistMovie] = [:]
-                    for movie in self.movies {
-                        moviesById[movie.id] = movie
+            for movieId in movieIds {
+                print("📋 [IndividualListView] Fetching movie card for ID: \(movieId)")
+                do {
+                    // Try fetching from cache first
+                    if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: movieId) {
+                        let masterlistMovie = movieCard.toMasterlistMovie(
+                            isWatched: watchlistManager.isWatched(movieId: movieId),
+                            friendsCount: 0 // TODO: Implement friends count when available
+                        )
+                        fetchedMovies.append(masterlistMovie)
+                        print("✅ [IndividualListView] Loaded movie \(movieId) from cache")
+                    } else {
+                        // Fallback to get-movie-card function
+                        print("📋 [IndividualListView] Movie \(movieId) not in cache, fetching from get-movie-card...")
+                        let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                        let masterlistMovie = movieCard.toMasterlistMovie(
+                            isWatched: watchlistManager.isWatched(movieId: movieId),
+                            friendsCount: 0
+                        )
+                        fetchedMovies.append(masterlistMovie)
+                        print("✅ [IndividualListView] Loaded movie \(movieId) from get-movie-card")
                     }
-                    for movie in fetchedMovies {
-                        moviesById[movie.id] = movie
-                    }
-                    self.movies = Array(moviesById.values).sorted { $0.title < $1.title }
-                    
-                    let totalTime = Date().timeIntervalSince(startTime) * 1000
-                    print("[WATCHLIST PERF] IndividualListView.loadMovies - finished (total: \(Int(totalTime))ms, final count: \(self.movies.count))")
+                } catch {
+                    print("❌ [IndividualListView] Failed to fetch movie \(movieId): \(error)")
+                    print("❌ [IndividualListView] Error details: \(error.localizedDescription)")
+                    // Continue with other movies even if one fails
                 }
-            } catch {
-                print("❌ [WATCHLIST PERF] IndividualListView.loadMovies - error: \(error)")
+            }
+            
+            await MainActor.run {
+                print("📋 [IndividualListView] Loaded \(fetchedMovies.count) movies from Supabase")
+                movies = fetchedMovies
             }
         }
     }
@@ -350,15 +340,9 @@ struct IndividualListView: View {
 
 struct WatchlistProductCard: View {
     let movie: MasterlistMovie
-    @EnvironmentObject private var watchlistManager: WatchlistManager
-    @State private var showMoviePage = false
     
     var body: some View {
-        Button(action: {
-            // Wire up NAVIGATE connection: Product Card → Movie Page
-            showMoviePage = true
-        }) {
-            HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             // Poster
             MoviePosterImage(
                 posterURL: movie.posterURL,
@@ -415,21 +399,6 @@ struct WatchlistProductCard: View {
                     }
                 }
                 
-                // Recommendation Indicator
-                if let recommendation = watchlistManager.getRecommendationData(movieId: movie.id),
-                   let recommender = recommendation.recommenderName {
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(Color(hex: "#666666"))
-                        
-                        Text("Recommended by \(recommender)")
-                            .font(.custom("Inter-Regular", size: 12))
-                            .foregroundColor(Color(hex: "#666666"))
-                    }
-                    .padding(.top, 4)
-                }
-                
                 // Watch on and Liked by (placeholder avatars)
                 HStack(spacing: 16) {
                     // Watch on
@@ -480,13 +449,6 @@ struct WatchlistProductCard: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .fullScreenCover(isPresented: $showMoviePage) {
-            NavigationStack {
-                MoviePageView(movieId: movie.id) // movie.id is now TMDB ID string
-            }
-        }
     }
 }
 

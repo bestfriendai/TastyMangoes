@@ -33,8 +33,13 @@ struct TastyMangoesApp: App {
                 // Check auth status on app launch
                 await authManager.checkAuthStatus()
                 
-                // Note: Supabase sync removed temporarily to debug persistence
-                // Will be re-added after cache persistence is confirmed working
+                // Sync watchlists from Supabase if user is authenticated
+                if authManager.isAuthenticated {
+                    print("📋 [Watchlist] App launch - user authenticated, syncing watchlists from Supabase...")
+                    await WatchlistManager.shared.syncFromSupabase()
+                } else {
+                    print("📋 [Watchlist] App launch - user not authenticated, skipping watchlist sync")
+                }
             }
         }
     }

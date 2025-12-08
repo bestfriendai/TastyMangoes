@@ -115,14 +115,32 @@ struct CreateWatchlistBottomSheet: View {
         
         isCreating = true
         
-        // Create the watchlist
-        let newWatchlist = watchlistManager.createWatchlist(name: trimmedName)
-        
-        // Call the callback if provided
-        onCreate?(newWatchlist)
-        
-        // Dismiss the sheet
-        dismiss()
+        // Create the watchlist asynchronously in Supabase
+        Task {
+            do {
+                print("📋 [Watchlist] Creating watchlist: \(trimmedName)")
+                let newWatchlist = try await watchlistManager.createWatchlistAsync(name: trimmedName)
+                print("📋 [Watchlist] Successfully created watchlist: \(trimmedName) (ID: \(newWatchlist.id))")
+                
+                // Call the callback if provided
+                await MainActor.run {
+                    onCreate?(newWatchlist)
+                    // Dismiss the sheet
+                    dismiss()
+                }
+            } catch {
+                print("❌ [Watchlist] Error creating watchlist: \(error)")
+                print("❌ [Watchlist] Error details: \(error.localizedDescription)")
+                
+                // Fallback to local-only creation if Supabase fails
+                await MainActor.run {
+                    let newWatchlist = watchlistManager.createWatchlist(name: trimmedName)
+                    print("⚠️ [Watchlist] Created watchlist locally only (Supabase sync failed): \(trimmedName)")
+                    onCreate?(newWatchlist)
+                    dismiss()
+                }
+            }
+        }
     }
 }
 

@@ -4,8 +4,6 @@
 //
 //  Rewritten to fix scroll-gesture conflicts with MoviePageView
 //  Last updated on 2025-11-16 at 02:10 (California time)
-//  Last modified: 2025-12-03 at 11:28 PST by Cursor Assistant
-//  Notes: Added TalkToMango voice interaction with listening view and glow animation. Fixed stuck listening state: resets showListeningView on app launch, ensures recognizer stops on launch if active, prevents auto-restart after dismissal.
 //
 
 import SwiftUI
@@ -13,10 +11,8 @@ import SwiftUI
 struct TabBarView: View {
     @State private var selectedTab = 0   // Default to Home
     @ObservedObject private var filterState = SearchFilterState.shared
-    @StateObject private var speechRecognizer = SpeechRecognizer()
-    @State private var showListeningView = false
-    @State private var isListening = false
-    @State private var animatePulse = false
+    @StateObject private var mangoSpeechRecognizer = SpeechRecognizer()
+    @State private var showMangoListeningView = false
     
     // Computed property for selection count
     private var totalSelections: Int {
@@ -37,13 +33,23 @@ struct TabBarView: View {
             case 1:
                 SearchView()
             case 2:
-                // Placeholder for AI chat / Talk to Mango
+                // Talk to Mango - show background, listening view will be presented as fullScreenCover
                 Color(.systemBackground)
-                    .overlay(
-                        Text("Talk to Mango (Coming Soon)")
-                            .font(.title3)
-                            .foregroundColor(.gray)
-                    )
+                    .onAppear {
+                        // Automatically present MangoListeningView when tab 2 is selected
+                        if !showMangoListeningView {
+                            showMangoListeningView = true
+                        }
+                    }
+                    .onChange(of: selectedTab) { oldValue, newValue in
+                        // Dismiss listening view when switching away from tab 2
+                        if newValue != 2 {
+                            showMangoListeningView = false
+                        } else if oldValue != 2 {
+                            // Present when switching to tab 2 (only if coming from another tab)
+                            showMangoListeningView = true
+                        }
+                    }
             case 3:
                 WatchlistView()
             case 4:
@@ -58,110 +64,28 @@ struct TabBarView: View {
             // MARK: - Custom Tab Bar - anchored to bottom safe area
             // Only show when no selections are made
             if shouldShowTabBar {
-                CustomTabBar(
-                    selectedTab: $selectedTab,
-                    showListeningView: $showListeningView,
-                    isListening: $isListening,
-                    animatePulse: $animatePulse,
-                    speechRecognizer: speechRecognizer
-                )
+                CustomTabBar(selectedTab: $selectedTab, showMangoListeningView: $showMangoListeningView)
             } else {
                 Color.clear.frame(height: 0)
             }
         }
         .ignoresSafeArea(.keyboard)
-        .fullScreenCover(isPresented: $showListeningView) {
+        .fullScreenCover(isPresented: $showMangoListeningView) {
             MangoListeningView(
-                speechRecognizer: speechRecognizer,
-                isPresented: $showListeningView
+                speechRecognizer: mangoSpeechRecognizer,
+                isPresented: $showMangoListeningView
             )
-            .onDisappear {
-                // Ensure showListeningView is false when view disappears
-                // This prevents stuck state after app restart
-                if showListeningView {
-                    print("🎤 fullScreenCover onDisappear - ensuring showListeningView is false")
-                    showListeningView = false
-                }
-            }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToSearch)) { note in
-            // Navigate to Search tab when Mango triggers a search
-            selectedTab = 1 // Search tab
-            print("🍋 Navigating to Search tab from Mango command")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .mangoPerformMovieQuery)) { _ in
-            // Navigate to Search tab when Mango performs a movie query
-            selectedTab = 1 // Search tab
-            print("🍋 Navigating to Search tab for Mango movie query")
-        }
-        .onAppear {
-            // Ensure listening view is not shown on app launch
-            // Reset to false in case it was stuck from previous session
-            if showListeningView {
-                print("⚠️ App launched with showListeningView=true - resetting to false")
-                showListeningView = false
-            }
-            // Also ensure recognizer is in idle state
-            let isActive: Bool
-            switch speechRecognizer.state {
-            case .listening, .requesting:
-                isActive = true
-            default:
-                isActive = false
-            }
-            if isActive {
-                print("⚠️ App launched with recognizer active - stopping")
-                Task {
-                    speechRecognizer.stopListening(reason: "appLaunch")
-                }
-            }
-        }
-        .onChange(of: speechRecognizer.state) { oldState, newState in
-            print("🎤 TabBarView: speechRecognizer state changed from \(oldState) to \(newState)")
-            // Update listening state for glow animation
-            switch newState {
-            case .listening, .requesting:
-                isListening = true
-                withAnimation {
-                    animatePulse = true
-                }
-            case .idle, .processing, .error:
-                isListening = false
-                withAnimation {
-                    animatePulse = false
-                }
-            }
-        }
-        .onChange(of: showListeningView) { oldValue, newValue in
-            print("🎤 TabBarView: showListeningView changed from \(oldValue) to \(newValue)")
-            
-            // When listening view is dismissed, ensure we stop recording
-            // But only if it was actually dismissed (not just initialized)
-            if !newValue && oldValue {
-                print("🎤 Listening view was dismissed")
-                // Stop recording if still active
-                if isListening || animatePulse {
-                    print("🎤 Listening view dismissed while recording active, stopping recording")
-                    Task {
-                        speechRecognizer.stopListening(reason: "viewDismissed")
-                    }
-                }
-                // IMPORTANT: Do NOT automatically restart or set showListeningView back to true
-                // Only user tap should set it to true
-            }
-            
-            // Prevent auto-restart: Never set showListeningView = true automatically
-            // It should only be set by user tap on the button
+        .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToSearch)) { _ in
+            print("🍋 [TabBarView] Received mangoNavigateToSearch notification - switching to Search tab")
+            selectedTab = 1
         }
     }
 }
 
 struct CustomTabBar: View {
     @Binding var selectedTab: Int
-    @Binding var showListeningView: Bool
-    @Binding var isListening: Bool
-    @Binding var animatePulse: Bool
-    @ObservedObject var speechRecognizer: SpeechRecognizer
+    @Binding var showMangoListeningView: Bool
     
     var body: some View {
         ZStack {
@@ -230,14 +154,9 @@ struct CustomTabBar: View {
                 Spacer()
                 
                 Button {
-                    // Present listening view instead of switching tabs
-                    // Only set to true if not already true (prevent double-tap issues)
-                    if !showListeningView {
-                        print("🎤 User tapped TalkToMango button")
-                        showListeningView = true
-                    } else {
-                        print("⚠️ TalkToMango button tapped but view already showing - ignoring")
-                    }
+                    // Switch to tab 2 and show listening view
+                    selectedTab = 2
+                    showMangoListeningView = true
                 } label: {
                     ZStack {
                         // Prominent filled orange circular background with gradient
@@ -279,17 +198,7 @@ struct CustomTabBar: View {
                         // White mango logo icon inside the circle (matches Figma)
                         MangoLogoIcon(size: 28, color: .white)
                     }
-                    .scaleEffect(animatePulse ? 1.06 : 1.0)
-                    .shadow(
-                        color: Color(hex: "#FFA500").opacity(animatePulse ? 0.6 : 0.4),
-                        radius: animatePulse ? 16 : 12,
-                        x: 0,
-                        y: 4
-                    )
-                    .animation(
-                        .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                        value: animatePulse
-                    )
+                    .shadow(color: Color(hex: "#FFA500").opacity(0.4), radius: 12, x: 0, y: 4)
                 }
                 .offset(y: -34)
                 

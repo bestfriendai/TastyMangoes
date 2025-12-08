@@ -1,11 +1,8 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 21:48 (America/Los_Angeles - Pacific Time)
-//  Notes: Fixed trailing action buttons layout, watched toggle, scores alignment. Optimized loading: cache-first display, single batch Supabase query, no TMDB calls.
-//
-//  TMDB USAGE: This view NEVER calls TMDB. It uses fetchWatchlistMovieCardsBatch() which reads
-//  directly from work_cards_cache. All movie data comes from Supabase cache tables.
+//  Last modified: 2025-11-17 at 02:27 (America/Los_Angeles - Pacific Time)
+//  Notes: Built Watchlist / Masterlist section with header, Your Lists horizontal scroll, and Masterlist vertical movie list with filters. Updated to use new bottom sheets and match Figma design exactly.
 
 import SwiftUI
 import Combine
@@ -79,26 +76,25 @@ struct WatchlistView: View {
             .environmentObject(watchlistManager)
         }
         .onAppear {
-            let startTime = Date()
-            print("[WATCHLIST PERF] onAppear - starting")
-            
-            loadLists()
-            
-            // Load movies (will use cache immediately, then refresh in background)
-            loadMasterlistMovies()
-            
-            let onAppearTime = Date().timeIntervalSince(startTime) * 1000
-            print("[WATCHLIST PERF] onAppear - finished initial setup (\(Int(onAppearTime))ms)")
+            print("📋 [WatchlistView] onAppear - syncing cache from Supabase...")
+            Task {
+                await watchlistManager.syncFromSupabase()
+                print("📋 [WatchlistView] Cache synced, loading lists and movies...")
+                await MainActor.run {
+                    loadLists()
+                    loadMasterlistMovies()
+                }
+            }
         }
         .onChange(of: watchlistManager.currentSortOption) { oldValue, newValue in
             // Reload lists when sort option changes (e.g., from YourListsView)
             loadLists()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("WatchlistManagerDidUpdate"))) { _ in
-            // Reload lists when watchlist manager updates (e.g., after creating/deleting lists, watched state changes)
+            // Reload lists when watchlist manager updates (e.g., after creating/deleting lists)
             loadLists()
             loadMasterlistName() // Also reload masterlist name in case it was edited
-            loadMasterlistMovies() // Reload movies when watchlist changes (including watched state)
+            loadMasterlistMovies() // Reload movies when watchlist changes
         }
         }
     }
@@ -260,8 +256,13 @@ struct WatchlistView: View {
             // Other positions: List cards
             let listIndex = position - 1 // -1 because position 0 is "Create New"
             if listIndex < yourLists.count {
-                NavigationLink(destination: IndividualListView(listId: yourLists[listIndex].id, listName: yourLists[listIndex].name)) {
-                    SmallListCard(list: yourLists[listIndex])
+                let list = yourLists[listIndex]
+                // Use the list object directly to ensure correct navigation
+                NavigationLink(destination: IndividualListView(listId: list.id, listName: list.name)) {
+                    SmallListCard(list: list)
+                }
+                .onAppear {
+                    print("📋 [WatchlistView] Card at position \(position) (index \(listIndex)): \(list.name) (ID: \(list.id))")
                 }
             } else {
                 // Empty space
@@ -282,21 +283,9 @@ struct WatchlistView: View {
                         .fill(Color(hex: "#FEA500"))
                         .frame(width: 6, height: 6)
                     
-                    HStack(spacing: 4) {
-                        Text(masterlistName)
-                            .font(.custom("Nunito-Bold", size: 20))
-                            .foregroundColor(Color(hex: "#1a1a1a"))
-                        
-                        if watchlistManager.isMasterListCountLoading {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 16, height: 16)
-                        } else {
-                            Text("(\(watchlistManager.getWatchlist(listId: "masterlist")?.filmCount ?? 0))")
-                                .font(.custom("Nunito-Bold", size: 20))
-                                .foregroundColor(Color(hex: "#1a1a1a"))
-                        }
-                    }
+                    Text("\(masterlistName) (\(masterlistMovies.count))")
+                        .font(.custom("Nunito-Bold", size: 20))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
                 }
                 
                 Spacer()
@@ -346,7 +335,16 @@ struct WatchlistView: View {
     private func loadLists() {
         // Load lists from WatchlistManager with current sort option
         // Use the shared sort option from WatchlistManager
-        yourLists = watchlistManager.getAllWatchlists(sortBy: watchlistManager.currentSortOption)
+        print("📋 [WatchlistView] Loading lists from cache...")
+        let allLists = watchlistManager.getAllWatchlists(sortBy: watchlistManager.currentSortOption)
+        // Filter out Masterlist by both ID and name (case-insensitive) as a safety measure
+        // This prevents any list named "Masterlist" from appearing in regular lists section
+        yourLists = allLists.filter { list in
+            let isMasterlistById = list.id == "masterlist" || list.id == "1"
+            let isMasterlistByName = list.name.lowercased() == "masterlist"
+            return !isMasterlistById && !isMasterlistByName
+        }
+        print("📋 [WatchlistView] Loaded \(yourLists.count) lists from cache (filtered out Masterlist)")
         loadMasterlistName()
     }
     
@@ -363,105 +361,43 @@ struct WatchlistView: View {
     }
     
     private func loadMasterlistMovies() {
-        let startTime = Date()
-        print("[WATCHLIST PERF] loadMasterlistMovies - starting")
-        
-        // Step 1: Load from cache immediately (instant display)
-        let cachedMovies = watchlistManager.getCachedMovieCardsForList(listId: "masterlist")
-        if !cachedMovies.isEmpty {
-            let cacheTime = Date().timeIntervalSince(startTime) * 1000
-            print("[WATCHLIST PERF] loadMasterlistMovies - using cached items: \(cachedMovies.count) (took \(Int(cacheTime))ms)")
-            masterlistMovies = cachedMovies
-        } else {
-            print("[WATCHLIST PERF] loadMasterlistMovies - no cached items available")
-        }
-        
-        // Step 2: Refresh from Supabase in background (don't clear list while refreshing)
-        guard !isLoadingMovies else {
-            print("[WATCHLIST PERF] loadMasterlistMovies - already loading, skipping")
-            return
-        }
+        guard !isLoadingMovies else { return }
         isLoadingMovies = true
         
         Task {
-            let refreshStartTime = Date()
-            print("[WATCHLIST PERF] loadMasterlistMovies - fetching from Supabase...")
-            
             // Get movie IDs from masterlist
             let movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
+            print("📋 [WatchlistView] Found \(movieIds.count) movies in masterlist cache")
             
-            guard !movieIds.isEmpty else {
-                print("[WATCHLIST PERF] loadMasterlistMovies - no movies in list, skipping fetch")
-                await MainActor.run {
-                    self.isLoadingMovies = false
-                }
-                return
-            }
+            // Fetch movie cards from Supabase
+            var fetchedMovies: [MasterlistMovie] = []
             
-            do {
-                // Use batch fetch - single Supabase query, no TMDB calls
-                let movieIdsArray = Array(movieIds)
-                
-                print("[WATCHLIST PERF] loadMasterlistMovies - batch fetching \(movieIdsArray.count) movies from work_cards_cache")
-                
-                // Fetch all movie cards in one batch query (direct from Supabase cache, no function calls, no TMDB)
-                let movieCards = try await SupabaseService.shared.fetchWatchlistMovieCardsBatch(movieIds: movieIdsArray)
-                
-                // Convert to MasterlistMovie and cache them
-                var fetchedMovies: [MasterlistMovie] = []
-                for movieCard in movieCards {
-                    // Log that we're using cached data (no TMDB call)
-                    print("[WATCHLIST CARD] Using work_cards_cache for tmdbId=\(movieCard.tmdbId) (no TMDB call)")
-                    
+            for movieId in movieIds {
+                // movieId is stored as TMDB ID string
+                do {
+                    let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
                     let masterlistMovie = movieCard.toMasterlistMovie(
-                        isWatched: watchlistManager.isWatched(movieId: movieCard.tmdbId),
+                        isWatched: watchlistManager.isWatched(movieId: movieId),
                         friendsCount: 0 // TODO: Implement friends count when available
                     )
                     fetchedMovies.append(masterlistMovie)
-                    // Cache it for next time
-                    watchlistManager.cacheMovieCard(masterlistMovie)
+                } catch {
+                    print("⚠️ Failed to fetch movie card for ID \(movieId): \(error)")
+                    // Continue with other movies even if one fails
                 }
-                
-                let refreshTime = Date().timeIntervalSince(refreshStartTime) * 1000
-                print("[WATCHLIST PERF] loadMasterlistMovies - Supabase response received (\(Int(refreshTime))ms)")
-                
-                await MainActor.run {
-                    // Update UI with fetched movies (merge with existing, don't clear)
-                    // Create a dictionary for quick lookup
-                    var moviesById: [String: MasterlistMovie] = [:]
-                    
-                    // Start with existing movies (from cache)
-                    for movie in self.masterlistMovies {
-                        moviesById[movie.id] = movie
-                    }
-                    
-                    // Update with newly fetched movies
-                    for movie in fetchedMovies {
-                        moviesById[movie.id] = movie
-                    }
-                    
-                    // Convert back to array, sorted by title for consistency
-                    self.masterlistMovies = Array(moviesById.values).sorted { $0.title < $1.title }
-                    
-                    self.isLoadingMovies = false
-                    
-                    let totalTime = Date().timeIntervalSince(startTime) * 1000
-                    print("[WATCHLIST PERF] loadMasterlistMovies - finished updating items (total: \(Int(totalTime))ms, final count: \(self.masterlistMovies.count))")
-                }
-            } catch {
-                print("❌ [WATCHLIST PERF] loadMasterlistMovies - error fetching from Supabase: \(error)")
-                await MainActor.run {
-                    self.isLoadingMovies = false
-                }
+            }
+            
+            await MainActor.run {
+                self.masterlistMovies = fetchedMovies
+                self.isLoadingMovies = false
             }
         }
     }
 }
 
 // MARK: - Data Models
-// Last modified: 2025-12-03 at 09:09 PST by Cursor Assistant
 
-struct WatchlistItem: Identifiable, Codable {
+struct WatchlistItem: Identifiable {
     let id: String
     let name: String
     let filmCount: Int
@@ -595,11 +531,6 @@ struct MasterlistMovieCard: View {
     @EnvironmentObject private var watchlistManager: WatchlistManager
     @State private var showMoviePage = false
     
-    // Get watched state from manager (observes changes)
-    private var isWatched: Bool {
-        watchlistManager.isWatched(movieId: movie.id)
-    }
-    
     var body: some View {
         Button(action: {
             // Wire up NAVIGATE connection: Product Card → Movie Page
@@ -627,8 +558,8 @@ struct MasterlistMovieCard: View {
                     .font(.custom("Inter-Regular", size: 12))
                     .foregroundColor(Color(hex: "#666666"))
                 
-                // Scores and Friends - aligned on baseline with consistent spacing
-                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                // Scores and Friends
+                HStack(spacing: 12) {
                     // Tasty Score
                     if let tastyScore = movie.tastyScore {
                         HStack(spacing: 4) {
@@ -683,41 +614,35 @@ struct MasterlistMovieCard: View {
             
             Spacer()
             
-            // Trailing Action Buttons - Three separate buttons stacked vertically in grey pill
-            VStack(spacing: 8) {
-                // 1. Overflow Menu (top) - using Figma icon
+            // Action Buttons
+            HStack(spacing: 8) {
+                // Delete/Trash (with checkmark if watched)
+                Button(action: {
+                    // Delete or mark as watched
+                }) {
+                    ZStack {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(hex: "#666666"))
+                        
+                        if movie.isWatched {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(Color(hex: "#648d00"))
+                                .offset(x: 8, y: -8)
+                        }
+                    }
+                }
+                
+                // Menu
                 Button(action: {
                     // Show menu
-                    print("📋 MasterlistMovieCard: Overflow menu tapped for \(movie.title)")
                 }) {
-                    TMMenuDotsIcon(size: 16, color: Color(hex: "#666666"))
-                }
-                
-                // 2. Watched/Checkmark Button (middle) - always visible, shows checked state when watched
-                Button(action: {
-                    // Toggle watched status
-                    print("✅ MasterlistMovieCard: Watched button tapped for \(movie.title) - toggling watched status")
-                    watchlistManager.toggleWatched(movieId: movie.id)
-                    print("   New watched status: \(watchlistManager.isWatched(movieId: movie.id))")
-                }) {
-                    Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
-                        .font(.system(size: 16))
-                        .foregroundColor(isWatched ? Color(hex: "#648d00") : Color(hex: "#666666"))
-                }
-                
-                // 3. Delete/Trash Button (bottom) - using Figma icon
-                Button(action: {
-                    // Delete movie from watchlist
-                    print("🗑️ MasterlistMovieCard: Delete tapped for \(movie.title)")
-                    watchlistManager.removeMovieFromList(movieId: movie.id, listId: "masterlist")
-                }) {
-                    TMDeleteIcon(size: 16, color: Color(hex: "#666666"))
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Color(hex: "#666666"))
                 }
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 10)
-            .background(Color(hex: "#f3f3f3"))
-            .cornerRadius(8)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)

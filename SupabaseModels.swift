@@ -2,8 +2,7 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:50 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:15 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-12-03 at 09:09 PST by Cursor Assistant
-//  Notes: Data models for Supabase database tables - updated to match revised schema. Added recommendation fields to WatchlistMovie.
+//  Notes: Data models for Supabase database tables - updated to match revised schema
 
 import Foundation
 
@@ -170,11 +169,10 @@ struct UserRating: Codable, Identifiable {
     let id: UUID
     let userId: UUID
     let movieId: String
-    var rating: Int // 0-5 stars (0 = no rating, 1-5 = star rating)
-    var reviewText: String?
-    var feedbackSource: String? // "quick_star", "talk_to_mango", "imported", "other"
+    let rating: Int // 0-5 stars
+    let reviewText: String?
     let createdAt: Date
-    var updatedAt: Date
+    let updatedAt: Date
     
     init(
         id: UUID = UUID(),
@@ -182,7 +180,6 @@ struct UserRating: Codable, Identifiable {
         movieId: String,
         rating: Int,
         reviewText: String? = nil,
-        feedbackSource: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -191,7 +188,6 @@ struct UserRating: Codable, Identifiable {
         self.movieId = movieId
         self.rating = rating
         self.reviewText = reviewText
-        self.feedbackSource = feedbackSource
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -202,7 +198,6 @@ struct UserRating: Codable, Identifiable {
         case movieId = "movie_id"
         case rating
         case reviewText = "review_text"
-        case feedbackSource = "feedback_source"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
