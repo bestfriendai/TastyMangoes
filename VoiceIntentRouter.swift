@@ -193,6 +193,14 @@ enum VoiceIntentRouter {
                             result: "parse_error",
                             errorMessage: "No movie context - user not on movie page"
                         )
+                        
+                        // Trigger self-healing for parse errors
+                        await checkAndTriggerSelfHealing(
+                            utterance: text,
+                            commandType: "mark_watched",
+                            result: "parse_error",
+                            voiceEventId: eventId
+                        )
                     }
                 }
                 
@@ -348,10 +356,11 @@ enum VoiceIntentRouter {
             llmError: llmError
         )
         
-        // Store eventId in SearchFilterState so SearchViewModel can update it after search completes
+        // Store eventId and original utterance in SearchFilterState so SearchViewModel can update it after search completes
         if let eventId = eventId {
             await MainActor.run {
                 SearchFilterState.shared.pendingVoiceEventId = eventId
+                SearchFilterState.shared.pendingVoiceUtterance = text // Store original utterance for self-healing
             }
         }
     }
@@ -451,6 +460,14 @@ enum VoiceIntentRouter {
                     eventId: eventId,
                     result: "success",
                     resultCount: 1
+                )
+                
+                // Check if self-healing should trigger (won't trigger for success, but included for completeness)
+                await checkAndTriggerSelfHealing(
+                    utterance: "mark as \(action)",
+                    commandType: "mark_watched",
+                    result: "success",
+                    voiceEventId: eventId
                 )
             }
         }
@@ -630,6 +647,75 @@ enum VoiceIntentRouter {
         }
         
         return true // Command was recognized and handled
+    }
+    
+    // MARK: - Self-Healing Voice System
+    
+    /// Checks if self-healing should trigger based on utterance, command type, and result
+    private static func shouldTriggerSelfHealing(utterance: String, result: String?, commandType: String) -> Bool {
+        let actionWords = ["watch", "watched", "add", "remove", "mark", "list", "delete", "save"]
+        let lowerUtterance = utterance.lowercased()
+        let hasActionWord = actionWords.contains { lowerUtterance.contains($0) }
+        
+        // Trigger if: no_results + has action word, OR classified as search but has action word
+        return (result == "no_results" && hasActionWord) ||
+               (commandType == "movie_search" && hasActionWord)
+    }
+    
+    /// Checks if self-healing should trigger and calls the service if needed
+    /// This is called from VoiceIntentRouter for non-search commands
+    private static func checkAndTriggerSelfHealing(
+        utterance: String,
+        commandType: String,
+        result: String?,
+        voiceEventId: UUID?
+    ) async {
+        await checkAndTriggerSelfHealingForSearch(
+            utterance: utterance,
+            commandType: commandType,
+            result: result,
+            voiceEventId: voiceEventId
+        )
+    }
+    
+    /// Checks if self-healing should trigger and calls the service if needed
+    /// This is called from SearchViewModel for search commands
+    static func checkAndTriggerSelfHealingForSearch(
+        utterance: String,
+        commandType: String,
+        result: String?,
+        voiceEventId: UUID?
+    ) async {
+        guard shouldTriggerSelfHealing(utterance: utterance, result: result, commandType: commandType) else {
+            return
+        }
+        
+        // Infer screen context from current state
+        let screen: String
+        let movieContext: String?
+        
+        if let _ = getCurrentMovieId() {
+            screen = "MoviePageView"
+            // We don't have the movie title here, so leave it nil
+            // In a real implementation, you might want to fetch it or pass it through
+            movieContext = nil
+        } else if let _ = getCurrentListContext() {
+            screen = "WatchlistView"
+            movieContext = nil
+        } else {
+            screen = "SearchView" // Default assumption for search commands
+            movieContext = nil
+        }
+        
+        print("🔧 [VoiceIntentRouter] Triggering self-healing for utterance: '\(utterance)'")
+        
+        await SelfHealingVoiceService.shared.analyzeAndLogPattern(
+            utterance: utterance,
+            commandType: commandType,
+            screen: screen,
+            movieContext: movieContext,
+            voiceEventId: voiceEventId
+        )
     }
 }
 

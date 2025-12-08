@@ -44,6 +44,7 @@
 		C517CD382EC9806C00EAE1FE /* HomeVew.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */; };
 		C51B70512ED2D66500B76CF7 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */; };
 		C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */; };
+		C59E8B822EE696D000F15ED6 /* SelfHealingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */; };
 		C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */; };
 		C5ADA3582ED5578700440F8D /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3572ED5578700440F8D /* Auth */; };
 		C5ADA35A2ED5578700440F8D /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3592ED5578700440F8D /* PostgREST */; };
@@ -147,6 +148,7 @@
 		C517CD1D2EC9806C00EAE1FE /* TMIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMIcons.swift; sourceTree = "<group>"; };
 		C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieDetailView.swift; sourceTree = "<group>"; };
 		C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayerView.swift; sourceTree = "<group>"; };
+		C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfHealingVoiceService.swift; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
 		C5B95D1C2ECB0B0800B47098 /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
 		C5B95D222ECB15DE00B47098 /* WatchlistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistManager.swift; sourceTree = "<group>"; };
@@ -238,6 +240,7 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */,
 				C50BE71D2EE65A0900883045 /* RecommenderNormalizer.swift */,
 				C50BE71B2EE63CAE00883045 /* MangoListeningView.swift */,
 				C50BE7192EE63C9900883045 /* MangoSpeaker.swift */,
@@ -545,6 +548,7 @@
 				C5E27A452EC9979400065352 /* UserProfileManager.swift in Sources */,
 				C5E27A472EC9979400065353 /* SignInView.swift in Sources */,
 				C5E27A492EC9979400065354 /* SignUpView.swift in Sources */,
+				C59E8B822EE696D000F15ED6 /* SelfHealingVoiceService.swift in Sources */,
 				C5E27A4B2EC9979400065355 /* ProfileView.swift in Sources */,
 				C5E27A4D2EC9979400065356 /* SupabaseService.swift in Sources */,
 				C5E27A4F2EC9979400065357 /* SupabaseModels.swift in Sources */,

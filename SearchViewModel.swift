@@ -271,9 +271,19 @@ class SearchViewModel: ObservableObject {
                         resultCount: searchResults.count
                     )
                     
-                    // Clear the eventId after updating
+                    // Trigger self-healing if needed (for search commands)
+                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    await VoiceIntentRouter.checkAndTriggerSelfHealingForSearch(
+                        utterance: utterance,
+                        commandType: "movie_search",
+                        result: result,
+                        voiceEventId: eventId
+                    )
+                    
+                    // Clear the eventId and utterance after updating
                     await MainActor.run {
                         SearchFilterState.shared.pendingVoiceEventId = nil
+                        SearchFilterState.shared.pendingVoiceUtterance = nil
                     }
                 }
             }
@@ -313,9 +323,19 @@ class SearchViewModel: ObservableObject {
                         errorMessage: searchError.localizedDescription
                     )
                     
-                    // Clear the eventId after updating
+                    // Trigger self-healing if needed (for network errors with action words)
+                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    await VoiceIntentRouter.checkAndTriggerSelfHealingForSearch(
+                        utterance: utterance,
+                        commandType: "movie_search",
+                        result: "network_error",
+                        voiceEventId: eventId
+                    )
+                    
+                    // Clear the eventId and utterance after updating
                     await MainActor.run {
                         SearchFilterState.shared.pendingVoiceEventId = nil
+                        SearchFilterState.shared.pendingVoiceUtterance = nil
                     }
                 }
             }
