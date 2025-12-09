@@ -6,6 +6,7 @@
 
 import SwiftUI
 import UIKit
+import SafariServices
 
 // MARK: - Sections
 
@@ -47,6 +48,7 @@ struct MoviePageView: View {
     @StateObject private var mangoSpeechRecognizer = SpeechRecognizer()
     @State private var showPosterCarousel = false
     @State private var selectedImageIndex = 0
+    @State private var showGoogleSearch = false
     
     // Computed property to determine if pinned tab bar should show
     private var shouldShowPinnedTabBar: Bool {
@@ -294,6 +296,9 @@ struct MoviePageView: View {
                                     )
                                 }
                             )
+                        
+                        // More Info section
+                        moreInfoSection
                     }
                     .padding(.top, 24)
                     .padding(.horizontal, 16)
@@ -396,6 +401,15 @@ struct MoviePageView: View {
                 if let movie = viewModel.movie {
                     let videoId = movie.trailerYoutubeId ?? ""
                     TrailerPlayerSheet(videoId: videoId, movieTitle: movie.title)
+                }
+            }
+            .sheet(isPresented: $showGoogleSearch) {
+                if let movie = viewModel.movie {
+                    let searchQuery = "\(movie.title) \(movie.releaseYear) movie"
+                    let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
+                    if let url = URL(string: "https://www.google.com/search?q=\(encodedQuery)") {
+                        SafariView(url: url)
+                    }
                 }
             }
             .fullScreenCover(isPresented: $showIndividualList) {
@@ -1429,6 +1443,37 @@ struct MoviePageView: View {
         }
     }
     
+    // MARK: - More Info Section
+    
+    private var moreInfoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("More Info")
+                    .font(.custom("Nunito-Bold", size: 20))
+                    .foregroundColor(Color(hex: "#1a1a1a"))
+                
+                Spacer()
+                
+                Button(action: {
+                    showGoogleSearch = true
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14, weight: .medium))
+                        Text("Google")
+                            .font(.custom("Inter-SemiBold", size: 14))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color(hex: "#FEA500"))
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .padding(.top, 24)
+    }
+    
     // MARK: - Bottom Action Buttons
     
     private var bottomActionButtons: some View {
@@ -2177,6 +2222,20 @@ fileprivate struct TabBarPositionKey: PreferenceKey {
     
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+// MARK: - Safari View Wrapper
+
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        return SFSafariViewController(url: url)
+    }
+    
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
+        // No update needed
     }
 }
 
