@@ -412,6 +412,13 @@ struct MoviePageView: View {
                     isPresented: $showMangoListeningView
                 )
             }
+            .onChange(of: showMangoListeningView) { oldValue, newValue in
+                // Clear movie context when listening view is dismissed
+                if oldValue == true && newValue == false {
+                    VoiceIntentRouter.setCurrentMovieId(nil)
+                    print("🎬 [MoviePageView] Cleared movie context after voice interaction")
+                }
+            }
             .fullScreenCover(isPresented: $showPosterCarousel) {
                 if let movie = viewModel.movie {
                     // Calculate safe index using selectedImageIndex directly
@@ -1485,6 +1492,11 @@ struct MoviePageView: View {
             
             // Mango button - universal functionality, elevated 50% above buttons
             Button(action: {
+                // Set movie context before presenting listening view so voice commands know which movie we're on
+                if let movie = viewModel.movie {
+                    VoiceIntentRouter.setCurrentMovieId(movieId)
+                    print("🎬 [MoviePageView] Set movie context for voice: \(movieId) - \(movie.title)")
+                }
                 showMangoListeningView = true
             }) {
                 ZStack {

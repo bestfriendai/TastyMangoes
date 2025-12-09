@@ -74,6 +74,7 @@
 		C5B95D472ECB416200B47098 /* EditListBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D462ECB416200B47098 /* EditListBottomSheet.swift */; };
 		C5B95D492ECB418100B47098 /* WatchlistFilterDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D482ECB418100B47098 /* WatchlistFilterDetailSheet.swift */; };
 		C5B95D4B2ECB59C500B47098 /* SearchFilterDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D4A2ECB59C500B47098 /* SearchFilterDetailSheet.swift */; };
+		C5E17F572EE7C35A00A945D6 /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = C5E17F562EE7C35A00A945D6 /* Secrets.xcconfig */; };
 		C5E27A3B2EC9979400065347 /* MoviePageHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A392EC9979400065347 /* MoviePageHeader.swift */; };
 		C5E27A3C2EC9979400065347 /* WatchlistBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */; };
 		C5E27A3D2EC9979400065348 /* RateBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E27A3E2EC9979400065348 /* RateBottomSheet.swift */; };
@@ -179,6 +180,7 @@
 		C5D017332E989F7800164472 /* TastyMangoes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TastyMangoes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5D017402E989F7900164472 /* TastyMangoesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TastyMangoesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5D0174A2E989F7900164472 /* TastyMangoesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TastyMangoesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C5E17F562EE7C35A00A945D6 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		C5E27A392EC9979400065347 /* MoviePageHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageHeader.swift; sourceTree = "<group>"; };
 		C5E27A3A2EC9979400065347 /* WatchlistBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistBottomSheet.swift; sourceTree = "<group>"; };
 		C5E27A3E2EC9979400065348 /* RateBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateBottomSheet.swift; sourceTree = "<group>"; };
@@ -328,6 +330,7 @@
 				C5B95D3C2ECB334600B47098 /* YourListsView.swift */,
 				C5ADA3642ED5601500440F8D /* Frameworks */,
 				C5D017342E989F7800164472 /* Products */,
+				C5E17F562EE7C35A00A945D6 /* Secrets.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -469,6 +472,7 @@
 			files = (
 				C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */,
 				C517CD212EC9806C00EAE1FE /* movies.json in Resources */,
+				C5E17F572EE7C35A00A945D6 /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -606,6 +610,7 @@
 /* Begin XCBuildConfiguration section */
 		C5D017522E989F7900164472 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C5E17F562EE7C35A00A945D6 /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -670,6 +675,7 @@
 		};
 		C5D017532E989F7900164472 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C5E17F562EE7C35A00A945D6 /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;

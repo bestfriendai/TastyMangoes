@@ -171,7 +171,7 @@ enum VoiceIntentRouter {
         // Only process if we have a current movie context (Mango invoked from MoviePageView)
         if case .markWatched(let watched, _) = mangoCommand {
             if let currentMovieId = getCurrentMovieId() {
-                await handleMarkWatchedCommand(watched: watched, movieId: currentMovieId)
+                await handleMarkWatchedCommand(watched: watched, movieId: currentMovieId, transcript: text)
                 // Don't clear movie context - user might want to do more actions
                 return // Early return - no LLM call needed
             } else {
@@ -195,10 +195,12 @@ enum VoiceIntentRouter {
                         )
                         
                         // Trigger self-healing for parse errors
-                        await checkAndTriggerSelfHealing(
+                        VoiceIntentRouter.checkAndTriggerSelfHealing(
                             utterance: text,
-                            commandType: "mark_watched",
-                            result: "parse_error",
+                            originalCommand: .markWatched(watched: true, raw: text),
+                            handlerResult: .parseError,
+                            screen: "MoviePageView",
+                            movieContext: nil,
                             voiceEventId: eventId
                         )
                     }
@@ -356,11 +358,12 @@ enum VoiceIntentRouter {
             llmError: llmError
         )
         
-        // Store eventId and original utterance in SearchFilterState so SearchViewModel can update it after search completes
+        // Store eventId, original utterance, and command in SearchFilterState so SearchViewModel can update it after search completes
         if let eventId = eventId {
             await MainActor.run {
                 SearchFilterState.shared.pendingVoiceEventId = eventId
                 SearchFilterState.shared.pendingVoiceUtterance = text // Store original utterance for self-healing
+                SearchFilterState.shared.pendingVoiceCommand = finalCommand // Store original command for self-healing
             }
         }
     }
@@ -414,16 +417,16 @@ enum VoiceIntentRouter {
     }
     
     /// Handle mark watched/unwatched command locally
-    private static func handleMarkWatchedCommand(watched: Bool, movieId: String) async {
+    private static func handleMarkWatchedCommand(watched: Bool, movieId: String, transcript: String) async {
         let action = watched ? "watched" : "unwatched"
         print("👁 [Mango] Marking movie \(movieId) as \(action)")
         
-        // Log the command first to get eventId
+        // Log the command first to get eventId (use actual transcript, not hardcoded string)
         let eventId = await VoiceAnalyticsLogger.shared.log(
-            utterance: "mark as \(action)",
-            mangoCommand: .markWatched(watched: watched, raw: "mark as \(action)"),
+            utterance: transcript,
+            mangoCommand: .markWatched(watched: watched, raw: transcript),
             llmUsed: false,
-            finalCommand: .markWatched(watched: watched, raw: "mark as \(action)"),
+            finalCommand: .markWatched(watched: watched, raw: transcript),
             llmIntent: nil,
             llmError: nil
         )
@@ -462,11 +465,10 @@ enum VoiceIntentRouter {
                     resultCount: 1
                 )
                 
-                // Check if self-healing should trigger (won't trigger for success, but included for completeness)
-                await checkAndTriggerSelfHealing(
-                    utterance: "mark as \(action)",
-                    commandType: "mark_watched",
-                    result: "success",
+                // Check for potential misclassification after successful execution
+                await SelfHealingVoiceService.shared.checkForMisclassification(
+                    transcript: transcript,
+                    executedCommand: .markWatched(watched: watched, raw: transcript),
                     voiceEventId: eventId
                 )
             }

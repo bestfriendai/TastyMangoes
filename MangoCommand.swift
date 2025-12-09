@@ -261,36 +261,17 @@ final class MangoCommandParser {
     
     /// Extract watched status from mark watched/unwatched commands
     /// Returns true for "watched", false for "unwatched", nil if not a watched command
+    /// Handles negation detection: if negation words appear before "watched" or "seen", inverts to unwatched
     private func extractWatchedStatus(from text: String) -> Bool? {
         let lower = text.lowercased()
         
-        // Patterns for marking as WATCHED (returns true)
-        let watchedPatterns = [
-            "mark as watched",
-            "mark this as watched",
-            "mark it as watched",
-            // Speech recognition mishearings: "as" → "has"
-            "mark has watched",
-            "marked has watched",
-            "mark it has watched",
-            "i watched this",
-            "i've watched this",
-            "already watched",
-            "already seen this",
-            "i've seen this",
-            "i saw this",
-            "seen it",
-            "watched it",
-            "mark watched"
-        ]
+        // Negation words that should invert the intent
+        let negationWords: Set<String> = ["don't", "dont", "didn't", "didnt", "haven't", "havent", "never", "not"]
         
-        for pattern in watchedPatterns {
-            if lower.contains(pattern) {
-                return true
-            }
-        }
+        // Keywords that indicate watched/seen status
+        let watchedKeywords: Set<String> = ["watched", "seen", "saw"]
         
-        // Patterns for marking as UNWATCHED (returns false)
+        // First, check for explicit unwatched patterns (these take precedence)
         let unwatchedPatterns = [
             "mark as unwatched",
             "mark this as unwatched",
@@ -316,6 +297,54 @@ final class MangoCommandParser {
         for pattern in unwatchedPatterns {
             if lower.contains(pattern) {
                 return false
+            }
+        }
+        
+        // Check for "watched" or "seen" keywords and detect negation before them
+        for keyword in watchedKeywords {
+            if let keywordRange = lower.range(of: keyword, options: .caseInsensitive) {
+                // Get text before the keyword (check last 10 words for negation)
+                let beforeKeyword = String(lower[..<keywordRange.lowerBound])
+                let wordsBefore = beforeKeyword.split(separator: " ").map { String($0).lowercased() }
+                
+                // Check last 10 words before the keyword for negation
+                let recentWords = wordsBefore.suffix(10)
+                let hasNegation = recentWords.contains { word in
+                    // Check if word contains any negation word (handles contractions like "don't")
+                    negationWords.contains(word) || negationWords.contains { neg in word.contains(neg) }
+                }
+                
+                if hasNegation {
+                    // Negation found before watched keyword - this is an unwatched command
+                    print("🔄 [MangoCommand] Negation detected before '\(keyword)' - marking as unwatched")
+                    return false
+                }
+            }
+        }
+        
+        // Patterns for marking as WATCHED (returns true, only if no negation was found above)
+        let watchedPatterns = [
+            "mark as watched",
+            "mark this as watched",
+            "mark it as watched",
+            // Speech recognition mishearings: "as" → "has"
+            "mark has watched",
+            "marked has watched",
+            "mark it has watched",
+            "i watched this",
+            "i've watched this",
+            "already watched",
+            "already seen this",
+            "i've seen this",
+            "i saw this",
+            "seen it",
+            "watched it",
+            "mark watched"
+        ]
+        
+        for pattern in watchedPatterns {
+            if lower.contains(pattern) {
+                return true
             }
         }
         

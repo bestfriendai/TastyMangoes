@@ -101,7 +101,9 @@ class SelfHealingVoiceService {
     /// Determine if self-healing should be triggered based on the command result
     /// Trigger conditions:
     /// 1. handler_result is "no_results" AND utterance contains action words
-    /// 2. mango_command_type is "movie_search" but utterance has action words
+    /// 2. handler_result is "parse_error" AND utterance contains action words (parser understood it was an action but couldn't execute)
+    /// 3. mango_command_type is "movie_search" but utterance has action words
+    /// 4. Unknown command with action words
     static func shouldTriggerSelfHealing(
         utterance: String,
         commandType: MangoCommand,
@@ -115,13 +117,19 @@ class SelfHealingVoiceService {
             return true
         }
         
-        // Condition 2: Classified as movie_search but has action words
+        // Condition 2: Parse error but looks like an action (parser understood it was an action command but couldn't execute it)
+        if handlerResult == .parseError && hasActionWords {
+            print("🔄 [SelfHealing] Trigger: parse_error + action words detected")
+            return true
+        }
+        
+        // Condition 3: Classified as movie_search but has action words
         if case .movieSearch = commandType, hasActionWords {
             print("🔄 [SelfHealing] Trigger: movie_search with action words detected")
             return true
         }
         
-        // Condition 3: Unknown command with action words
+        // Condition 4: Unknown command with action words
         if case .unknown = commandType, hasActionWords {
             print("🔄 [SelfHealing] Trigger: unknown command with action words detected")
             return true
@@ -405,6 +413,124 @@ class SelfHealingVoiceService {
         }
     }
     
+    // MARK: - Misclassification Detection
+    
+    /// Check for potential misclassifications after successful command execution
+    /// Triggers self-healing analysis if:
+    /// 1. Command was markWatched but transcript contains negation words before "watched" or "seen"
+    /// 2. Command was markUnwatched but transcript has NO negation words
+    func checkForMisclassification(
+        transcript: String,
+        executedCommand: MangoCommand,
+        voiceEventId: UUID? = nil
+    ) async {
+        guard case .markWatched(let watched, _) = executedCommand else {
+            // Only check markWatched/markUnwatched commands
+            return
+        }
+        
+        let lower = transcript.lowercased()
+        
+        // Negation words that should invert the intent
+        let negationWords: Set<String> = ["don't", "dont", "didn't", "didnt", "haven't", "havent", "never", "not"]
+        
+        // Keywords that indicate watched/seen status
+        let watchedKeywords: Set<String> = ["watched", "seen", "saw"]
+        
+        // Check for negation words before watched keywords
+        var hasNegation = false
+        for keyword in watchedKeywords {
+            if let keywordRange = lower.range(of: keyword, options: .caseInsensitive) {
+                // Get text before the keyword (check last 10 words for negation)
+                let beforeKeyword = String(lower[..<keywordRange.lowerBound])
+                let wordsBefore = beforeKeyword.split(separator: " ").map { String($0).lowercased() }
+                
+                // Check last 10 words before the keyword for negation
+                let recentWords = wordsBefore.suffix(10)
+                hasNegation = recentWords.contains { word in
+                    // Check if word contains any negation word (handles contractions like "don't")
+                    negationWords.contains(word) || negationWords.contains { neg in word.contains(neg) }
+                }
+                
+                if hasNegation {
+                    break
+                }
+            }
+        }
+        
+        // Case 1: Command was markWatched (watched=true) but transcript contains negation
+        if watched && hasNegation {
+            print("⚠️ [SelfHealing] Misclassification detected: markWatched but transcript has negation")
+            await logMisclassificationSuggestion(
+                transcript: transcript,
+                executedCommand: executedCommand,
+                suggestedIntent: "markUnwatched",
+                reasoning: "Transcript contains negation words ('don't', 'didn't', 'haven't', 'never', 'not') before 'watched' or 'seen', suggesting user wanted to mark as unwatched",
+                voiceEventId: voiceEventId
+            )
+            return
+        }
+        
+        // Case 2: Command was markUnwatched (watched=false) but transcript has NO negation
+        if !watched && !hasNegation {
+            // Check if transcript actually contains watched keywords (if not, might be a different issue)
+            let hasWatchedKeyword = watchedKeywords.contains { lower.contains($0) }
+            if hasWatchedKeyword {
+                print("⚠️ [SelfHealing] Misclassification detected: markUnwatched but transcript has no negation")
+                await logMisclassificationSuggestion(
+                    transcript: transcript,
+                    executedCommand: executedCommand,
+                    suggestedIntent: "markWatched",
+                    reasoning: "Transcript contains 'watched' or 'seen' keywords but no negation words, suggesting user wanted to mark as watched",
+                    voiceEventId: voiceEventId
+                )
+            }
+        }
+    }
+    
+    /// Log misclassification suggestion directly (without OpenAI analysis)
+    private func logMisclassificationSuggestion(
+        transcript: String,
+        executedCommand: MangoCommand,
+        suggestedIntent: String,
+        reasoning: String,
+        voiceEventId: UUID?
+    ) async {
+        guard let client = supabaseClient else {
+            print("⚠️ [SelfHealing] Supabase client not available, skipping misclassification log")
+            return
+        }
+        
+        let commandType = commandTypeString(executedCommand)
+        
+        do {
+            let suggestion = PatternSuggestion(
+                utterance: transcript,
+                original_command_type: commandType,
+                suggested_intent: suggestedIntent,
+                suggested_pattern: reasoning,
+                confidence: 0.8, // High confidence for rule-based detection
+                source: "misclassification_detector",
+                status: "pending",
+                voice_event_id: voiceEventId?.uuidString
+            )
+            
+            try await client
+                .from("voice_pattern_suggestions")
+                .insert(suggestion)
+                .execute()
+            
+            print("✅ [SelfHealing] Logged misclassification suggestion to Supabase")
+            print("   Utterance: '\(transcript)'")
+            print("   Executed Command: \(commandType)")
+            print("   Suggested Intent: \(suggestedIntent)")
+            print("   Reasoning: \(reasoning)")
+            
+        } catch {
+            print("❌ [SelfHealing] Failed to log misclassification suggestion: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Helpers
     
     private func commandTypeString(_ command: MangoCommand) -> String {
@@ -415,8 +541,8 @@ class SelfHealingVoiceService {
             return "movie_search"
         case .createWatchlist:
             return "create_watchlist"
-        case .markWatched:
-            return "mark_watched"
+        case .markWatched(let watched, _):
+            return watched ? "mark_watched" : "mark_unwatched"
         case .unknown:
             return "unknown"
         }

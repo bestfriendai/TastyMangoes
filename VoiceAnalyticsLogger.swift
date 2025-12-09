@@ -188,8 +188,8 @@ class VoiceAnalyticsLogger {
             return "movie_search"
         case .createWatchlist:
             return "create_watchlist"
-        case .markWatched:
-            return "mark_watched"
+        case .markWatched(let watched, _):
+            return watched ? "mark_watched" : "mark_unwatched"
         case .unknown:
             return "unknown"
         }

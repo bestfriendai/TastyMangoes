@@ -273,17 +273,35 @@ class SearchViewModel: ObservableObject {
                     
                     // Trigger self-healing if needed (for search commands)
                     let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
-                    await VoiceIntentRouter.checkAndTriggerSelfHealingForSearch(
+                    let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
+                    
+                    // Convert string result to VoiceHandlerResult enum
+                    let handlerResult: VoiceHandlerResult? = {
+                        switch result {
+                        case "success": return .success
+                        case "no_results": return .noResults
+                        case "ambiguous": return .ambiguous
+                        case "network_error": return .networkError
+                        case "parse_error": return .parseError
+                        default: return nil
+                        }
+                    }()
+                    
+                    // Use the proper extension method with correct types
+                    VoiceIntentRouter.checkAndTriggerSelfHealing(
                         utterance: utterance,
-                        commandType: "movie_search",
-                        result: result,
+                        originalCommand: originalCommand,
+                        handlerResult: handlerResult,
+                        screen: "SearchView",
+                        movieContext: nil,
                         voiceEventId: eventId
                     )
                     
-                    // Clear the eventId and utterance after updating
+                    // Clear the eventId, utterance, and command after updating
                     await MainActor.run {
                         SearchFilterState.shared.pendingVoiceEventId = nil
                         SearchFilterState.shared.pendingVoiceUtterance = nil
+                        SearchFilterState.shared.pendingVoiceCommand = nil
                     }
                 }
             }
@@ -325,17 +343,23 @@ class SearchViewModel: ObservableObject {
                     
                     // Trigger self-healing if needed (for network errors with action words)
                     let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
-                    await VoiceIntentRouter.checkAndTriggerSelfHealingForSearch(
+                    let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
+                    
+                    // Use the proper extension method with correct types
+                    VoiceIntentRouter.checkAndTriggerSelfHealing(
                         utterance: utterance,
-                        commandType: "movie_search",
-                        result: "network_error",
+                        originalCommand: originalCommand,
+                        handlerResult: .networkError,
+                        screen: "SearchView",
+                        movieContext: nil,
                         voiceEventId: eventId
                     )
                     
-                    // Clear the eventId and utterance after updating
+                    // Clear the eventId, utterance, and command after updating
                     await MainActor.run {
                         SearchFilterState.shared.pendingVoiceEventId = nil
                         SearchFilterState.shared.pendingVoiceUtterance = nil
+                        SearchFilterState.shared.pendingVoiceCommand = nil
                     }
                 }
             }
