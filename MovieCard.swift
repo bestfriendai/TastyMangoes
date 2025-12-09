@@ -28,6 +28,9 @@ struct MovieCard: Codable, Identifiable {
     let certification: String?
     let cast: [MovieCardCastMember]?
     let director: String?
+    let writer: String?
+    let screenplay: String?
+    let composer: String?
     let aiScore: Double?
     let aiScoreRange: [Double]?
     let sourceScores: SourceScores?
@@ -59,6 +62,9 @@ struct MovieCard: Codable, Identifiable {
         case certification
         case cast
         case director
+        case writer
+        case screenplay
+        case composer
         case aiScore = "ai_score"
         case aiScoreRange = "ai_score_range"
         case sourceScores = "source_scores"

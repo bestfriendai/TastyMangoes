@@ -622,6 +622,11 @@ class SupabaseService: ObservableObject {
             }
         }
         
+        struct CrewMember: Codable {
+            let name: String
+            let job: String
+        }
+        
         let works: [Work] = try await client
             .from("works")
             .select("work_id")
@@ -651,7 +656,78 @@ class SupabaseService: ObservableObject {
             return nil
         }
         
-        return cacheEntry.payload
+        // Fetch crew members from works_meta
+        struct WorksMeta: Codable {
+            let crewMembers: [CrewMember]?
+            
+            enum CodingKeys: String, CodingKey {
+                case crewMembers = "crew_members"
+            }
+        }
+        
+        let metaEntries: [WorksMeta] = try await client
+            .from("works_meta")
+            .select("crew_members")
+            .eq("work_id", value: work.workId)
+            .execute()
+            .value
+        
+        // Extract crew roles from the crew_members array
+        var writer: String? = nil
+        var screenplay: String? = nil
+        var composer: String? = nil
+        
+        if let crewMembers = metaEntries.first?.crewMembers {
+            // Get all writers (job = "Writer")
+            let writers = crewMembers.filter { $0.job == "Writer" }.map { $0.name }
+            if !writers.isEmpty {
+                writer = writers.joined(separator: ", ")
+            }
+            
+            // Get all screenplay writers (job = "Screenplay")
+            let screenwriters = crewMembers.filter { $0.job == "Screenplay" }.map { $0.name }
+            if !screenwriters.isEmpty {
+                screenplay = screenwriters.joined(separator: ", ")
+            }
+            
+            // Get composer (job = "Original Music Composer")
+            composer = crewMembers.first { $0.job == "Original Music Composer" }?.name
+        }
+        
+        // Create MovieCard with crew data populated
+        let card = cacheEntry.payload
+        return MovieCard(
+            workId: card.workId,
+            tmdbId: card.tmdbId,
+            imdbId: card.imdbId,
+            title: card.title,
+            originalTitle: card.originalTitle,
+            year: card.year,
+            releaseDate: card.releaseDate,
+            runtimeMinutes: card.runtimeMinutes,
+            runtimeDisplay: card.runtimeDisplay,
+            tagline: card.tagline,
+            overview: card.overview,
+            overviewShort: card.overviewShort,
+            genres: card.genres,
+            poster: card.poster,
+            backdrop: card.backdrop,
+            trailerYoutubeId: card.trailerYoutubeId,
+            trailerThumbnail: card.trailerThumbnail,
+            certification: card.certification,
+            cast: card.cast,
+            director: card.director,
+            writer: writer,
+            screenplay: screenplay,
+            composer: composer,
+            aiScore: card.aiScore,
+            aiScoreRange: card.aiScoreRange,
+            sourceScores: card.sourceScores,
+            similarMovieIds: card.similarMovieIds,
+            stillImages: card.stillImages,
+            trailers: card.trailers,
+            lastUpdated: card.lastUpdated
+        )
     }
     
     // MARK: - Similar Movies

@@ -805,6 +805,8 @@ struct MovieDetailView: View {
             VStack(spacing: 0) {
                 DetailRow(label: "Director", value: movie.director)
                 DetailRow(label: "Writer", value: movie.writer)
+                DetailRow(label: "Screenplay", value: movie.screenplay)
+                DetailRow(label: "Composer", value: movie.composer)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1526,6 +1528,8 @@ struct MovieDetailData {
         director: "Clint Eastwood",
         rating: "R",
         writer: "Jonathan Abrams",
+        screenplay: "Jonathan Abrams",
+        composer: "N/A",
         cast: [
             MovieDetailView.SimpleCastMember(name: "Nicholas Hoult", character: "Justin Kemp"),
             MovieDetailView.SimpleCastMember(name: "Toni Collette", character: "Grace Kennedy"),
@@ -1552,6 +1556,8 @@ struct MovieDetailInfo {
     let director: String
     let rating: String
     let writer: String
+    let screenplay: String
+    let composer: String
     let cast: [MovieDetailView.SimpleCastMember]
     let tastyScore: Int
     let aiScore: Double
@@ -1580,9 +1586,17 @@ extension MovieDetail {
         // Get rating
         let ratingString = rating ?? "N/A"
         
-        // Get writers from crew
-        let writers = crew?.filter { $0.job == "Writer" || $0.job == "Screenplay" } ?? []
+        // Get writers from crew (job = "Writer" only)
+        let writers = crew?.filter { $0.job == "Writer" } ?? []
         let writerNames = writers.isEmpty ? "N/A" : writers.map { $0.name }.joined(separator: ", ")
+        
+        // Get screenplay writers from crew (job = "Screenplay" only)
+        let screenplayWriters = crew?.filter { $0.job == "Screenplay" } ?? []
+        let screenplayNames = screenplayWriters.isEmpty ? "N/A" : screenplayWriters.map { $0.name }.joined(separator: ", ")
+        
+        // Get composer from crew (job = "Original Music Composer")
+        let composers = crew?.filter { $0.job == "Original Music Composer" } ?? []
+        let composerNames = composers.isEmpty ? "N/A" : composers.map { $0.name }.joined(separator: ", ")
         
         // Convert cast members - use first 7 for display
         let castMembers = (cast ?? []).prefix(7).map { castMember in
@@ -1613,6 +1627,8 @@ extension MovieDetail {
             director: directorName,
             rating: ratingString,
             writer: writerNames,
+            screenplay: screenplayNames,
+            composer: composerNames,
             cast: castMembers,
             tastyScore: tastyScorePercent,
             aiScore: aiScoreValue,

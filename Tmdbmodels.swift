@@ -243,6 +243,9 @@ extension TMDBMovie {
             genres: [], // Genre names come from a separate API call
             rating: nil,
             director: nil,
+            writer: nil,
+            screenplay: nil,
+            composer: nil,
             runtime: nil,
             releaseDate: releaseDate,
             language: nil,

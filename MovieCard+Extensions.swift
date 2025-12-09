@@ -26,7 +26,7 @@ extension MovieCard {
             )
         }
         
-        // Convert crew (we only have director in MovieCard, so create minimal crew)
+        // Convert crew (director, writer, screenplay, composer from MovieCard)
         var crewMembers: [CrewMember] = []
         if let directorName = director {
             crewMembers.append(CrewMember(
@@ -34,6 +34,33 @@ extension MovieCard {
                 name: directorName,
                 job: "Director",
                 department: "Directing",
+                profilePath: nil
+            ))
+        }
+        if let writerName = writer {
+            crewMembers.append(CrewMember(
+                id: 1,
+                name: writerName,
+                job: "Writer",
+                department: "Writing",
+                profilePath: nil
+            ))
+        }
+        if let screenplayName = screenplay {
+            crewMembers.append(CrewMember(
+                id: 2,
+                name: screenplayName,
+                job: "Screenplay",
+                department: "Writing",
+                profilePath: nil
+            ))
+        }
+        if let composerName = composer {
+            crewMembers.append(CrewMember(
+                id: 3,
+                name: composerName,
+                job: "Original Music Composer",
+                department: "Sound",
                 profilePath: nil
             ))
         }

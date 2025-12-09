@@ -21,6 +21,9 @@ struct Movie: Codable, Identifiable, Equatable, Hashable {
     let genres: [String]
     let rating: String?
     let director: String?
+    let writer: String?
+    let screenplay: String?
+    let composer: String?
     let runtime: String?
     let releaseDate: String?
     let language: String?
@@ -28,7 +31,7 @@ struct Movie: Codable, Identifiable, Equatable, Hashable {
     
     // Coding Keys for JSON mapping
     enum CodingKeys: String, CodingKey {
-        case id, title, year, genres, rating, director, runtime, language, overview
+        case id, title, year, genres, rating, director, writer, screenplay, composer, runtime, language, overview
         case trailerURL
         case trailerDuration
         case posterImageURL
@@ -170,6 +173,9 @@ extension Movie {
             genres: ["Sci-Fi", "Thriller"],
             rating: "PG-13",
             director: "Christopher Nolan",
+            writer: nil,
+            screenplay: nil,
+            composer: nil,
             runtime: "2h 28m",
             releaseDate: "July 16, 2010",
             language: "English",
@@ -191,6 +197,9 @@ extension Movie {
                 genres: ["Sci-Fi", "Thriller"],
                 rating: "PG-13",
                 director: "Christopher Nolan",
+                writer: nil,
+                screenplay: nil,
+                composer: nil,
                 runtime: "2h 28m",
                 releaseDate: "July 16, 2010",
                 language: "English",
@@ -208,6 +217,9 @@ extension Movie {
                 genres: ["Thriller", "Drama"],
                 rating: "R",
                 director: "Bong Joon-ho",
+                writer: nil,
+                screenplay: nil,
+                composer: nil,
                 runtime: "2h 12m",
                 releaseDate: "May 30, 2019",
                 language: "Korean",
@@ -225,6 +237,9 @@ extension Movie {
                 genres: ["Comedy", "Fantasy"],
                 rating: "PG-13",
                 director: "Greta Gerwig",
+                writer: nil,
+                screenplay: nil,
+                composer: nil,
                 runtime: "1h 54m",
                 releaseDate: "July 21, 2023",
                 language: "English",
