@@ -435,6 +435,13 @@ struct WatchlistView: View {
                     Text(masterlistCountText)
                         .font(.custom("Nunito-Bold", size: 20))
                         .foregroundColor(Color(hex: "#1a1a1a"))
+                    
+                    // Show loading spinner while movies are being fetched
+                    if isLoadingMovies {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(Color(hex: "#FEA500"))
+                    }
                 }
                 
                 Spacer()
