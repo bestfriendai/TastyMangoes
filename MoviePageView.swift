@@ -786,16 +786,9 @@ struct MoviePageView: View {
                 )
                 .cornerRadius(9999)
                 
-                HStack(spacing: 0) {
-                    Text("You've been into courtroom dramas lately, and your friends loved this one — Juror #2 might be your next binge. It's smart, tense, and full... ")
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#333333"))
-                    Text("Read More")
-                        .font(.custom("Inter-SemiBold", size: 14))
-                        .foregroundColor(Color(hex: "#b56900"))
-                        .underline()
-                }
-                .lineLimit(2)
+                Text("Coming soon")
+                    .font(.custom("Inter-Regular", size: 14))
+                    .foregroundColor(Color(hex: "#333333"))
             }
             
             // Watch On / Liked By cards (wired from Figma: CHANGE_TO → Expanded states)

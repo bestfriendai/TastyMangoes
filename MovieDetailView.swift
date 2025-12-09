@@ -620,7 +620,7 @@ struct MovieDetailView: View {
             }
             
             // Recommendation Text
-            Text("This thriller delivers intense courtroom drama with compelling performances. Perfect for fans of legal suspense and character-driven narratives.")
+            Text("Coming soon")
                 .font(.custom("Inter-Regular", size: 14))
                 .foregroundColor(Color(hex: "#1a1a1a"))
                 .lineSpacing(4)
