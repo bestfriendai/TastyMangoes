@@ -64,11 +64,8 @@ struct TabBarView: View {
             // MARK: - Custom Tab Bar - anchored to bottom safe area
             // Only show when no selections are made
             if shouldShowTabBar {
-                VStack(spacing: 0) {
-                    // No separator - just the tab bar
-                    CustomTabBar(selectedTab: $selectedTab, showMangoListeningView: $showMangoListeningView)
-                }
-                .background(Color.white.ignoresSafeArea(edges: .top)) // Extend white background upward to cover any separator
+                CustomTabBar(selectedTab: $selectedTab, showMangoListeningView: $showMangoListeningView)
+                    .ignoresSafeArea(edges: .bottom) // Extend tab bar to bottom edge
             } else {
                 Color.clear.frame(height: 0)
             }
@@ -93,10 +90,17 @@ struct CustomTabBar: View {
     
     var body: some View {
         ZStack {
-            // Tab bar background - white background extends fully
-            Color.white
-                .frame(height: 60)
-                .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: -2)
+            // Tab bar background - highly translucent with blur effect
+            ZStack {
+                // Clear base to allow content to show through
+                Color.clear
+                
+            // Ultra-thin material for blur effect
+            Rectangle()
+                .fill(.ultraThinMaterial)
+        }
+        .frame(height: 92) // 15% bigger (80 * 1.15 = 92)
+        .shadow(color: Color.black.opacity(0.02), radius: 8, x: 0, y: -2) // Lighter shadow for more translucency
             
             // Tab items
             HStack(spacing: 0) {
@@ -136,8 +140,9 @@ struct CustomTabBar: View {
                     selectedTab = 4
                 }
             }
-            .frame(height: 60)
+            .frame(height: 92) // 15% bigger (80 * 1.15 = 92)
             .padding(.horizontal, 16)
+            .padding(.bottom, 0) // No bottom padding - extend to edge
             
             // Floating AI Button (Talk to Mango) - prominent orange circular background
             VStack {
@@ -199,8 +204,7 @@ struct CustomTabBar: View {
                     .offset(y: -24)
             }
         }
-        .frame(height: 60)
-        .background(Color.white)
+        .frame(height: 92) // 15% bigger (80 * 1.15 = 92)
     }
 }
 

@@ -177,9 +177,9 @@ struct SearchCategoriesView: View {
                     .padding(.horizontal, 16)
                 }
                 
-                // Bottom padding
+                // Bottom padding to allow content to scroll behind tab bar
                 Color.clear
-                    .frame(height: 20)
+                    .frame(height: 100)
                 }
             }
         }

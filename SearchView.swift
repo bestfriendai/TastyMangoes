@@ -95,14 +95,17 @@ struct SearchView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                searchHeader
-                mainContent
-            }
-            .background(Color(hex: "#fdfdfd"))
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+                    searchHeader
+                    mainContent
+                }
+                .background(Color(hex: "#fdfdfd"))
+                
+                // Bottom button overlay - positioned above tab bar without creating its own safeAreaInset
                 bottomButton
                     .background(Color.white) // Ensure white background extends to edge
+                    .padding(.bottom, 80) // Space for tab bar height (tab bar is in TabBarView's safeAreaInset)
             }
             .navigationDestination(isPresented: $navigateToResults) {
                 CategoryResultsView()
@@ -656,6 +659,7 @@ struct SearchView: View {
                         }
                     }
                     .padding(.horizontal, 20)
+                    .padding(.bottom, 100) // Space for tab bar (will be adjusted by safeAreaInset)
                 }
             }
         }

@@ -66,7 +66,7 @@ struct WatchlistView: View {
                     masterlistSection
                         .padding(.top, 24)
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 100) // Space for tab bar
+                        .padding(.bottom, 100) // Space for tab bar (will be adjusted by safeAreaInset)
                 }
             }
         }

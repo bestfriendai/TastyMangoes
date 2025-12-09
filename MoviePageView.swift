@@ -307,12 +307,16 @@ struct MoviePageView: View {
                 // Pinned Bottom Action Buttons
                 VStack(spacing: 0) {
                     Divider()
-                        .background(Color(hex: "#f3f3f3"))
+                        .background(Color(hex: "#f3f3f3").opacity(0.5)) // More translucent divider
                     
                     bottomActionButtons
                         .padding(.top, 16)
                         .padding(.bottom, 8)
-                        .background(Color.white)
+                        .background {
+                            Rectangle()
+                                .fill(.ultraThinMaterial)
+                                .ignoresSafeArea(edges: .all)
+                        }
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
