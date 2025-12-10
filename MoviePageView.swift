@@ -1476,6 +1476,7 @@ struct MoviePageView: View {
                     // Only show rating sheet when marking as watched (not when un-watching)
                     let wasWatched = isWatched
                     // Toggle watched status (CHANGE_TO connection - changes button state)
+                    // This will automatically sync to Supabase and trigger a full sync
                     WatchlistManager.shared.toggleWatched(movieId: movieId)
                     // Show rate bottom sheet only when marking as watched (per Figma prototype connection)
                     if !wasWatched {

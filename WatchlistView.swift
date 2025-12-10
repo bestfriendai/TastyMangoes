@@ -137,25 +137,19 @@ struct WatchlistView: View {
             loadMasterlistMoviesFromCache()
             loadWatchedMoviesFromCache()
             
-            // Step 2: Only sync from Supabase if we haven't already this session
-            // The app already syncs at launch, so this avoids double-syncing
-            if !hasSyncedThisSession {
-                print("📋 [WatchlistView] First appear - syncing from Supabase in background...")
-                hasSyncedThisSession = true
-                
-                Task {
-                    await watchlistManager.syncFromSupabase()
-                    await MainActor.run {
-                        loadLists()
-                        // After sync, check for any new movies we need to fetch
-                        loadMasterlistMoviesSmartFetch()
-                        loadWatchedMoviesSmartFetch()
-                    }
+            // Step 2: Always sync watch_history from Supabase when view appears
+            // This ensures watched count is up-to-date
+            print("📋 [WatchlistView] Syncing watch_history from Supabase...")
+            Task {
+                await watchlistManager.syncFromSupabase()
+                await MainActor.run {
+                    loadLists()
+                    // After sync, reload watched movies to reflect updated count
+                    loadWatchedMoviesFromCache()
+                    // Check for any new movies we need to fetch
+                    loadMasterlistMoviesSmartFetch()
+                    loadWatchedMoviesSmartFetch()
                 }
-            } else {
-                print("📋 [WatchlistView] Already synced this session - using cached data")
-                // Still do a smart fetch in case new movies were added
-                loadMasterlistMoviesSmartFetch()
             }
         }
         .onChange(of: watchlistManager.currentSortOption) { oldValue, newValue in
@@ -166,9 +160,22 @@ struct WatchlistView: View {
             // Reload lists when watchlist manager updates (e.g., after creating/deleting lists)
             loadLists()
             loadMasterlistName() // Also reload masterlist name in case it was edited
+            // Reload watched movies to reflect any watched status changes
+            loadWatchedMoviesFromCache()
             // Smart fetch will only get new movies
             loadMasterlistMoviesSmartFetch()
             loadWatchedMoviesSmartFetch()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("MangoMarkedWatched"))) { notification in
+            // After marking watched/unwatched via voice command, sync and reload
+            print("📋 [WatchlistView] Received MangoMarkedWatched notification - syncing watch_history...")
+            Task {
+                await watchlistManager.syncFromSupabase()
+                await MainActor.run {
+                    loadWatchedMoviesFromCache()
+                    loadWatchedMoviesSmartFetch()
+                }
+            }
         }
         }
     }
@@ -653,18 +660,8 @@ struct WatchlistView: View {
     
     /// Load watched movies from local cache (no network)
     private func loadWatchedMoviesFromCache() {
-        var watchedMovieIds: Set<String> = []
-        
-        // Get all movies from all lists and filter by watched status
-        let allListIds = watchlistManager.getAllWatchlists().map { $0.id } + ["masterlist"]
-        for listId in allListIds {
-            let movieIds = watchlistManager.getMoviesInList(listId: listId)
-            for movieId in movieIds {
-                if watchlistManager.isWatched(movieId: movieId) {
-                    watchedMovieIds.insert(movieId)
-                }
-            }
-        }
+        // Get ALL watched movie IDs from WatchlistManager (not just those in lists)
+        let watchedMovieIds = watchlistManager.getAllWatchedMovieIds()
         
         let cache = MovieCardCache.shared
         var cachedMovies: [MasterlistMovie] = []
@@ -687,17 +684,8 @@ struct WatchlistView: View {
     private func loadWatchedMoviesSmartFetch() {
         guard !isLoadingWatchedMovies else { return }
         
-        var watchedMovieIds: Set<String> = []
-        
-        let allListIds = watchlistManager.getAllWatchlists().map { $0.id } + ["masterlist"]
-        for listId in allListIds {
-            let movieIds = watchlistManager.getMoviesInList(listId: listId)
-            for movieId in movieIds {
-                if watchlistManager.isWatched(movieId: movieId) {
-                    watchedMovieIds.insert(movieId)
-                }
-            }
-        }
+        // Get ALL watched movie IDs from WatchlistManager (not just those in lists)
+        let watchedMovieIds = watchlistManager.getAllWatchedMovieIds()
         
         let cache = MovieCardCache.shared
         let missingIds = cache.getMissingIds(from: Array(watchedMovieIds))

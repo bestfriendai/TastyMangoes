@@ -158,6 +158,11 @@ class WatchlistManager: ObservableObject {
         watchedMovies[movieId] = true
         // Notify observers that watched status changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
+        // Sync to Supabase
+        Task {
+            await syncWatchedStatusToSupabase(movieId: movieId, watched: true)
+        }
     }
     
     /// Mark a movie as not watched
@@ -165,6 +170,11 @@ class WatchlistManager: ObservableObject {
         watchedMovies[movieId] = false
         // Notify observers that watched status changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
+        // Sync to Supabase
+        Task {
+            await syncWatchedStatusToSupabase(movieId: movieId, watched: false)
+        }
     }
     
     /// Toggle watched status
@@ -173,11 +183,45 @@ class WatchlistManager: ObservableObject {
         watchedMovies[movieId] = !currentStatus
         // Notify observers that watched status changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
+        // Sync to Supabase
+        Task {
+            await syncWatchedStatusToSupabase(movieId: movieId, watched: !currentStatus)
+        }
+    }
+    
+    /// Sync watched status to Supabase
+    private func syncWatchedStatusToSupabase(movieId: String, watched: Bool) async {
+        do {
+            guard let userId = try await SupabaseService.shared.getCurrentUser() else {
+                print("⚠️ [Watchlist] Cannot sync watched status - user not authenticated")
+                return
+            }
+            
+            if watched {
+                _ = try await SupabaseService.shared.addToWatchHistory(userId: userId.id, movieId: movieId, platform: nil)
+                print("✅ [Watchlist] Synced watched status to Supabase: \(movieId) marked as watched")
+            } else {
+                try await SupabaseService.shared.removeFromWatchHistory(userId: userId.id, movieId: movieId)
+                print("✅ [Watchlist] Synced watched status to Supabase: \(movieId) marked as unwatched")
+            }
+            
+            // After syncing individual status, do a full sync to ensure consistency
+            // This ensures the watched count is accurate
+            await syncFromSupabase()
+        } catch {
+            print("❌ [Watchlist] Failed to sync watched status to Supabase: \(error)")
+        }
     }
     
     /// Check if a movie is watched
     func isWatched(movieId: String) -> Bool {
         return watchedMovies[movieId] ?? false
+    }
+    
+    /// Get all watched movie IDs
+    func getAllWatchedMovieIds() -> Set<String> {
+        return Set(watchedMovies.filter { $0.value == true }.map { $0.key })
     }
     
     /// Get recommendation data for a movie
@@ -394,6 +438,10 @@ class WatchlistManager: ObservableObject {
             watchlistMetadata = snapshot.watchlistMetadata
             nextListId = snapshot.nextListId
             
+            // Log watched movies count
+            let watchedCount = watchedMovies.filter { $0.value == true }.count
+            print("📋 [Watchlist] Loaded \(watchedCount) watched movies from watch_history table")
+            
             // Convert movieRecommendations from snapshot format
             for (movieId, recommendation) in snapshot.movieRecommendations {
                 movieRecommendations[movieId] = (
@@ -406,7 +454,7 @@ class WatchlistManager: ObservableObject {
             // Notify observers that lists have changed
             NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
             
-            print("✅ [Watchlist] Synced watchlist data from Supabase - \(snapshot.watchlistMetadata.count) lists, nextListId: \(snapshot.nextListId)")
+            print("✅ [Watchlist] Synced watchlist data from Supabase - \(snapshot.watchlistMetadata.count) lists, \(watchedCount) watched movies, nextListId: \(snapshot.nextListId)")
         } catch {
             print("❌ [Watchlist] Error syncing from Supabase: \(error)")
             print("❌ [Watchlist] Error details: \(error.localizedDescription)")
