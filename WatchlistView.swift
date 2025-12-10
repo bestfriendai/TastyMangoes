@@ -1,8 +1,11 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 02:27 (America/Los_Angeles - Pacific Time)
-//  Notes: Built Watchlist / Masterlist section with header, Your Lists horizontal scroll, and Masterlist vertical movie list with filters. Updated to use new bottom sheets and match Figma design exactly.
+//  Last modified by Claude on 2025-12-09 at 14:30 really 16:08 (America/Los_Angeles - Pacific Time)
+//  Changes: Fixed first-tap movie opening bug by replacing fullScreenCover(isPresented:) with
+//           fullScreenCover(item:) pattern. Added IdentifiableMovieId wrapper struct. Removed
+//           showMoviePage state variable. This fixes race condition where selectedMovieId wasn't
+//           set before the sheet tried to present.
 
 import SwiftUI
 import Combine
@@ -17,14 +20,18 @@ struct AllListsView: View {
     }
 }
 
+// MARK: - Identifiable Movie ID Wrapper
+struct IdentifiableMovieId: Identifiable {
+    let id: Int
+}
+
 struct WatchlistView: View {
     @State private var searchText: String = ""
     @State private var watchedFilter: String = "Any"
     @State private var showFilterSheet = false
     @State private var showManageList = false
     @State private var showCreateWatchlistSheet = false
-    @State private var showMoviePage = false
-    @State private var selectedMovieId: Int? = nil
+    @State private var selectedMovieId: IdentifiableMovieId? = nil
     @State private var showDeleteConfirmation = false
     @State private var movieToDelete: String? = nil
     @State private var otherListsContainingMovie: [String] = []
@@ -88,34 +95,9 @@ struct WatchlistView: View {
             }
             .environmentObject(watchlistManager)
         }
-        .fullScreenCover(isPresented: $showMoviePage) {
-            if let movieId = selectedMovieId, movieId > 0 {
-                NavigationStack {
-                    MoviePageView(movieId: movieId)
-                }
-            } else {
-                // Fallback: show error view if invalid ID
-                ZStack {
-                    Color(hex: "#fdfdfd")
-                        .ignoresSafeArea()
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 48))
-                            .foregroundColor(Color(hex: "#999999"))
-                        Text("Unable to load movie")
-                            .font(.custom("Inter-Regular", size: 16))
-                            .foregroundColor(Color(hex: "#666666"))
-                        Button("Close") {
-                            showMoviePage = false
-                        }
-                        .font(.custom("Inter-SemiBold", size: 16))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(Color(hex: "#FEA500"))
-                        .cornerRadius(8)
-                    }
-                }
+        .fullScreenCover(item: $selectedMovieId) { movieId in
+            NavigationStack {
+                MoviePageView(movieId: movieId.id)
             }
         }
         .alert("Delete from All Lists?", isPresented: $showDeleteConfirmation) {
@@ -400,8 +382,7 @@ struct WatchlistView: View {
                                     }
                                     
                                     print("📋 [WatchlistView] Opening movie page for ID: \(movieId) (movie: \(movie.title))")
-                                    selectedMovieId = movieId
-                                    showMoviePage = true
+                                    selectedMovieId = IdentifiableMovieId(id: movieId)
                                 }
                         }
                     }
@@ -490,8 +471,7 @@ struct WatchlistView: View {
                             }
                             
                             print("📋 [WatchlistView] Opening movie page for ID: \(movieId) (movie: \(movie.title))")
-                            selectedMovieId = movieId
-                            showMoviePage = true
+                            selectedMovieId = IdentifiableMovieId(id: movieId)
                         },
                         onDelete: {
                             handleMasterlistDelete(movieId: movie.id)
@@ -1080,4 +1060,3 @@ struct MasterlistMovieCard: View {
 #Preview {
     WatchlistView()
 }
-
