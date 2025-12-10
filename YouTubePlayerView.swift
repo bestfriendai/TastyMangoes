@@ -3,17 +3,17 @@
 //  TastyMangoes
 //
 //  Created by Claude on 2025-12-02 at 8:45 AM (Pacific Time)
-//  Modified by Claude on 2025-12-02 at 6:15 PM (Pacific Time)
+//  Last modified by Claude on 2025-12-09 at 21:15 (America/Los_Angeles - Pacific Time)
 //
-//  Changes (6:15 PM):
-//  - Simplified to open YouTube externally (app or Safari)
-//  - SFSafariViewController had entitlement issues with free provisioning
-//  - External opening is most reliable and allows fullscreen/landscape in YouTube app
+//  Changes (2025-12-09):
+//  - Simplified to open YouTube directly (like Movie Clips)
+//  - No preview sheet - tapping trailer opens YouTube app immediately
+//  - iOS shows "◀ TastyMangoes" back button automatically
 //
 
 import SwiftUI
 
-// MARK: - Trailer Player Helper
+// MARK: - Trailer Player Sheet
 
 struct TrailerPlayerSheet: View {
     let videoId: String
@@ -23,12 +23,12 @@ struct TrailerPlayerSheet: View {
     var body: some View {
         Color.clear
             .onAppear {
-                openYouTube()
+                openInYouTube()
                 dismiss()
             }
     }
     
-    private func openYouTube() {
+    private func openInYouTube() {
         // Try YouTube app first, then fall back to Safari
         let youtubeAppURL = URL(string: "youtube://watch?v=\(videoId)")!
         let youtubeWebURL = URL(string: "https://www.youtube.com/watch?v=\(videoId)")!
@@ -44,5 +44,5 @@ struct TrailerPlayerSheet: View {
 // MARK: - Preview
 
 #Preview {
-    TrailerPlayerSheet(videoId: "dQw4w9WgXcQ", movieTitle: "Sample Movie")
+    TrailerPlayerSheet(videoId: "6ZfuNTqbHE8", movieTitle: "Wicked")
 }
