@@ -50,6 +50,7 @@ struct MoviePageView: View {
     @State private var showPosterCarousel = false
     @State private var selectedImageIndex = 0
     @State private var showGoogleSearch = false
+    @State private var showJustWatch = false
     
     // Computed property to determine if pinned tab bar should show
     private var shouldShowPinnedTabBar: Bool {
@@ -404,6 +405,15 @@ struct MoviePageView: View {
                     let searchQuery = "\(movie.title) \(movie.releaseYear) movie"
                     let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
                     if let url = URL(string: "https://www.google.com/search?q=\(encodedQuery)") {
+                        SafariView(url: url)
+                    }
+                }
+            }
+            .sheet(isPresented: $showJustWatch) {
+                if let movie = viewModel.movie {
+                    let searchQuery = movie.title
+                    let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
+                    if let url = URL(string: "https://www.justwatch.com/us/search?q=\(encodedQuery)") {
                         SafariView(url: url)
                     }
                 }
@@ -1450,6 +1460,31 @@ struct MoviePageView: View {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 14, weight: .medium))
                         Text("Google")
+                            .font(.custom("Inter-SemiBold", size: 14))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color(hex: "#FEA500"))
+                    .cornerRadius(8)
+                }
+            }
+            
+            // Where to Watch row
+            HStack {
+                Text("Where to Watch")
+                    .font(.custom("Nunito-Bold", size: 20))
+                    .foregroundColor(Color(hex: "#1a1a1a"))
+                
+                Spacer()
+                
+                Button(action: {
+                    showJustWatch = true
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.rectangle")
+                            .font(.system(size: 14, weight: .medium))
+                        Text("JustWatch")
                             .font(.custom("Inter-SemiBold", size: 14))
                     }
                     .foregroundColor(.white)
