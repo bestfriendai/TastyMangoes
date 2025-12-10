@@ -1,8 +1,9 @@
 //  MoviePageView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:37 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 03:13 (America/Los_Angeles - Pacific Time)
+//  Last modified by Claude on 2025-12-09 at 19:40 (America/Los_Angeles - Pacific Time)
 //  Notes: Fixed horizontal tab bar pinning - tab bar now properly pins below header when scrolling up, and scrolls to sections when tabs are clicked. Updated MenuBottomSheet to match Figma design with correct review icon. Changed AddToListView presentation from fullScreenCover to sheet to match bottom sheet design. Added navigation to list functionality from toast notifications. Replaced deprecated NavigationLink with fullScreenCover for navigating to IndividualListView.
+//  Changes: Set 12pt top padding above Overview section for minimal breathing room
 
 import SwiftUI
 import UIKit
@@ -176,11 +177,6 @@ struct MoviePageView: View {
                     
                     // Content Sections
                     VStack(alignment: .leading, spacing: 32) {
-                        // Spacer to account for pinned header + tab bar when scrolling to sections
-                        Color.clear
-                            .frame(height: 0)
-                            .id("sectionsStart")
-                        
                         overviewSection(movie)
                             .id(MovieSection.overview.id)
                             .background(
@@ -300,7 +296,7 @@ struct MoviePageView: View {
                         // More Info section
                         moreInfoSection
                     }
-                    .padding(.top, 24)
+                    .padding(.top, 12) // Small gap below tab bar for breathing room
                     .padding(.horizontal, 16)
                     .padding(.bottom, 100) // Extra padding to ensure content is visible above pinned buttons
                 }
