@@ -2,8 +2,11 @@
 //  TabBarView.swift
 //  TastyMangoes
 //
-//  Rewritten to fix scroll-gesture conflicts with MoviePageView
-//  Last updated on 2025-11-16 at 02:10 (California time)
+//  Created by Claude on 2025-12-09 at 17:30 (America/Los_Angeles - Pacific Time)
+//  Last modified by Claude on 2025-12-09 at 19:15 (America/Los_Angeles - Pacific Time)
+//
+//  Version: v16
+//  Changes: More translucent (0.85 opacity), shorter content area (72pt) to push icons lower
 //
 
 import SwiftUI
@@ -61,11 +64,8 @@ struct TabBarView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            // MARK: - Custom Tab Bar - anchored to bottom safe area
-            // Only show when no selections are made
             if shouldShowTabBar {
                 CustomTabBar(selectedTab: $selectedTab, showMangoListeningView: $showMangoListeningView)
-                    .ignoresSafeArea(edges: .bottom) // Extend tab bar to bottom edge
             } else {
                 Color.clear.frame(height: 0)
             }
@@ -84,24 +84,14 @@ struct TabBarView: View {
     }
 }
 
+// MARK: - Custom Tab Bar (v16)
 struct CustomTabBar: View {
     @Binding var selectedTab: Int
     @Binding var showMangoListeningView: Bool
     
     var body: some View {
+        // Content stays in 72pt (was 92pt), background extends into safe area
         ZStack {
-            // Tab bar background - highly translucent with blur effect
-            ZStack {
-                // Clear base to allow content to show through
-                Color.clear
-                
-            // Ultra-thin material for blur effect
-            Rectangle()
-                .fill(.ultraThinMaterial)
-        }
-        .frame(height: 92) // 15% bigger (80 * 1.15 = 92)
-        .shadow(color: Color.black.opacity(0.02), radius: 8, x: 0, y: -2) // Lighter shadow for more translucency
-            
             // Tab items
             HStack(spacing: 0) {
                 TabBarItem(
@@ -140,21 +130,18 @@ struct CustomTabBar: View {
                     selectedTab = 4
                 }
             }
-            .frame(height: 92) // 15% bigger (80 * 1.15 = 92)
             .padding(.horizontal, 16)
-            .padding(.bottom, 0) // No bottom padding - extend to edge
+            .padding(.top, 8) // Push icons down within the frame
             
-            // Floating AI Button (Talk to Mango) - prominent orange circular background
+            // Floating AI Button (Talk to Mango)
             VStack {
                 Spacer()
                 
                 Button {
-                    // Switch to tab 2 and show listening view
                     selectedTab = 2
                     showMangoListeningView = true
                 } label: {
                     ZStack {
-                        // Prominent filled orange circular background with gradient
                         Circle()
                             .fill(
                                 LinearGradient(
@@ -168,46 +155,33 @@ struct CustomTabBar: View {
                             )
                             .frame(width: 56, height: 56)
                             .overlay(
-                                // Border with white opacity
                                 Circle()
                                     .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                    .frame(width: 56, height: 56)
-                            )
-                            .overlay(
-                                // Inner shadow/glow effect
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color.white.opacity(0.4),
-                                                Color.clear
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .center
-                                        )
-                                    )
-                                    .frame(width: 56, height: 56)
-                                    .blendMode(.overlay)
                             )
                         
-                        // White mango logo icon inside the circle (matches Figma)
                         MangoLogoIcon(size: 28, color: .white)
                     }
                     .shadow(color: Color(hex: "#FFA500").opacity(0.4), radius: 12, x: 0, y: 4)
                 }
-                .offset(y: -34)
+                .offset(y: -24) // Adjusted for shorter height
                 
-                // Label below button
                 Text("Talk to Mango")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(Color(red: 153/255, green: 153/255, blue: 153/255))
-                    .offset(y: -24)
+                    .offset(y: -16) // Adjusted for shorter height
             }
         }
-        .frame(height: 92) // 15% bigger (80 * 1.15 = 92)
+        .frame(height: 72) // Reduced from 92pt - pushes content closer to bottom
+        .background(
+            // This background extends into the safe area
+            Color.white.opacity(0.85) // More translucent (was 0.92)
+                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: -4)
+                .ignoresSafeArea(edges: .bottom)
+        )
     }
 }
 
+// MARK: - Tab Bar Item
 struct TabBarItem: View {
     let icon: String
     let label: String
@@ -268,9 +242,7 @@ struct TabBarItem: View {
     }
 }
 
-
-// WatchlistView is now in its own file
-
+// MARK: - More View (Placeholder)
 struct MoreView: View {
     var body: some View {
         ZStack {

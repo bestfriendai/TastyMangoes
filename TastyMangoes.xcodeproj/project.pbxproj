@@ -43,6 +43,7 @@
 		C517CD372EC9806C00EAE1FE /* MovieDetailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD0E2EC9806C00EAE1FE /* MovieDetailService.swift */; };
 		C517CD382EC9806C00EAE1FE /* HomeVew.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */; };
 		C51B70512ED2D66500B76CF7 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */; };
+		C537D5CB2EE8FEF5001C8460 /* MovieCardCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C537D5CA2EE8FEF5001C8460 /* MovieCardCache.swift */; };
 		C55D3BD82EE73C7E003BE6F4 /* PosterCarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C55D3BD72EE73C7E003BE6F4 /* PosterCarouselView.swift */; };
 		C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */; };
 		C59E8B822EE696D000F15ED6 /* SelfHealingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */; };
@@ -150,6 +151,7 @@
 		C517CD1C2EC9806C00EAE1FE /* Tmdbservice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tmdbservice.swift; sourceTree = "<group>"; };
 		C517CD1D2EC9806C00EAE1FE /* TMIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMIcons.swift; sourceTree = "<group>"; };
 		C51B70502ED2D66500B76CF7 /* MovieDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieDetailView.swift; sourceTree = "<group>"; };
+		C537D5CA2EE8FEF5001C8460 /* MovieCardCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieCardCache.swift; sourceTree = "<group>"; };
 		C55D3BD72EE73C7E003BE6F4 /* PosterCarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PosterCarouselView.swift; sourceTree = "<group>"; };
 		C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayerView.swift; sourceTree = "<group>"; };
 		C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfHealingVoiceService.swift; sourceTree = "<group>"; };
@@ -246,6 +248,7 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C537D5CA2EE8FEF5001C8460 /* MovieCardCache.swift */,
 				C517CD042EC9806C00EAE1FE /* Assets.xcassets */,
 				C5B95D442ECB3D9100B47098 /* AddMoviesToListView.swift */,
 				C5B95D422ECB3D5300B47098 /* AddToListView.swift */,
@@ -529,6 +532,7 @@
 				C517CD2B2EC9806C00EAE1FE /* MoviePosterImage.swift in Sources */,
 				C5B95D272ECB1D4000B47098 /* SearchCategoriesView.swift in Sources */,
 				C5B95D252ECB1D2800B47098 /* SearchFiltersBottomSheet.swift in Sources */,
+				C537D5CB2EE8FEF5001C8460 /* MovieCardCache.swift in Sources */,
 				C517CD2C2EC9806C00EAE1FE /* TastyMangoesApp.swift in Sources */,
 				C517CD2D2EC9806C00EAE1FE /* TMIcons.swift in Sources */,
 				C517CD2E2EC9806C00EAE1FE /* SearchComponents.swift in Sources */,

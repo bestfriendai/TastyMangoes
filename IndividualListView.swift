@@ -1,8 +1,13 @@
 //  IndividualListView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:57 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-17 at 03:22 (America/Los_Angeles - Pacific Time)
-//  Notes: Built individual list view (Manage List) with movie selection, drag handles, and management actions. Updated to match Figma design with hero section, search, filters, and Product Card format. Added filter state tracking and active filter badges. Added "Add movies to list" functionality for empty lists.
+//  Last modified by Claude on 2025-12-09 at 17:25 (America/Los_Angeles - Pacific Time)
+//  Changes:
+//    1. Fixed first-tap movie opening bug (fullScreenCover item pattern)
+//    2. Implemented smart caching for instant list loading:
+//       - Load cached MovieCards instantly from MovieCardCache (no network)
+//       - Only fetch missing cards via batch Supabase query
+//       - Skip redundant Supabase sync (already synced at app launch)
 
 import SwiftUI
 
@@ -19,14 +24,11 @@ struct IndividualListView: View {
     @State private var showManageMenu = false
     @State private var showAddMoviesSheet = false
     @State private var movies: [MasterlistMovie] = []
+    @State private var isLoadingMovies: Bool = false
     @StateObject private var filterState = WatchlistFilterState.shared
-    @State private var showMoviePage = false
-    @State private var selectedMovieId: Int? = nil
     
-    // Helper to safely convert movie ID
-    private func safeMovieId(from movieId: String) -> Int? {
-        return Int(movieId)
-    }
+    // Use IdentifiableMovieId wrapper for fullScreenCover(item:) pattern
+    @State private var selectedMovieId: IdentifiableMovieId? = nil
     
     var body: some View {
         ZStack {
@@ -55,7 +57,7 @@ struct IndividualListView: View {
                     // Movie List (Product Cards) with Swipe Actions
                     VStack(spacing: 12) {
                         // Create New Watchlist Card (if empty)
-                        if movies.isEmpty {
+                        if movies.isEmpty && !isLoadingMovies {
                             Button(action: {
                                 showAddMoviesSheet = true
                             }) {
@@ -64,18 +66,28 @@ struct IndividualListView: View {
                             .buttonStyle(.plain)
                         }
                         
+                        // Loading indicator
+                        if isLoadingMovies && movies.isEmpty {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .padding()
+                                Spacer()
+                            }
+                        }
+                        
                         // Movie Cards with Swipe Actions
                         ForEach(movies) { movie in
                             SwipeableMovieCard(
                                 movie: movie,
                                 onTap: {
-                                    // Only set movieId if we can safely convert it to a valid Int
-                                    if let movieId = safeMovieId(from: movie.id), movieId > 0 {
-                                        selectedMovieId = movieId
-                                        showMoviePage = true
-                                    } else {
+                                    // Safely convert movie ID
+                                    guard let movieId = Int(movie.id), movieId > 0 else {
                                         print("⚠️ [IndividualListView] Invalid movie ID '\(movie.id)' - cannot open movie page")
+                                        return
                                     }
+                                    print("📋 [IndividualListView] Opening movie page for ID: \(movieId)")
+                                    selectedMovieId = IdentifiableMovieId(id: movieId)
                                 },
                                 onDelete: {
                                     removeMovie(movieId: movie.id)
@@ -101,56 +113,31 @@ struct IndividualListView: View {
             AddMoviesToListView(listId: listId, listName: listName)
                 .environmentObject(watchlistManager)
                 .onDisappear {
-                    // Reload movies after adding
-                    loadMovies()
+                    // Reload movies after adding - smart fetch will only get new ones
+                    loadMoviesSmartFetch()
                 }
         }
-        .fullScreenCover(isPresented: $showMoviePage) {
-            if let movieId = selectedMovieId, movieId > 0 {
-                NavigationStack {
-                    MoviePageView(movieId: movieId)
-                }
-            } else {
-                // Fallback: show error or loading state
-                ZStack {
-                    Color(hex: "#fdfdfd")
-                        .ignoresSafeArea()
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 48))
-                            .foregroundColor(Color(hex: "#999999"))
-                        Text("Unable to load movie")
-                            .font(.custom("Inter-Regular", size: 16))
-                            .foregroundColor(Color(hex: "#666666"))
-                        Button("Close") {
-                            showMoviePage = false
-                        }
-                        .font(.custom("Inter-SemiBold", size: 16))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(Color(hex: "#FEA500"))
-                        .cornerRadius(8)
-                    }
-                }
+        // Use fullScreenCover(item:) pattern to fix first-tap bug
+        .fullScreenCover(item: $selectedMovieId) { movieId in
+            NavigationStack {
+                MoviePageView(movieId: movieId.id)
             }
         }
         .onAppear {
             print("📋 [IndividualListView] Loading movies for list: \(listName) (ID: \(listId))")
-            // Refresh cache from Supabase before loading to ensure we have latest data
-            Task {
-                print("📋 [IndividualListView] Syncing watchlist cache from Supabase...")
-                await watchlistManager.syncFromSupabase()
-                print("📋 [IndividualListView] Cache synced, loading movies...")
-                await MainActor.run {
-                    loadMovies()
-                }
-            }
+            
+            // Step 1: Load from local cache INSTANTLY (no network)
+            loadMoviesFromCache()
+            
+            // Step 2: Smart fetch only missing movies in background
+            // Don't do a full Supabase sync - WatchlistView already does that
+            loadMoviesSmartFetch()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("WatchlistManagerDidUpdate"))) { _ in
             // Reload movies when watchlist manager updates
             print("📋 [IndividualListView] WatchlistManagerDidUpdate notification received - reloading movies")
-            loadMovies()
+            loadMoviesFromCache()
+            loadMoviesSmartFetch()
         }
     }
     
@@ -213,9 +200,18 @@ struct IndividualListView: View {
                 
                 // List Details
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(listName)
-                        .font(.custom("Nunito-Bold", size: 20))
-                        .foregroundColor(Color(hex: "#1a1a1a"))
+                    HStack(spacing: 4) {
+                        Text(listName)
+                            .font(.custom("Nunito-Bold", size: 20))
+                            .foregroundColor(Color(hex: "#1a1a1a"))
+                        
+                        // Show loading spinner while fetching
+                        if isLoadingMovies {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .tint(Color(hex: "#FEA500"))
+                        }
+                    }
                     
                     Text("\(movies.count) films")
                         .font(.custom("Inter-Regular", size: 14))
@@ -309,53 +305,100 @@ struct IndividualListView: View {
         .padding(.horizontal, -16)
     }
     
-    // MARK: - Helper Methods
+    // MARK: - Smart Movie Loading (with local caching)
     
-    private func loadMovies() {
-        // Load movies for this list from watchlist manager
-        let movieIds = watchlistManager.getMoviesInList(listId: listId)
-        print("📋 [IndividualListView] Found \(movieIds.count) movies in local cache for list \(listName)")
-        print("📋 [IndividualListView] Movie IDs: \(Array(movieIds).sorted())")
+    /// Load movies instantly from local MovieCardCache (no network)
+    private func loadMoviesFromCache() {
+        let movieIdsSet = watchlistManager.getMoviesInList(listId: listId)
+        let movieIds = Array(movieIdsSet)
+        print("📋 [IndividualListView] Loading \(movieIds.count) movies from local cache for \(listName)...")
         
-        // Fetch real movie data from Supabase (not mock data)
-        Task {
-            var fetchedMovies: [MasterlistMovie] = []
-            
-            for movieId in movieIds {
-                print("📋 [IndividualListView] Fetching movie card for ID: \(movieId)")
-                do {
-                    // Try fetching from cache first
-                    if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: movieId) {
-                        let masterlistMovie = movieCard.toMasterlistMovie(
-                            isWatched: watchlistManager.isWatched(movieId: movieId),
-                            friendsCount: 0 // TODO: Implement friends count when available
-                        )
-                        fetchedMovies.append(masterlistMovie)
-                        print("✅ [IndividualListView] Loaded movie \(movieId) from cache")
-                    } else {
-                        // Fallback to get-movie-card function
-                        print("📋 [IndividualListView] Movie \(movieId) not in cache, fetching from get-movie-card...")
-                        let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
-                        let masterlistMovie = movieCard.toMasterlistMovie(
-                            isWatched: watchlistManager.isWatched(movieId: movieId),
-                            friendsCount: 0
-                        )
-                        fetchedMovies.append(masterlistMovie)
-                        print("✅ [IndividualListView] Loaded movie \(movieId) from get-movie-card")
-                    }
-                } catch {
-                    print("❌ [IndividualListView] Failed to fetch movie \(movieId): \(error)")
-                    print("❌ [IndividualListView] Error details: \(error.localizedDescription)")
-                    // Continue with other movies even if one fails
-                }
+        let cache = MovieCardCache.shared
+        var cachedMovies: [MasterlistMovie] = []
+        
+        for movieId in movieIds {
+            if let card = cache.getCard(tmdbId: movieId) {
+                let masterlistMovie = card.toMasterlistMovie(
+                    isWatched: watchlistManager.isWatched(movieId: movieId),
+                    friendsCount: 0
+                )
+                cachedMovies.append(masterlistMovie)
             }
-            
-            await MainActor.run {
-                print("📋 [IndividualListView] Loaded \(fetchedMovies.count) movies from Supabase")
-                movies = fetchedMovies
+        }
+        
+        movies = cachedMovies
+        print("📋 [IndividualListView] Loaded \(cachedMovies.count)/\(movieIds.count) movies from local cache (instant)")
+    }
+    
+    /// Smart fetch: Only get movies we don't have locally, using batch query
+    private func loadMoviesSmartFetch() {
+        let movieIdsSet = watchlistManager.getMoviesInList(listId: listId)
+        let movieIds = Array(movieIdsSet)
+        let cache = MovieCardCache.shared
+        
+        // Find which movies we're missing locally
+        let missingIds = cache.getMissingIds(from: movieIds)
+        
+        if missingIds.isEmpty {
+            print("📋 [IndividualListView] All \(movieIds.count) movies already cached locally!")
+            // Refresh display from cache (in case watched status changed)
+            loadMoviesFromCache()
+            return
+        }
+        
+        print("📋 [IndividualListView] Need to fetch \(missingIds.count)/\(movieIds.count) missing movies...")
+        isLoadingMovies = true
+        
+        Task {
+            do {
+                // Batch fetch all missing movies in ONE query
+                let fetchedCards = try await SupabaseService.shared.fetchMovieCardsBatch(tmdbIds: missingIds)
+                
+                // Cache the newly fetched cards locally
+                cache.setCards(Array(fetchedCards.values))
+                
+                // Rebuild the full list from cache (now complete)
+                await MainActor.run {
+                    loadMoviesFromCache()
+                    isLoadingMovies = false
+                }
+            } catch {
+                print("⚠️ [IndividualListView] Batch fetch failed: \(error)")
+                // Fall back to individual fetches
+                await fetchMissingMoviesIndividually(missingIds: missingIds)
             }
         }
     }
+    
+    /// Fallback: fetch missing movies one at a time (if batch fails)
+    private func fetchMissingMoviesIndividually(missingIds: [String]) async {
+        let cache = MovieCardCache.shared
+        
+        for movieId in missingIds {
+            do {
+                // Try cache first, then edge function
+                if let movieCard = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: movieId) {
+                    cache.setCard(movieCard)
+                } else {
+                    let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                    cache.setCard(movieCard)
+                }
+                
+                // Update UI progressively
+                await MainActor.run {
+                    loadMoviesFromCache()
+                }
+            } catch {
+                print("⚠️ [IndividualListView] Failed to fetch movie \(movieId): \(error)")
+            }
+        }
+        
+        await MainActor.run {
+            isLoadingMovies = false
+        }
+    }
+    
+    // MARK: - Helper Methods
     
     private func toggleSelection(_ movieId: String) {
         if selectedMovieIds.contains(movieId) {
@@ -653,4 +696,3 @@ struct WatchlistProductCard: View {
 #Preview {
     IndividualListView(listId: "1", listName: "Masterlist")
 }
-

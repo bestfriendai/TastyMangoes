@@ -1,11 +1,14 @@
 //  WatchlistView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-11-16 at 23:42 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude on 2025-12-09 at 14:30 really 16:08 (America/Los_Angeles - Pacific Time)
-//  Changes: Fixed first-tap movie opening bug by replacing fullScreenCover(isPresented:) with
-//           fullScreenCover(item:) pattern. Added IdentifiableMovieId wrapper struct. Removed
-//           showMoviePage state variable. This fixes race condition where selectedMovieId wasn't
-//           set before the sheet tried to present.
+//  Last modified by Claude on 2025-12-09 at 17:00 (America/Los_Angeles - Pacific Time)
+//  Changes:
+//    1. Fixed first-tap movie opening bug (fullScreenCover item pattern)
+//    2. Implemented smart caching for instant watchlist loading:
+//       - Load cached MovieCards instantly from MovieCardCache (no network)
+//       - Only fetch missing cards via batch Supabase query
+//       - Progressive UI updates as new cards arrive
+//       - Skip redundant Supabase sync if already synced at app launch
 
 import SwiftUI
 import Combine
@@ -45,6 +48,9 @@ struct WatchlistView: View {
     @State private var watchedMovies: [MasterlistMovie] = []
     @State private var isLoadingWatchedMovies: Bool = false
     @State private var isWatchedSectionExpanded: Bool = false
+    
+    /// Track if we've already synced to avoid redundant network calls
+    @State private var hasSyncedThisSession: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -124,15 +130,32 @@ struct WatchlistView: View {
             }
         }
         .onAppear {
-            print("📋 [WatchlistView] onAppear - syncing cache from Supabase...")
-            Task {
-                await watchlistManager.syncFromSupabase()
-                print("📋 [WatchlistView] Cache synced, loading lists and movies...")
-                await MainActor.run {
-                    loadLists()
-                    loadMasterlistMovies()
-                    loadWatchedMovies()
+            print("📋 [WatchlistView] onAppear")
+            
+            // Step 1: Load cached data INSTANTLY (no network)
+            loadLists()
+            loadMasterlistMoviesFromCache()
+            loadWatchedMoviesFromCache()
+            
+            // Step 2: Only sync from Supabase if we haven't already this session
+            // The app already syncs at launch, so this avoids double-syncing
+            if !hasSyncedThisSession {
+                print("📋 [WatchlistView] First appear - syncing from Supabase in background...")
+                hasSyncedThisSession = true
+                
+                Task {
+                    await watchlistManager.syncFromSupabase()
+                    await MainActor.run {
+                        loadLists()
+                        // After sync, check for any new movies we need to fetch
+                        loadMasterlistMoviesSmartFetch()
+                        loadWatchedMoviesSmartFetch()
+                    }
                 }
+            } else {
+                print("📋 [WatchlistView] Already synced this session - using cached data")
+                // Still do a smart fetch in case new movies were added
+                loadMasterlistMoviesSmartFetch()
             }
         }
         .onChange(of: watchlistManager.currentSortOption) { oldValue, newValue in
@@ -143,8 +166,9 @@ struct WatchlistView: View {
             // Reload lists when watchlist manager updates (e.g., after creating/deleting lists)
             loadLists()
             loadMasterlistName() // Also reload masterlist name in case it was edited
-            loadMasterlistMovies() // Reload movies when watchlist changes
-            loadWatchedMovies() // Reload watched movies when watchlist changes
+            // Smart fetch will only get new movies
+            loadMasterlistMoviesSmartFetch()
+            loadWatchedMoviesSmartFetch()
         }
         }
     }
@@ -345,7 +369,7 @@ struct WatchlistView: View {
                         isWatchedSectionExpanded.toggle()
                     }
                     if isWatchedSectionExpanded && watchedMovies.isEmpty {
-                        loadWatchedMovies()
+                        loadWatchedMoviesSmartFetch()
                     }
                 }) {
                     Image(systemName: isWatchedSectionExpanded ? "chevron.up" : "chevron.down")
@@ -532,36 +556,173 @@ struct WatchlistView: View {
         }
     }
     
-    private func loadMasterlistMovies() {
-        guard !isLoadingMovies else { return }
+    // MARK: - Smart Movie Loading (with local caching)
+    
+    /// Load movies instantly from local MovieCardCache (no network)
+    private func loadMasterlistMoviesFromCache() {
+        let movieIdsSet = watchlistManager.getMoviesInList(listId: "masterlist")
+        let movieIds = Array(movieIdsSet)
+        print("📋 [WatchlistView] Loading \(movieIds.count) masterlist movies from local cache...")
+        
+        let cache = MovieCardCache.shared
+        var cachedMovies: [MasterlistMovie] = []
+        
+        for movieId in movieIds {
+            if let card = cache.getCard(tmdbId: movieId) {
+                let masterlistMovie = card.toMasterlistMovie(
+                    isWatched: watchlistManager.isWatched(movieId: movieId),
+                    friendsCount: 0
+                )
+                cachedMovies.append(masterlistMovie)
+            }
+        }
+        
+        masterlistMovies = cachedMovies
+        print("📋 [WatchlistView] Loaded \(cachedMovies.count)/\(movieIds.count) movies from local cache (instant)")
+    }
+    
+    /// Smart fetch: Only get movies we don't have locally, using batch query
+    private func loadMasterlistMoviesSmartFetch() {
+        let movieIdsSet = watchlistManager.getMoviesInList(listId: "masterlist")
+        let movieIds = Array(movieIdsSet)
+        let cache = MovieCardCache.shared
+        
+        // Find which movies we're missing locally
+        let missingIds = cache.getMissingIds(from: movieIds)
+        
+        if missingIds.isEmpty {
+            print("📋 [WatchlistView] All \(movieIds.count) masterlist movies already cached locally!")
+            // Refresh the display from cache (in case watched status changed)
+            loadMasterlistMoviesFromCache()
+            return
+        }
+        
+        print("📋 [WatchlistView] Need to fetch \(missingIds.count)/\(movieIds.count) missing movies from Supabase...")
         isLoadingMovies = true
         
         Task {
-            // Get movie IDs from masterlist
-            let movieIds = watchlistManager.getMoviesInList(listId: "masterlist")
-            print("📋 [WatchlistView] Found \(movieIds.count) movies in masterlist cache")
-            
-            // Fetch movie cards from Supabase
-            var fetchedMovies: [MasterlistMovie] = []
-            
-            for movieId in movieIds {
-                // movieId is stored as TMDB ID string
-                do {
-                    let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+            do {
+                // Batch fetch all missing movies in ONE query
+                let fetchedCards = try await SupabaseService.shared.fetchMovieCardsBatch(tmdbIds: missingIds)
+                
+                // Cache the newly fetched cards locally
+                cache.setCards(Array(fetchedCards.values))
+                
+                // Rebuild the full list from cache (now complete)
+                await MainActor.run {
+                    loadMasterlistMoviesFromCache()
+                    isLoadingMovies = false
+                }
+            } catch {
+                print("⚠️ [WatchlistView] Batch fetch failed: \(error)")
+                // Fall back to individual fetches for missing cards
+                await fetchMissingMoviesIndividually(missingIds: missingIds)
+            }
+        }
+    }
+    
+    /// Fallback: fetch missing movies one at a time (if batch fails)
+    private func fetchMissingMoviesIndividually(missingIds: [String]) async {
+        let cache = MovieCardCache.shared
+        
+        for movieId in missingIds {
+            do {
+                let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
+                cache.setCard(movieCard)
+                
+                // Update UI progressively
+                await MainActor.run {
                     let masterlistMovie = movieCard.toMasterlistMovie(
                         isWatched: watchlistManager.isWatched(movieId: movieId),
-                        friendsCount: 0 // TODO: Implement friends count when available
+                        friendsCount: 0
                     )
-                    fetchedMovies.append(masterlistMovie)
-                } catch {
-                    print("⚠️ Failed to fetch movie card for ID \(movieId): \(error)")
-                    // Continue with other movies even if one fails
+                    // Add to list if not already there
+                    if !masterlistMovies.contains(where: { $0.id == movieId }) {
+                        masterlistMovies.append(masterlistMovie)
+                    }
+                }
+            } catch {
+                print("⚠️ [WatchlistView] Failed to fetch movie \(movieId): \(error)")
+            }
+        }
+        
+        await MainActor.run {
+            isLoadingMovies = false
+        }
+    }
+    
+    /// Load watched movies from local cache (no network)
+    private func loadWatchedMoviesFromCache() {
+        var watchedMovieIds: Set<String> = []
+        
+        // Get all movies from all lists and filter by watched status
+        let allListIds = watchlistManager.getAllWatchlists().map { $0.id } + ["masterlist"]
+        for listId in allListIds {
+            let movieIds = watchlistManager.getMoviesInList(listId: listId)
+            for movieId in movieIds {
+                if watchlistManager.isWatched(movieId: movieId) {
+                    watchedMovieIds.insert(movieId)
                 }
             }
-            
-            await MainActor.run {
-                self.masterlistMovies = fetchedMovies
-                self.isLoadingMovies = false
+        }
+        
+        let cache = MovieCardCache.shared
+        var cachedMovies: [MasterlistMovie] = []
+        
+        for movieId in watchedMovieIds {
+            if let card = cache.getCard(tmdbId: movieId) {
+                let masterlistMovie = card.toMasterlistMovie(
+                    isWatched: true,
+                    friendsCount: 0
+                )
+                cachedMovies.append(masterlistMovie)
+            }
+        }
+        
+        watchedMovies = cachedMovies
+        print("📋 [WatchlistView] Loaded \(cachedMovies.count)/\(watchedMovieIds.count) watched movies from local cache")
+    }
+    
+    /// Smart fetch watched movies
+    private func loadWatchedMoviesSmartFetch() {
+        guard !isLoadingWatchedMovies else { return }
+        
+        var watchedMovieIds: Set<String> = []
+        
+        let allListIds = watchlistManager.getAllWatchlists().map { $0.id } + ["masterlist"]
+        for listId in allListIds {
+            let movieIds = watchlistManager.getMoviesInList(listId: listId)
+            for movieId in movieIds {
+                if watchlistManager.isWatched(movieId: movieId) {
+                    watchedMovieIds.insert(movieId)
+                }
+            }
+        }
+        
+        let cache = MovieCardCache.shared
+        let missingIds = cache.getMissingIds(from: Array(watchedMovieIds))
+        
+        if missingIds.isEmpty {
+            loadWatchedMoviesFromCache()
+            return
+        }
+        
+        isLoadingWatchedMovies = true
+        
+        Task {
+            do {
+                let fetchedCards = try await SupabaseService.shared.fetchMovieCardsBatch(tmdbIds: missingIds)
+                cache.setCards(Array(fetchedCards.values))
+                
+                await MainActor.run {
+                    loadWatchedMoviesFromCache()
+                    isLoadingWatchedMovies = false
+                }
+            } catch {
+                print("⚠️ [WatchlistView] Failed to batch fetch watched movies: \(error)")
+                await MainActor.run {
+                    isLoadingWatchedMovies = false
+                }
             }
         }
     }
@@ -606,6 +767,9 @@ struct WatchlistView: View {
         // Remove from local array
         masterlistMovies.removeAll { $0.id == movieId }
         
+        // Note: We don't remove from MovieCardCache - the card data might be useful
+        // if the user adds the movie again later
+        
         // Sync with Supabase - remove from all lists
         Task {
             do {
@@ -628,53 +792,6 @@ struct WatchlistView: View {
                 }
             } catch {
                 print("❌ [WatchlistView] Failed to remove movie \(movieId) from Supabase: \(error)")
-            }
-        }
-    }
-    
-    private func loadWatchedMovies() {
-        guard !isLoadingWatchedMovies else { return }
-        isLoadingWatchedMovies = true
-        
-        Task {
-            // Get all watched movie IDs from WatchlistManager
-            // Note: We need to access the watchedMovies dictionary
-            // Since it's private, we'll get all movies from all lists and filter by watched status
-            var watchedMovieIds: Set<String> = []
-            
-            // Get all movies from all lists
-            let allListIds = watchlistManager.getAllWatchlists().map { $0.id } + ["masterlist"]
-            for listId in allListIds {
-                let movieIds = watchlistManager.getMoviesInList(listId: listId)
-                for movieId in movieIds {
-                    if watchlistManager.isWatched(movieId: movieId) {
-                        watchedMovieIds.insert(movieId)
-                    }
-                }
-            }
-            
-            print("📋 [WatchlistView] Found \(watchedMovieIds.count) watched movies")
-            
-            // Fetch movie cards from Supabase
-            var fetchedMovies: [MasterlistMovie] = []
-            
-            for movieId in watchedMovieIds {
-                do {
-                    let movieCard = try await SupabaseService.shared.fetchMovieCard(tmdbId: movieId)
-                    let masterlistMovie = movieCard.toMasterlistMovie(
-                        isWatched: true, // All movies in this list are watched
-                        friendsCount: 0
-                    )
-                    fetchedMovies.append(masterlistMovie)
-                } catch {
-                    print("⚠️ Failed to fetch watched movie card for ID \(movieId): \(error)")
-                    // Continue with other movies even if one fails
-                }
-            }
-            
-            await MainActor.run {
-                self.watchedMovies = fetchedMovies
-                self.isLoadingWatchedMovies = false
             }
         }
     }

@@ -2,7 +2,10 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:45 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:20 (America/Los_Angeles - Pacific Time)
-//  Notes: Supabase service layer for database operations - updated to match revised schema with watch_history and user_ratings
+//  Last modified by Claude on 2025-12-09 at 16:50 (America/Los_Angeles - Pacific Time)
+//  Changes: Added fetchMovieCardsBatch() method for efficient batch fetching of multiple
+//           movie cards in a single Supabase query. This eliminates the N+1 query problem
+//           when loading watchlists.
 
 import Foundation
 import Supabase
@@ -604,6 +607,85 @@ class SupabaseService: ObservableObject {
     /// Fetches a pre-built movie card using Int tmdbId
     func fetchMovieCard(tmdbId: Int) async throws -> MovieCard {
         return try await fetchMovieCard(tmdbId: String(tmdbId))
+    }
+    
+    /// Fetches multiple movie cards in a single batch query
+    /// This is much more efficient than calling fetchMovieCard() multiple times
+    /// Returns cards keyed by tmdbId for easy lookup
+    func fetchMovieCardsBatch(tmdbIds: [String]) async throws -> [String: MovieCard] {
+        guard !tmdbIds.isEmpty else {
+            return [:]
+        }
+        
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        print("🎬 [SupabaseService] Batch fetching \(tmdbIds.count) movie cards...")
+        
+        // Step 1: Get work_ids for all tmdb_ids in one query
+        struct WorkMapping: Codable {
+            let workId: Int
+            let tmdbId: String
+            
+            enum CodingKeys: String, CodingKey {
+                case workId = "work_id"
+                case tmdbId = "tmdb_id"
+            }
+        }
+        
+        let workMappings: [WorkMapping] = try await client
+            .from("works")
+            .select("work_id, tmdb_id")
+            .in("tmdb_id", values: tmdbIds)
+            .execute()
+            .value
+        
+        guard !workMappings.isEmpty else {
+            print("⚠️ [SupabaseService] No works found for provided tmdb_ids")
+            return [:]
+        }
+        
+        // Create mapping from work_id to tmdb_id for later
+        let workIdToTmdbId = Dictionary(uniqueKeysWithValues: workMappings.map { ($0.workId, $0.tmdbId) })
+        let workIds = workMappings.map { $0.workId }
+        
+        // Step 2: Fetch all cached cards in one query
+        struct CacheEntry: Codable {
+            let workId: Int
+            let payload: MovieCard
+            
+            enum CodingKeys: String, CodingKey {
+                case workId = "work_id"
+                case payload
+            }
+        }
+        
+        let cacheEntries: [CacheEntry] = try await client
+            .from("work_cards_cache")
+            .select("work_id, payload")
+            .in("work_id", values: workIds)
+            .execute()
+            .value
+        
+        // Step 3: Build result dictionary keyed by tmdb_id
+        var result: [String: MovieCard] = [:]
+        for entry in cacheEntries {
+            if let tmdbId = workIdToTmdbId[entry.workId] {
+                result[tmdbId] = entry.payload
+            }
+        }
+        
+        print("🎬 [SupabaseService] Batch fetch complete: \(result.count)/\(tmdbIds.count) cards found")
+        
+        // Log which ones were missing (for debugging)
+        let foundIds = Set(result.keys)
+        let missingIds = Set(tmdbIds).subtracting(foundIds)
+        if !missingIds.isEmpty {
+            print("⚠️ [SupabaseService] Missing from cache: \(missingIds)")
+        }
+        
+        return result
     }
     
     /// Fetches a movie card directly from work_cards_cache table (no edge function call)
