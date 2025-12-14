@@ -1,0 +1,13 @@
+/* TanStack Table - highlight animation for new rows */
+@keyframes highlight-fade {
+  0% {
+    background-color: rgba(249, 115, 22, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-highlight-fade {
+  animation: highlight-fade 3s ease-out;
+}

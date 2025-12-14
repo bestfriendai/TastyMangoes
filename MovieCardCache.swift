@@ -105,7 +105,7 @@ class MovieCardCache: ObservableObject {
         saveTask = Task {
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second debounce
             if !Task.isCancelled {
-                await saveToDisk()
+                saveToDisk()
             }
         }
     }
@@ -147,8 +147,6 @@ class MovieCardCache: ObservableObject {
     /// Force save (call on app backgrounding)
     func forceSave() {
         saveTask?.cancel()
-        Task {
-            await saveToDisk()
-        }
+        saveToDisk()
     }
 }

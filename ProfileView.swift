@@ -1,7 +1,9 @@
 //  ProfileView.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 16:20 (America/Los_Angeles - Pacific Time)
+//  Last modified by Cursor Assistant on 2025-12-10 at 17:54 (America/Los_Angeles - Pacific Time)
 //  Notes: User profile view for managing username and streaming subscriptions - matches app design patterns
+//  Changes: Added Developer Tools section with NavigationLink to DashboardView. Refactored body into computed properties to fix type-checking performance issue.
 
 import SwiftUI
 
@@ -22,156 +24,12 @@ struct ProfileView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 24) {
-                        // Profile Header Section
-                        VStack(spacing: 16) {
-                            // Avatar
-                            Circle()
-                                .fill(Color(hex: "#E0E0E0"))
-                                .frame(width: 80, height: 80)
-                                .overlay(
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(Color(hex: "#666666"))
-                                )
-                            
-                            // Username Section
-                            VStack(spacing: 12) {
-                                if editingUsername {
-                                    HStack(spacing: 12) {
-                                        TextField("Username", text: $newUsername)
-                                            .font(.custom("Inter-Regular", size: 16))
-                                            .foregroundColor(Color(hex: "#333333"))
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 10)
-                                            .background(Color(hex: "#f3f3f3"))
-                                            .cornerRadius(8)
-                                        
-                                        Button(action: {
-                                            saveUsername()
-                                        }) {
-                                            Text("Save")
-                                                .font(.custom("Nunito-SemiBold", size: 14))
-                                                .foregroundColor(.white)
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 10)
-                                                .background(Color(hex: "#FEA500"))
-                                                .cornerRadius(8)
-                                        }
-                                        
-                                        Button(action: {
-                                            editingUsername = false
-                                            newUsername = profileManager.username
-                                        }) {
-                                            Text("Cancel")
-                                                .font(.custom("Nunito-SemiBold", size: 14))
-                                                .foregroundColor(Color(hex: "#666666"))
-                                        }
-                                    }
-                                } else {
-                                    HStack(spacing: 8) {
-                                        Text(profileManager.username.isEmpty ? "No username" : profileManager.username)
-                                            .font(.custom("Nunito-Bold", size: 20))
-                                            .foregroundColor(Color(hex: "#1a1a1a"))
-                                        
-                                        Button(action: {
-                                            newUsername = profileManager.username
-                                            editingUsername = true
-                                        }) {
-                                            Image(systemName: "pencil")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(Color(hex: "#666666"))
-                                        }
-                                    }
-                                }
-                                
-                                // Email (read-only)
-                                if let email = getCurrentUserEmail() {
-                                    Text(email)
-                                        .font(.custom("Inter-Regular", size: 14))
-                                        .foregroundColor(Color(hex: "#666666"))
-                                }
-                            }
-                        }
-                        .padding(.top, 24)
-                        .padding(.horizontal, 20)
-                        
-                        // Streaming Subscriptions Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Streaming Subscriptions")
-                                .font(.custom("Nunito-Bold", size: 18))
-                                .foregroundColor(Color(hex: "#1a1a1a"))
-                                .padding(.horizontal, 20)
-                            
-                            // Platform Checkboxes
-                            VStack(spacing: 12) {
-                                ForEach(allPlatforms, id: \.self) { platform in
-                                    PlatformSubscriptionRow(
-                                        platform: platform,
-                                        isSelected: selectedSubscriptions.contains(platform),
-                                        onToggle: {
-                                            if selectedSubscriptions.contains(platform) {
-                                                selectedSubscriptions.remove(platform)
-                                            } else {
-                                                selectedSubscriptions.insert(platform)
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                        }
-                        .padding(.top, 8)
-                        
-                        // Save Button
-                        Button(action: {
-                            saveSubscriptions()
-                        }) {
-                            Text("Save Subscriptions (\(selectedSubscriptions.count))")
-                                .font(.custom("Nunito-Bold", size: 18))
-                                .foregroundColor(Color(hex: "#1a1a1a"))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(
-                                    LinearGradient(
-                                        colors: [Color(hex: "#FFC966"), Color(hex: "#FFA500")],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .cornerRadius(12)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                        
-                        // Error Message
-                        if let errorMessage = errorMessage {
-                            Text(errorMessage)
-                                .font(.custom("Inter-Regular", size: 14))
-                                .foregroundColor(.red)
-                                .padding(.horizontal, 20)
-                        }
-                        
-                        // Sign Out Button
-                        Button(action: {
-                            Task {
-                                do {
-                                    try await authManager.signOut()
-                                } catch {
-                                    self.errorMessage = "Error signing out: \(error.localizedDescription)"
-                                }
-                            }
-                        }) {
-                            Text("Sign Out")
-                                .font(.custom("Nunito-Bold", size: 18))
-                                .foregroundColor(Color(hex: "#333333"))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color(hex: "#f3f3f3"))
-                                .cornerRadius(12)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .padding(.bottom, 100)
+                        profileHeaderSection
+                        subscriptionsSection
+                        saveSubscriptionsButton
+                        errorMessageView
+                        signOutButton
+                        developerToolsSection
                     }
                 }
             }
@@ -188,6 +46,203 @@ struct ProfileView: View {
                 selectedSubscriptions = Set(newValue)
             }
         }
+    }
+    
+    // MARK: - View Sections
+    
+    private var profileHeaderSection: some View {
+        VStack(spacing: 16) {
+            // Avatar
+            Circle()
+                .fill(Color(hex: "#E0E0E0"))
+                .frame(width: 80, height: 80)
+                .overlay(
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(Color(hex: "#666666"))
+                )
+            
+            // Username Section
+            VStack(spacing: 12) {
+                if editingUsername {
+                    usernameEditingView
+                } else {
+                    usernameDisplayView
+                }
+                
+                // Email (read-only)
+                if let email = getCurrentUserEmail() {
+                    Text(email)
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#666666"))
+                }
+            }
+        }
+        .padding(.top, 24)
+        .padding(.horizontal, 20)
+    }
+    
+    private var usernameEditingView: some View {
+        HStack(spacing: 12) {
+            TextField("Username", text: $newUsername)
+                .font(.custom("Inter-Regular", size: 16))
+                .foregroundColor(Color(hex: "#333333"))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(hex: "#f3f3f3"))
+                .cornerRadius(8)
+            
+            Button(action: {
+                saveUsername()
+            }) {
+                Text("Save")
+                    .font(.custom("Nunito-SemiBold", size: 14))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(hex: "#FEA500"))
+                    .cornerRadius(8)
+            }
+            
+            Button(action: {
+                editingUsername = false
+                newUsername = profileManager.username
+            }) {
+                Text("Cancel")
+                    .font(.custom("Nunito-SemiBold", size: 14))
+                    .foregroundColor(Color(hex: "#666666"))
+            }
+        }
+    }
+    
+    private var usernameDisplayView: some View {
+        HStack(spacing: 8) {
+            Text(profileManager.username.isEmpty ? "No username" : profileManager.username)
+                .font(.custom("Nunito-Bold", size: 20))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+            
+            Button(action: {
+                newUsername = profileManager.username
+                editingUsername = true
+            }) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(hex: "#666666"))
+            }
+        }
+    }
+    
+    private var subscriptionsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Streaming Subscriptions")
+                .font(.custom("Nunito-Bold", size: 18))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .padding(.horizontal, 20)
+            
+            // Platform Checkboxes
+            VStack(spacing: 12) {
+                ForEach(allPlatforms, id: \.self) { platform in
+                    PlatformSubscriptionRow(
+                        platform: platform,
+                        isSelected: selectedSubscriptions.contains(platform),
+                        onToggle: {
+                            if selectedSubscriptions.contains(platform) {
+                                selectedSubscriptions.remove(platform)
+                            } else {
+                                selectedSubscriptions.insert(platform)
+                            }
+                        }
+                    )
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.top, 8)
+    }
+    
+    private var saveSubscriptionsButton: some View {
+        Button(action: {
+            saveSubscriptions()
+        }) {
+            Text("Save Subscriptions (\(selectedSubscriptions.count))")
+                .font(.custom("Nunito-Bold", size: 18))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "#FFC966"), Color(hex: "#FFA500")],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+    }
+    
+    @ViewBuilder
+    private var errorMessageView: some View {
+        if let errorMessage = errorMessage {
+            Text(errorMessage)
+                .font(.custom("Inter-Regular", size: 14))
+                .foregroundColor(.red)
+                .padding(.horizontal, 20)
+        }
+    }
+    
+    private var signOutButton: some View {
+        Button(action: {
+            Task {
+                do {
+                    try await authManager.signOut()
+                } catch {
+                    self.errorMessage = "Error signing out: \(error.localizedDescription)"
+                }
+            }
+        }) {
+            Text("Sign Out")
+                .font(.custom("Nunito-Bold", size: 18))
+                .foregroundColor(Color(hex: "#333333"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color(hex: "#f3f3f3"))
+                .cornerRadius(12)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+    }
+    
+    private var developerToolsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Developer Tools")
+                .font(.custom("Nunito-Bold", size: 18))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+            
+            NavigationLink {
+                DashboardView()
+            } label: {
+                HStack {
+                    Image(systemName: "chart.bar.fill")
+                        .foregroundColor(Color(hex: "#FEA500"))
+                    Text("Voice Dashboard")
+                        .font(.custom("Inter-Regular", size: 16))
+                        .foregroundColor(Color(hex: "#333333"))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(Color(hex: "#b3b3b3"))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(Color.white)
+                .cornerRadius(8)
+                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 100)
     }
     
     // MARK: - Helper Methods

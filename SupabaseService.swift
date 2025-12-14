@@ -108,6 +108,21 @@ class SupabaseService: ObservableObject {
         return response
     }
     
+    func getAllUsers() async throws -> [UserProfile] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        let response: [UserProfile] = try await client
+            .from("profiles")
+            .select("id, username, created_at")
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+        
+        return response
+    }
+    
     func updateProfile(userId: UUID, username: String?, avatarURL: String?) async throws -> UserProfile {
         guard let client = client else {
             throw SupabaseError.notConfigured
@@ -464,6 +479,37 @@ class SupabaseService: ObservableObject {
             .value
         
         return !response.isEmpty
+    }
+    
+    // MARK: - Voice Events Operations
+    
+    struct VoiceEvent: Identifiable, Codable {
+        let id: UUID
+        let created_at: String
+        let utterance: String
+        let mango_command_type: String?
+        let final_command_type: String?
+        let handler_result: String?
+        let result_count: Int?
+        let llm_used: Bool?
+        let mango_command_movie_title: String?
+        let mango_command_recommender: String?
+    }
+    
+    func getVoiceEvents(limit: Int = 100) async throws -> [VoiceEvent] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        let response: [VoiceEvent] = try await client
+            .from("voice_utterance_events")
+            .select()
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+            .value
+        
+        return response
     }
     
     // MARK: - User Rating Operations
