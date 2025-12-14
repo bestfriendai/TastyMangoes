@@ -1054,6 +1054,18 @@ class SupabaseService: ObservableObject {
         }
     }
     
+    /// Logs a movie search event for analytics
+    func logMovieSearch(query: String, resultCount: Int, source: String = "keyboard") {
+        let properties: [String: Any] = [
+            "query": query,
+            "result_count": resultCount,
+            "source": source
+        ]
+        
+        // TODO: Implement actual analytics logging
+        print("📊 [Analytics] Movie search logged: \(properties)")
+    }
+    
     /// Triggers ingestion for a movie (force refresh)
     func ingestMovie(tmdbId: String, forceRefresh: Bool = false) async throws -> MovieCard {
         guard client != nil else {

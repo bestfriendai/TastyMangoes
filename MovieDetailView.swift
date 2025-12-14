@@ -18,6 +18,8 @@ struct MovieDetailView: View {
     @State private var hasReachedPinningPoint: Bool = false // Track if we've scrolled past pinning threshold
     @State private var scrollProxy: ScrollViewProxy?
     
+    private let source: String // Track where user came from ("search" or "list")
+    
     // Simple cast member struct for display (to avoid conflict with Codable CastMember)
     struct SimpleCastMember: Identifiable {
         let id = UUID()
@@ -37,7 +39,8 @@ struct MovieDetailView: View {
     
     
     // Initializer for Movie model - fetches from TMDB
-    init(movie: Movie) {
+    init(movie: Movie, source: String = "search") {
+        self.source = source
         // Try to convert string ID to Int for TMDB API
         // If it's a numeric string (like "550"), use it as Int ID
         // Otherwise, use string ID (MovieDetailViewModel supports both)
@@ -52,7 +55,8 @@ struct MovieDetailView: View {
     }
     
     // Initializer for MovieDetailInfo (for dummy data or direct use)
-    init(movie: MovieDetailInfo = MovieDetailData.juror2) {
+    init(movie: MovieDetailInfo = MovieDetailData.juror2, source: String = "search") {
+        self.source = source
         // For dummy data, use a default ID
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieId: 0))
     }
@@ -310,6 +314,15 @@ struct MovieDetailView: View {
         .task {
             // Load movie data from TMDB when view appears
             await viewModel.loadMovie()
+            
+            // Log analytics after movie loads successfully
+            if let movie = viewModel.movie {
+                AnalyticsService.shared.logMovieView(
+                    movieId: String(movie.id),
+                    movieTitle: movie.title,
+                    source: source
+                )
+            }
         }
     }
     

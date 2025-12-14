@@ -364,6 +364,14 @@ struct AddToListView: View {
                     )
                     print("✅ [Supabase] Successfully inserted movie \(movieId) into watchlist \(listId)")
                     
+                    // Log analytics after successful Supabase insert
+                    AnalyticsService.shared.logListAdd(
+                        listId: listId,
+                        listName: listName,
+                        movieId: movieId,
+                        movieTitle: movieTitle
+                    )
+                    
                     // Only update local cache if Supabase save succeeded
                     let localSuccess = watchlistManager.addMovieToList(
                         movieId: movieId,

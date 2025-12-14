@@ -103,7 +103,7 @@ struct WatchlistView: View {
         }
         .fullScreenCover(item: $selectedMovieId) { movieId in
             NavigationStack {
-                MoviePageView(movieId: movieId.id, source: "list")
+                MoviePageView(movieId: movieId.id)
             }
         }
         .alert("Delete from All Lists?", isPresented: $showDeleteConfirmation) {

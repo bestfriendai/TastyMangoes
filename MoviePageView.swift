@@ -29,9 +29,10 @@ struct MoviePageView: View {
     // MARK: - Properties
     
     let movieId: String
-    let source: String // Analytics source: "search", "list", "recommendation", etc.
     @StateObject private var viewModel: MovieDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    
+    private let source: String // Track where user came from ("search" or "list")
     
     @State private var selectedSection: MovieSection = .overview
     @State private var showMenuBottomSheet = false
@@ -64,14 +65,14 @@ struct MoviePageView: View {
     
     // MARK: - Initialization
     
-    init(movieId: String, source: String = "unknown") {
+    init(movieId: String, source: String = "list") {
         self.movieId = movieId
         self.source = source
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieStringId: movieId))
     }
     
     // Alternative initializer for Int IDs
-    init(movieId: Int, source: String = "unknown") {
+    init(movieId: Int, source: String = "list") {
         self.movieId = String(movieId)
         self.source = source
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieId: movieId))
@@ -91,11 +92,12 @@ struct MoviePageView: View {
         }
         .task {
             await viewModel.loadMovie()
-            // Log movie view after movie loads
+            
+            // Log analytics after movie loads successfully
             if let movie = viewModel.movie {
-                await AnalyticsService.shared.logMovieView(
-                    movieId: movieId,
-                    title: movie.title,
+                AnalyticsService.shared.logMovieView(
+                    movieId: String(movie.id),
+                    movieTitle: movie.title,
                     source: source
                 )
             }

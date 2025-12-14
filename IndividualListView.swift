@@ -120,7 +120,7 @@ struct IndividualListView: View {
         // Use fullScreenCover(item:) pattern to fix first-tap bug
         .fullScreenCover(item: $selectedMovieId) { movieId in
             NavigationStack {
-                MoviePageView(movieId: movieId.id, source: "list")
+                MoviePageView(movieId: movieId.id)
             }
         }
         .onAppear {
