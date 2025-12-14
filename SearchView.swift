@@ -851,7 +851,7 @@ struct SearchMovieCard: View {
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $showMoviePage) {
             NavigationStack {
-                MoviePageView(movieId: movie.id)
+                MoviePageView(movieId: movie.id, source: "search")
             }
         }
     }

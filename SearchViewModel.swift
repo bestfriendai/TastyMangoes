@@ -256,6 +256,9 @@ class SearchViewModel: ObservableObject {
             
             print("✅ Found \(searchResults.count) movies from Supabase for '\(query)'")
             
+            // Log search analytics
+            await AnalyticsService.shared.logMovieSearch(query: query, resultCount: searchResults.count)
+            
             // Update voice event with search results if this was a Mango-initiated search
             if isMangoInitiatedSearch, let eventId = SearchFilterState.shared.pendingVoiceEventId {
                 Task {

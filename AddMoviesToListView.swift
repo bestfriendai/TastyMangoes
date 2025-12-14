@@ -272,6 +272,16 @@ struct AddMoviesToListView: View {
         let wasAdded = watchlistManager.addMovieToList(movieId: movieId, listId: listId)
         
         if wasAdded {
+            // Log analytics
+            Task {
+                await AnalyticsService.shared.logListAdd(
+                    listId: listId,
+                    listName: listName,
+                    movieId: movieId,
+                    movieTitle: movieTitle
+                )
+            }
+            
             toastMessage = "\(movieTitle) added to \(listName)"
             withAnimation {
                 showToast = true

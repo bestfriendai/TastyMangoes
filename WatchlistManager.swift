@@ -154,10 +154,15 @@ class WatchlistManager: ObservableObject {
     }
     
     /// Mark a movie as watched
-    func markAsWatched(movieId: String) {
+    func markAsWatched(movieId: String, movieTitle: String? = nil) {
         watchedMovies[movieId] = true
         // Notify observers that watched status changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
+        // Log analytics
+        Task {
+            await AnalyticsService.shared.logMarkWatched(movieId: movieId, movieTitle: movieTitle ?? "unknown")
+        }
         
         // Sync to Supabase
         Task {
@@ -166,10 +171,15 @@ class WatchlistManager: ObservableObject {
     }
     
     /// Mark a movie as not watched
-    func markAsNotWatched(movieId: String) {
+    func markAsNotWatched(movieId: String, movieTitle: String? = nil) {
         watchedMovies[movieId] = false
         // Notify observers that watched status changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
+        
+        // Log analytics
+        Task {
+            await AnalyticsService.shared.logUnmarkWatched(movieId: movieId, movieTitle: movieTitle ?? "unknown")
+        }
         
         // Sync to Supabase
         Task {
@@ -178,15 +188,25 @@ class WatchlistManager: ObservableObject {
     }
     
     /// Toggle watched status
-    func toggleWatched(movieId: String) {
+    func toggleWatched(movieId: String, movieTitle: String? = nil) {
         let currentStatus = isWatched(movieId: movieId)
-        watchedMovies[movieId] = !currentStatus
+        let newStatus = !currentStatus
+        watchedMovies[movieId] = newStatus
         // Notify observers that watched status changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
         
+        // Log analytics
+        Task {
+            if newStatus {
+                await AnalyticsService.shared.logMarkWatched(movieId: movieId, movieTitle: movieTitle ?? "unknown")
+            } else {
+                await AnalyticsService.shared.logUnmarkWatched(movieId: movieId, movieTitle: movieTitle ?? "unknown")
+            }
+        }
+        
         // Sync to Supabase
         Task {
-            await syncWatchedStatusToSupabase(movieId: movieId, watched: !currentStatus)
+            await syncWatchedStatusToSupabase(movieId: movieId, watched: newStatus)
         }
     }
     

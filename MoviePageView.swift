@@ -29,6 +29,7 @@ struct MoviePageView: View {
     // MARK: - Properties
     
     let movieId: String
+    let source: String // Analytics source: "search", "list", "recommendation", etc.
     @StateObject private var viewModel: MovieDetailViewModel
     @Environment(\.dismiss) private var dismiss
     
@@ -63,14 +64,16 @@ struct MoviePageView: View {
     
     // MARK: - Initialization
     
-    init(movieId: String) {
+    init(movieId: String, source: String = "unknown") {
         self.movieId = movieId
+        self.source = source
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieStringId: movieId))
     }
     
     // Alternative initializer for Int IDs
-    init(movieId: Int) {
+    init(movieId: Int, source: String = "unknown") {
         self.movieId = String(movieId)
+        self.source = source
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieId: movieId))
     }
     
@@ -88,6 +91,14 @@ struct MoviePageView: View {
         }
         .task {
             await viewModel.loadMovie()
+            // Log movie view after movie loads
+            if let movie = viewModel.movie {
+                await AnalyticsService.shared.logMovieView(
+                    movieId: movieId,
+                    title: movie.title,
+                    source: source
+                )
+            }
         }
     }
     
@@ -1512,7 +1523,8 @@ struct MoviePageView: View {
                     let wasWatched = isWatched
                     // Toggle watched status (CHANGE_TO connection - changes button state)
                     // This will automatically sync to Supabase and trigger a full sync
-                    WatchlistManager.shared.toggleWatched(movieId: movieId)
+                    let movieTitle = viewModel.movie?.title
+                    WatchlistManager.shared.toggleWatched(movieId: movieId, movieTitle: movieTitle)
                     // Show rate bottom sheet only when marking as watched (per Figma prototype connection)
                     if !wasWatched {
                         showRateBottomSheet = true
