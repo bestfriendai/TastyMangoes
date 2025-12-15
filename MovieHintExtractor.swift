@@ -1,8 +1,367 @@
-//
 //  MovieHintExtractor.swift
 //  TastyMangoes
 //
-//  Created by Tim Robinson on 12/15/25.
-//
+//  Created by Claude on 2025-12-15 at 08:50 (America/Los_Angeles - Pacific Time) / 16:50 UTC
+//  Notes: Phase 2 - Extracts movie hints (year, actors, director, keywords, plot clues)
+//         from voice utterances for analytics and potential semantic search.
 
 import Foundation
+
+/// Extracted hints from a voice utterance
+struct ExtractedHints: Codable {
+    var titleLikely: String?
+    var year: Int?
+    var decade: Int?
+    var actors: [String]
+    var director: String?
+    var keywords: [String]
+    var plotClues: [String]
+    var isRemakeHint: Bool
+    
+    init(
+        titleLikely: String? = nil,
+        year: Int? = nil,
+        decade: Int? = nil,
+        actors: [String] = [],
+        director: String? = nil,
+        keywords: [String] = [],
+        plotClues: [String] = [],
+        isRemakeHint: Bool = false
+    ) {
+        self.titleLikely = titleLikely
+        self.year = year
+        self.decade = decade
+        self.actors = actors
+        self.director = director
+        self.keywords = keywords
+        self.plotClues = plotClues
+        self.isRemakeHint = isRemakeHint
+    }
+    
+    /// Convert to JSON string for database storage
+    func toJSON() -> String? {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        guard let data = try? encoder.encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+    
+    /// Check if any hints were extracted
+    var hasAnyHints: Bool {
+        return titleLikely != nil ||
+               year != nil ||
+               decade != nil ||
+               !actors.isEmpty ||
+               director != nil ||
+               !keywords.isEmpty ||
+               !plotClues.isEmpty ||
+               isRemakeHint
+    }
+}
+
+/// Extracts movie-related hints from voice utterances
+enum MovieHintExtractor {
+    
+    // MARK: - Actor Patterns
+    
+    /// Patterns that indicate an actor mention
+    private static let actorPatterns: [String] = [
+        "with (\\w+(?:\\s+\\w+)?)",
+        "starring (\\w+(?:\\s+\\w+)?)",
+        "stars (\\w+(?:\\s+\\w+)?)",
+        "has (\\w+(?:\\s+\\w+)?) in it",
+        "(\\w+(?:\\s+\\w+)?) is in it",
+        "(\\w+(?:\\s+\\w+)?) plays",
+        "(\\w+(?:\\s+\\w+)?) was in"
+    ]
+    
+    // MARK: - Director Patterns
+    
+    /// Patterns that indicate a director mention
+    private static let directorPatterns: [String] = [
+        "directed by (\\w+(?:\\s+\\w+)?)",
+        "by director (\\w+(?:\\s+\\w+)?)",
+        "(\\w+(?:\\s+\\w+)?) directed",
+        "a (\\w+(?:\\s+\\w+)?) film",
+        "a (\\w+(?:\\s+\\w+)?) movie"
+    ]
+    
+    // MARK: - Known Directors (for better matching)
+    
+    private static let knownDirectors: Set<String> = [
+        "spielberg", "scorsese", "tarantino", "kubrick", "hitchcock",
+        "nolan", "fincher", "coppola", "anderson", "coen", "coens",
+        "villeneuve", "cameron", "scott", "ridley", "zemeckis",
+        "lucas", "jackson", "bay", "snyder", "wan", "peele",
+        "gerwig", "coogler", "waititi", "gunn", "mangold"
+    ]
+    
+    // MARK: - Known Actors (for better matching)
+    
+    private static let knownActors: Set<String> = [
+        "dicaprio", "leonardo", "pitt", "brad", "cruise", "tom",
+        "hanks", "denzel", "washington", "freeman", "morgan",
+        "streep", "meryl", "lawrence", "jennifer", "portman", "natalie",
+        "damon", "matt", "affleck", "ben", "clooney", "george",
+        "johansson", "scarlett", "roberts", "julia", "bullock", "sandra",
+        "keanu", "reeves", "smith", "will", "johnson", "dwayne", "rock",
+        "downey", "robert", "hemsworth", "chris", "pratt", "evans",
+        "driver", "adam", "chalamet", "timothee", "zendaya", "pugh", "florence"
+    ]
+    
+    // MARK: - Genre Keywords
+    
+    private static let genreKeywords: [String: [String]] = [
+        "horror": ["scary", "horror", "terrifying", "haunted", "possessed", "demon", "ghost", "zombie", "vampire", "slasher"],
+        "comedy": ["funny", "comedy", "hilarious", "laughing", "comedic", "humor"],
+        "action": ["action", "explosions", "chase", "fight", "battles", "stunts"],
+        "drama": ["drama", "emotional", "moving", "touching", "serious"],
+        "romance": ["romance", "romantic", "love story", "love", "relationship"],
+        "sci-fi": ["sci-fi", "science fiction", "space", "alien", "futuristic", "robot", "spaceship"],
+        "thriller": ["thriller", "suspense", "tense", "edge of seat", "twist"],
+        "mystery": ["mystery", "detective", "whodunit", "clues", "investigation"]
+    ]
+    
+    // MARK: - Remake Indicators
+    
+    private static let remakeIndicators: [String] = [
+        "remake", "reboot", "new version", "modern version",
+        "not the original", "the new one", "recent one",
+        "the newer", "updated version"
+    ]
+    
+    // MARK: - Plot Action Words
+    
+    private static let plotActionWords: Set<String> = [
+        "escapes", "discovers", "finds", "travels", "fights", "falls",
+        "meets", "saves", "kills", "dies", "transforms", "becomes",
+        "hunts", "chases", "investigates", "solves", "steals", "robs",
+        "kidnaps", "rescues", "betrays", "reveals", "hides", "runs"
+    ]
+    
+    // MARK: - Extraction
+    
+    /// Extract all hints from an utterance
+    static func extract(from utterance: String) -> ExtractedHints {
+        let lower = utterance.lowercased()
+        var hints = ExtractedHints()
+        
+        // Extract year
+        hints.year = extractYear(from: lower)
+        
+        // Extract decade
+        hints.decade = extractDecade(from: lower)
+        
+        // Extract actors
+        hints.actors = extractActors(from: lower)
+        
+        // Extract director
+        hints.director = extractDirector(from: lower)
+        
+        // Extract genre keywords
+        hints.keywords = extractKeywords(from: lower)
+        
+        // Extract plot clues
+        hints.plotClues = extractPlotClues(from: lower)
+        
+        // Check for remake hints
+        hints.isRemakeHint = checkForRemakeHint(in: lower)
+        
+        // Try to extract likely title (short phrases at start)
+        hints.titleLikely = extractLikelyTitle(from: utterance)
+        
+        return hints
+    }
+    
+    // MARK: - Individual Extractors
+    
+    private static func extractYear(from text: String) -> Int? {
+        // Look for 4-digit year between 1900-2030
+        let yearPattern = try? NSRegularExpression(pattern: "\\b(19[0-9]{2}|20[0-2][0-9]|2030)\\b")
+        if let match = yearPattern?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+            if let range = Range(match.range, in: text) {
+                return Int(text[range])
+            }
+        }
+        return nil
+    }
+    
+    private static func extractDecade(from text: String) -> Int? {
+        // Look for decade references like "80s", "90s", "eighties"
+        let decadePatterns: [(String, Int)] = [
+            ("\\b(19)?80s?\\b", 1980), ("\\beighties\\b", 1980),
+            ("\\b(19)?90s?\\b", 1990), ("\\bnineties\\b", 1990),
+            ("\\b(20)?00s?\\b", 2000), ("\\b2000s\\b", 2000),
+            ("\\b(20)?10s?\\b", 2010), ("\\btwenty tens\\b", 2010),
+            ("\\b(20)?20s?\\b", 2020),
+            ("\\b(19)?70s?\\b", 1970), ("\\bseventies\\b", 1970),
+            ("\\b(19)?60s?\\b", 1960), ("\\bsixties\\b", 1960),
+            ("\\b(19)?50s?\\b", 1950), ("\\bfifties\\b", 1950)
+        ]
+        
+        for (pattern, decade) in decadePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                if regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil {
+                    return decade
+                }
+            }
+        }
+        return nil
+    }
+    
+    private static func extractActors(from text: String) -> [String] {
+        var actors: [String] = []
+        
+        // Check for known actors
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
+        
+        for word in words {
+            if knownActors.contains(word) {
+                // Try to get full name by looking at adjacent words
+                if let index = words.firstIndex(of: word) {
+                    var fullName = word.capitalized
+                    // Check next word for last name
+                    if index + 1 < words.count && knownActors.contains(words[index + 1]) {
+                        fullName += " " + words[index + 1].capitalized
+                    }
+                    // Check previous word for first name
+                    if index > 0 && knownActors.contains(words[index - 1]) {
+                        fullName = words[index - 1].capitalized + " " + fullName
+                    }
+                    if !actors.contains(fullName) {
+                        actors.append(fullName)
+                    }
+                }
+            }
+        }
+        
+        // Also try pattern matching for "with [Name]" etc.
+        for pattern in actorPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+                for match in matches {
+                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
+                        let name = String(text[range]).trimmingCharacters(in: .whitespaces).capitalized
+                        if !actors.contains(name) && name.count > 2 {
+                            actors.append(name)
+                        }
+                    }
+                }
+            }
+        }
+        
+        return actors
+    }
+    
+    private static func extractDirector(from text: String) -> String? {
+        // Check for known directors
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
+        
+        for word in words {
+            if knownDirectors.contains(word) {
+                return word.capitalized
+            }
+        }
+        
+        // Try pattern matching
+        for pattern in directorPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                if let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
+                        return String(text[range]).trimmingCharacters(in: .whitespaces).capitalized
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    private static func extractKeywords(from text: String) -> [String] {
+        var keywords: [String] = []
+        
+        for (genre, genreWords) in genreKeywords {
+            for word in genreWords {
+                if text.contains(word) {
+                    if !keywords.contains(genre) {
+                        keywords.append(genre)
+                    }
+                    break
+                }
+            }
+        }
+        
+        return keywords
+    }
+    
+    private static func extractPlotClues(from text: String) -> [String] {
+        var clues: [String] = []
+        
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
+        
+        for word in words {
+            if plotActionWords.contains(word) {
+                // Get some context around the action word
+                if let index = words.firstIndex(of: word) {
+                    let start = max(0, index - 2)
+                    let end = min(words.count, index + 3)
+                    let context = words[start..<end].joined(separator: " ")
+                    if !clues.contains(context) {
+                        clues.append(context)
+                    }
+                }
+            }
+        }
+        
+        return clues
+    }
+    
+    private static func checkForRemakeHint(in text: String) -> Bool {
+        for indicator in remakeIndicators {
+            if text.contains(indicator) {
+                return true
+            }
+        }
+        return false
+    }
+    
+    private static func extractLikelyTitle(from utterance: String) -> String? {
+        // If the utterance is short (1-4 words), it's probably just a title
+        let words = utterance.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        
+        if words.count <= 4 {
+            return utterance.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        // Check for "the movie [Title]" or "find [Title]" patterns
+        let lower = utterance.lowercased()
+        let titlePatterns = [
+            "the movie (.+)",
+            "find (.+)",
+            "search for (.+)",
+            "search (.+)",
+            "look up (.+)"
+        ]
+        
+        for pattern in titlePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                if let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)) {
+                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: lower) {
+                        let title = String(utterance[Range(match.range(at: 1), in: utterance)!])
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        // Only return if it looks like a title (not too long)
+                        if title.components(separatedBy: .whitespaces).count <= 6 {
+                            return title
+                        }
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+}

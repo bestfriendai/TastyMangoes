@@ -1,10 +1,11 @@
 //  VoiceAnalyticsLogger.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude: 2025-12-06 at 22:35 (America/Los_Angeles - Pacific Time)
+//  Last modified by Claude: 2025-12-15 at 09:00 (America/Los_Angeles - Pacific Time) / 17:00 UTC
 //  Notes: Added failure reason tracking (handler_result, result_count, error_message)
 //         Added markWatched case to mangoCommandTypeString
 //         Added updateVoiceEventResult method and modified log to return UUID
+//  Phase 2: Added search_intent, confidence_score, extracted_hints parameters
 
 import Foundation
 import Supabase
@@ -54,6 +55,11 @@ class VoiceAnalyticsLogger {
         finalCommand: MangoCommand,
         llmIntent: LLMIntent?,
         llmError: Error?,
+        // Phase 2: Intent tracking parameters
+        searchIntent: VoiceSearchIntent? = nil,
+        confidenceScore: Double? = nil,
+        extractedHints: ExtractedHints? = nil,
+        // Original result parameters
         handlerResult: VoiceHandlerResult? = nil,
         resultCount: Int? = nil,
         errorMessage: String? = nil
@@ -95,6 +101,10 @@ class VoiceAnalyticsLogger {
                     let handler_result: String?
                     let result_count: Int?
                     let error_message: String?
+                    // Phase 2 fields
+                    let search_intent: String?
+                    let confidence_score: Double?
+                    let extracted_hints: String?
                 }
                 
                 let eventData = VoiceEventInsert(
@@ -116,7 +126,11 @@ class VoiceAnalyticsLogger {
                     llm_error: llmError?.localizedDescription,
                     handler_result: handlerResult?.rawValue,
                     result_count: resultCount,
-                    error_message: errorMessage
+                    error_message: errorMessage,
+                    // Phase 2 fields
+                    search_intent: searchIntent?.rawValue,
+                    confidence_score: confidenceScore,
+                    extracted_hints: extractedHints?.toJSON()
                 )
                 
                 try await client
@@ -125,6 +139,9 @@ class VoiceAnalyticsLogger {
                     .execute()
                 
                 print("📊 [VoiceAnalytics] Logged voice event \(eventId) to Supabase")
+                if let intent = searchIntent {
+                    print("📊 [VoiceAnalytics] Intent: \(intent.rawValue), Confidence: \(String(format: "%.0f%%", (confidenceScore ?? 0) * 100))")
+                }
             } catch {
                 print("⚠️ [VoiceAnalytics] Failed to log voice event: \(error.localizedDescription)")
             }
@@ -180,6 +197,46 @@ class VoiceAnalyticsLogger {
         }
     }
     
+    /// Updates a voice event with selected movie and candidates shown
+    /// - Parameters:
+    ///   - eventId: The UUID of the voice event to update
+    ///   - selectedMovieId: The TMDB ID of the movie the user selected
+    ///   - candidatesShown: Number of search results shown to user
+    static func updateVoiceEventSelection(
+        eventId: UUID,
+        selectedMovieId: Int,
+        candidatesShown: Int
+    ) async {
+        guard let client = shared.supabaseClient else {
+            print("⚠️ [VoiceAnalytics] Supabase client not available, skipping update")
+            return
+        }
+        
+        Task {
+            do {
+                struct VoiceEventSelectionUpdate: Codable {
+                    let selected_movie_id: Int
+                    let candidates_shown: Int
+                }
+                
+                let updateData = VoiceEventSelectionUpdate(
+                    selected_movie_id: selectedMovieId,
+                    candidates_shown: candidatesShown
+                )
+                
+                try await client
+                    .from("voice_utterance_events")
+                    .update(updateData)
+                    .eq("id", value: eventId.uuidString)
+                    .execute()
+                
+                print("✅ [VoiceAnalytics] Updated event \(eventId) with selection: movie \(selectedMovieId) from \(candidatesShown) candidates")
+            } catch {
+                print("❌ [VoiceAnalytics] Failed to update event selection: \(error)")
+            }
+        }
+    }
+    
     private func mangoCommandTypeString(_ command: MangoCommand) -> String {
         switch command {
         case .recommenderSearch:
@@ -214,10 +271,15 @@ struct VoiceEventLog: Codable {
     let llmRecommender: String?
     let llmError: String?
     
-    // New fields for result tracking
+    // Fields for result tracking
     let handlerResult: String?
     let resultCount: Int?
     let errorMessage: String?
+    
+    // Phase 2 fields
+    let searchIntent: String?
+    let confidenceScore: Double?
+    let extractedHints: String?
     
     enum CodingKeys: String, CodingKey {
         case utterance
@@ -237,5 +299,9 @@ struct VoiceEventLog: Codable {
         case handlerResult = "handler_result"
         case resultCount = "result_count"
         case errorMessage = "error_message"
+        // Phase 2 fields
+        case searchIntent = "search_intent"
+        case confidenceScore = "confidence_score"
+        case extractedHints = "extracted_hints"
     }
 }

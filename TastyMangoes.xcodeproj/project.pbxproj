@@ -17,6 +17,8 @@
 		C50BE71A2EE63C9900883045 /* MangoSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50BE7192EE63C9900883045 /* MangoSpeaker.swift */; };
 		C50BE71C2EE63CAE00883045 /* MangoListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50BE71B2EE63CAE00883045 /* MangoListeningView.swift */; };
 		C50BE71E2EE65A0900883045 /* RecommenderNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50BE71D2EE65A0900883045 /* RecommenderNormalizer.swift */; };
+		C5176F532EF07FB3009F8F0C /* MovieHintExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5176F522EF07FB3009F8F0C /* MovieHintExtractor.swift */; };
+		C5176F552EF07FF0009F8F0C /* SearchIntentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5176F542EF07FF0009F8F0C /* SearchIntentClassifier.swift */; };
 		C517CD202EC9806C00EAE1FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C517CD042EC9806C00EAE1FE /* Assets.xcassets */; };
 		C517CD212EC9806C00EAE1FE /* movies.json in Resources */ = {isa = PBXBuildFile; fileRef = C517CD122EC9806C00EAE1FE /* movies.json */; };
 		C517CD222EC9806C00EAE1FE /* CategoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C517CD062EC9806C00EAE1FE /* CategoryItem.swift */; };
@@ -126,6 +128,8 @@
 		C50BE7192EE63C9900883045 /* MangoSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoSpeaker.swift; sourceTree = "<group>"; };
 		C50BE71B2EE63CAE00883045 /* MangoListeningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoListeningView.swift; sourceTree = "<group>"; };
 		C50BE71D2EE65A0900883045 /* RecommenderNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommenderNormalizer.swift; sourceTree = "<group>"; };
+		C5176F522EF07FB3009F8F0C /* MovieHintExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovieHintExtractor.swift; sourceTree = "<group>"; };
+		C5176F542EF07FF0009F8F0C /* SearchIntentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchIntentClassifier.swift; sourceTree = "<group>"; };
 		C517CD042EC9806C00EAE1FE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C517CD052EC9806C00EAE1FE /* CastTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastTabView.swift; sourceTree = "<group>"; };
 		C517CD062EC9806C00EAE1FE /* CategoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryItem.swift; sourceTree = "<group>"; };
@@ -252,6 +256,8 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C5176F542EF07FF0009F8F0C /* SearchIntentClassifier.swift */,
+				C5176F522EF07FB3009F8F0C /* MovieHintExtractor.swift */,
 				C527BB602EEF2C2E00A2C8D8 /* AnalyticsService.swift */,
 				C5CCDB792EEA5D1B0008C76B /* DashboardView.swift */,
 				C537D5CA2EE8FEF5001C8460 /* MovieCardCache.swift */,
@@ -534,6 +540,7 @@
 				C59E8B842EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift in Sources */,
 				C5B95D1D2ECB0B0800B47098 /* WatchlistView.swift in Sources */,
 				C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */,
+				C5176F532EF07FB3009F8F0C /* MovieHintExtractor.swift in Sources */,
 				C517CD292EC9806C00EAE1FE /* MoviePageView.swift in Sources */,
 				C517CD2A2EC9806C00EAE1FE /* MovieDetailViewModel.swift in Sources */,
 				C517CD2B2EC9806C00EAE1FE /* MoviePosterImage.swift in Sources */,
@@ -554,6 +561,7 @@
 				C5B95D3B2ECB333000B47098 /* WatchlistFiltersBottomSheet.swift in Sources */,
 				C5B95D232ECB15DE00B47098 /* WatchlistManager.swift in Sources */,
 				C5B95D472ECB416200B47098 /* EditListBottomSheet.swift in Sources */,
+				C5176F552EF07FF0009F8F0C /* SearchIntentClassifier.swift in Sources */,
 				C517CD342EC9806C00EAE1FE /* CrewTabView.swift in Sources */,
 				C517CD352EC9806C00EAE1FE /* SearchFiltersView.swift in Sources */,
 				C5E27A3B2EC9979400065347 /* MoviePageHeader.swift in Sources */,
