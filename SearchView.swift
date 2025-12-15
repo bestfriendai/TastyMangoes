@@ -4,12 +4,17 @@
 //  Originally created by Cursor Assistant on 2025-11-14
 //  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
 //  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
+//  Modified by Claude on 2025-12-15 at 11:15 AM (Pacific Time) - Phase 2: Added voice search selection tracking
 //
 //  Changes made by Claude (2025-12-02):
 //  - Reordered content logic to keep previous results visible while searching
 //  - Only show loading view when there are no results to display
 //  - Only show empty state after search truly completes with no results
 //  - This prevents the distracting flash of "Oops! No movies found" while typing
+//
+//  Changes made by Claude (2025-12-15):
+//  - SearchMovieCard now tracks voice search selections (selected_movie_id, candidates_shown)
+//  - Logs to Supabase when user taps a movie from voice-initiated search results
 
 import SwiftUI
 
@@ -720,6 +725,8 @@ struct SearchView: View {
 }
 
 // MARK: - Search Movie Card (Product Card)
+// Last modified by Claude on 2025-12-15 at 11:10 AM (Pacific Time)
+// Phase 2: Added voice search selection tracking (selected_movie_id, candidates_shown)
 
 struct SearchMovieCard: View {
     let movie: Movie
@@ -727,131 +734,165 @@ struct SearchMovieCard: View {
     
     var body: some View {
         Button(action: {
+            // Phase 2: Track movie selection if this was a voice search
+            trackVoiceSearchSelection()
+            
             // Wire up NAVIGATE connection: Product Card → Movie Page
             showMoviePage = true
         }) {
             HStack(alignment: .top, spacing: 12) {
-            // Poster
-            MoviePosterImage(
-                posterURL: movie.posterImageURL,
-                width: 80,
-                height: 120,
-                cornerRadius: 8
-            )
-            
-            // Content
-            VStack(alignment: .leading, spacing: 8) {
-                // Title
-                Text(movie.title)
-                    .font(.custom("Nunito-Bold", size: 16))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
-                    .lineLimit(2)
+                // Poster
+                MoviePosterImage(
+                    posterURL: movie.posterImageURL,
+                    width: 80,
+                    height: 120,
+                    cornerRadius: 8
+                )
                 
-                // Year, Genres, Runtime
-                HStack(spacing: 4) {
-                    if movie.year > 0 {
-                        Text(String(movie.year))
-                        Text("·")
-                    }
+                // Content
+                VStack(alignment: .leading, spacing: 8) {
+                    // Title
+                    Text(movie.title)
+                        .font(.custom("Nunito-Bold", size: 16))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                        .lineLimit(2)
                     
-                    if !movie.genres.isEmpty {
-                        Text(movie.genres.prefix(2).joined(separator: "/"))
-                        if let runtime = movie.runtime, !runtime.isEmpty {
+                    // Year, Genres, Runtime
+                    HStack(spacing: 4) {
+                        if movie.year > 0 {
+                            Text(String(movie.year))
                             Text("·")
+                        }
+                        
+                        if !movie.genres.isEmpty {
+                            Text(movie.genres.prefix(2).joined(separator: "/"))
+                            if let runtime = movie.runtime, !runtime.isEmpty {
+                                Text("·")
+                                Text(runtime)
+                            }
+                        } else if let runtime = movie.runtime, !runtime.isEmpty {
                             Text(runtime)
                         }
-                    } else if let runtime = movie.runtime, !runtime.isEmpty {
-                        Text(runtime)
                     }
-                }
-                .font(.custom("Inter-Regular", size: 12))
-                .foregroundColor(Color(hex: "#666666"))
-                
-                // Scores
-                HStack(spacing: 12) {
-                    // Tasty Score
-                    if let tastyScore = movie.tastyScore {
-                        HStack(spacing: 4) {
-                            Image("TastyScoreIcon")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 12, height: 12)
-                            
-                            Text("\(Int(tastyScore * 100))%")
-                                .font(.custom("Inter-SemiBold", size: 14))
-                                .foregroundColor(Color(hex: "#1a1a1a"))
-                        }
-                    }
+                    .font(.custom("Inter-Regular", size: 12))
+                    .foregroundColor(Color(hex: "#666666"))
                     
-                    // AI Score
-                    if let aiScore = movie.aiScore {
-                        HStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(Color(hex: "#FFD60A"))
-                            
-                            Text(String(format: "%.1f", aiScore))
-                                .font(.custom("Inter-SemiBold", size: 14))
-                                .foregroundColor(Color(hex: "#1a1a1a"))
+                    // Scores
+                    HStack(spacing: 12) {
+                        // Tasty Score
+                        if let tastyScore = movie.tastyScore {
+                            HStack(spacing: 4) {
+                                Image("TastyScoreIcon")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 12, height: 12)
+                                
+                                Text("\(Int(tastyScore * 100))%")
+                                    .font(.custom("Inter-SemiBold", size: 14))
+                                    .foregroundColor(Color(hex: "#1a1a1a"))
+                            }
                         }
-                    }
-                }
-                
-                // Watch on and Liked by (placeholder avatars)
-                HStack(spacing: 16) {
-                    // Watch on
-                    HStack(spacing: 4) {
-                        Text("Watch on:")
-                            .font(.custom("Inter-Regular", size: 12))
-                            .foregroundColor(Color(hex: "#666666"))
                         
-                        HStack(spacing: -4) {
-                            ForEach(0..<3, id: \.self) { _ in
-                                Circle()
-                                    .fill(Color(hex: "#E0E0E0"))
-                                    .frame(width: 20, height: 20)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 1)
-                                    )
+                        // AI Score
+                        if let aiScore = movie.aiScore {
+                            HStack(spacing: 4) {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Color(hex: "#FFD60A"))
+                                
+                                Text(String(format: "%.1f", aiScore))
+                                    .font(.custom("Inter-SemiBold", size: 14))
+                                    .foregroundColor(Color(hex: "#1a1a1a"))
                             }
                         }
                     }
                     
-                    // Liked by
-                    HStack(spacing: 4) {
-                        Text("Liked by:")
-                            .font(.custom("Inter-Regular", size: 12))
-                            .foregroundColor(Color(hex: "#666666"))
+                    // Watch on and Liked by (placeholder avatars)
+                    HStack(spacing: 16) {
+                        // Watch on
+                        HStack(spacing: 4) {
+                            Text("Watch on:")
+                                .font(.custom("Inter-Regular", size: 12))
+                                .foregroundColor(Color(hex: "#666666"))
+                            
+                            HStack(spacing: -4) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    Circle()
+                                        .fill(Color(hex: "#E0E0E0"))
+                                        .frame(width: 20, height: 20)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 1)
+                                        )
+                                }
+                            }
+                        }
                         
-                        HStack(spacing: -4) {
-                            ForEach(0..<3, id: \.self) { _ in
-                                Circle()
-                                    .fill(Color(hex: "#E0E0E0"))
-                                    .frame(width: 20, height: 20)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 1)
-                                    )
+                        // Liked by
+                        HStack(spacing: 4) {
+                            Text("Liked by:")
+                                .font(.custom("Inter-Regular", size: 12))
+                                .foregroundColor(Color(hex: "#666666"))
+                            
+                            HStack(spacing: -4) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    Circle()
+                                        .fill(Color(hex: "#E0E0E0"))
+                                        .frame(width: 20, height: 20)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 1)
+                                        )
+                                }
                             }
                         }
                     }
+                    
+                    Spacer()
                 }
                 
                 Spacer()
             }
-            
-            Spacer()
-        }
-        .padding(12)
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            .padding(12)
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $showMoviePage) {
             NavigationStack {
                 MoviePageView(movieId: movie.id, source: "search")
+            }
+        }
+    }
+    
+    // MARK: - Voice Search Selection Tracking
+    
+    /// Track movie selection if this search was initiated by voice
+    private func trackVoiceSearchSelection() {
+        // Check if there's a pending voice event (meaning this was a voice search)
+        guard let eventId = SearchFilterState.shared.pendingVoiceEventId else {
+            return // Not a voice search, nothing to track
+        }
+        
+        // Get the number of candidates shown
+        let candidatesShown = SearchViewModel.shared.searchResults.count
+        
+        print("🎯 [VoiceSelection] User selected movie \(movie.id) (\(movie.title)) from \(candidatesShown) candidates")
+        
+        // Log the selection to Supabase
+        Task {
+            await VoiceAnalyticsLogger.updateVoiceEventSelection(
+                eventId: eventId,
+                selectedMovieId: Int(movie.id) ?? 0,
+                candidatesShown: candidatesShown
+            )
+            
+            // Clear the voice event tracking after selection is logged
+            await MainActor.run {
+                SearchFilterState.shared.pendingVoiceEventId = nil
+                SearchFilterState.shared.pendingVoiceUtterance = nil
+                SearchFilterState.shared.pendingVoiceCommand = nil
             }
         }
     }
