@@ -2,10 +2,12 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:45 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:20 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude on 2025-12-09 at 16:50 (America/Los_Angeles - Pacific Time)
+//  Last modified by Claude on 2025-12-15 at 11:25 (America/Los_Angeles - Pacific Time) / 19:25 UTC
 //  Changes: Added fetchMovieCardsBatch() method for efficient batch fetching of multiple
 //           movie cards in a single Supabase query. This eliminates the N+1 query problem
 //           when loading watchlists.
+//           Phase 2: Added new VoiceEvent fields for intent tracking (search_intent,
+//           confidence_score, extracted_hints, handoff tracking, clarification, selected_movie_id)
 
 import Foundation
 import Supabase
@@ -483,6 +485,8 @@ class SupabaseService: ObservableObject {
     
     // MARK: - Voice Events Operations
     
+    /// Voice event from voice_utterance_events table
+    /// Phase 2: Added intent tracking fields
     struct VoiceEvent: Identifiable, Codable {
         let id: UUID
         let created_at: String
@@ -494,6 +498,18 @@ class SupabaseService: ObservableObject {
         let llm_used: Bool?
         let mango_command_movie_title: String?
         let mango_command_recommender: String?
+        let error_message: String?
+        
+        // Phase 2: Intent tracking fields
+        let search_intent: String?
+        let confidence_score: Double?
+        let extracted_hints: String?
+        let handoff_initiated: Bool?
+        let handoff_returned: Bool?
+        let clarifying_question_asked: String?
+        let clarifying_answer: String?
+        let selected_movie_id: Int?
+        let candidates_shown: Int?
     }
     
     func getVoiceEvents(limit: Int = 100) async throws -> [VoiceEvent] {
