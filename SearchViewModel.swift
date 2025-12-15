@@ -4,12 +4,17 @@
 //
 //  Originally created by Claude on 11/13/25 at 9:07 PM
 //  Modified by Claude on 2025-12-02 at 12:15 AM (Pacific Time)
+//  Modified by Claude on 2025-12-15 at 11:50 AM (Pacific Time) - Fixed voice selection tracking
 //
 //  Changes made by Claude (2025-12-02):
 //  - Fixed flashing "no movies found" issue during typing
 //  - Keep previous results visible while new search is in progress
 //  - Only show empty state after debounced search truly completes with no results
 //  - Fixed Task cancellation not resetting isSearching state
+//
+//  Changes made by Claude (2025-12-15):
+//  - Moved pendingVoiceEventId clearing from performSearch() to clearSearch()
+//  - This allows SearchMovieCard to track which movie user selects after voice search
 
 import Foundation
 import SwiftUI
@@ -304,12 +309,9 @@ class SearchViewModel: ObservableObject {
                         voiceEventId: eventId
                     )
                     
-                    // Clear the eventId, utterance, and command after updating
-                    await MainActor.run {
-                        SearchFilterState.shared.pendingVoiceEventId = nil
-                        SearchFilterState.shared.pendingVoiceUtterance = nil
-                        SearchFilterState.shared.pendingVoiceCommand = nil
-                    }
+                    // NOTE: Do NOT clear pendingVoiceEventId here!
+                    // SearchMovieCard needs it to track which movie the user selects.
+                    // It will be cleared in clearSearch() or after selection is logged.
                 }
             }
             
@@ -362,12 +364,9 @@ class SearchViewModel: ObservableObject {
                         voiceEventId: eventId
                     )
                     
-                    // Clear the eventId, utterance, and command after updating
-                    await MainActor.run {
-                        SearchFilterState.shared.pendingVoiceEventId = nil
-                        SearchFilterState.shared.pendingVoiceUtterance = nil
-                        SearchFilterState.shared.pendingVoiceCommand = nil
-                    }
+                    // NOTE: Do NOT clear pendingVoiceEventId here!
+                    // Keep it for potential retry or selection tracking.
+                    // It will be cleared in clearSearch().
                 }
             }
         }
@@ -435,6 +434,11 @@ class SearchViewModel: ObservableObject {
         searchTask?.cancel()
         // Also clear searchQuery in SearchFilterState for tab bar visibility
         SearchFilterState.shared.searchQuery = ""
+        
+        // Clear voice event tracking when search is cleared
+        SearchFilterState.shared.pendingVoiceEventId = nil
+        SearchFilterState.shared.pendingVoiceUtterance = nil
+        SearchFilterState.shared.pendingVoiceCommand = nil
     }
     
     /// Load popular movies (for when search is empty)
