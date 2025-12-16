@@ -1,10 +1,12 @@
+//
 //  SearchView.swift
 //  TastyMangoes
 //
 //  Originally created by Cursor Assistant on 2025-11-14
 //  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
 //  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
-//  Modified by Claude on 2025-12-15 at 11:15 AM (Pacific Time) - Phase 2: Added voice search selection tracking
+//  Modified by Claude on 2025-12-15 at 11:10 AM (Pacific Time) - Phase 2: Added voice search selection tracking
+//  Modified by Claude on 2025-12-15 at 5:15 PM (Pacific Time) - Fixed candidates_shown always 0 bug
 //
 //  Changes made by Claude (2025-12-02):
 //  - Reordered content logic to keep previous results visible while searching
@@ -12,14 +14,20 @@
 //  - Only show empty state after search truly completes with no results
 //  - This prevents the distracting flash of "Oops! No movies found" while typing
 //
-//  Changes made by Claude (2025-12-15):
+//  Changes made by Claude (2025-12-15 11:10 AM):
 //  - SearchMovieCard now tracks voice search selections (selected_movie_id, candidates_shown)
 //  - Logs to Supabase when user taps a movie from voice-initiated search results
+//
+//  Changes made by Claude (2025-12-15 5:15 PM):
+//  - Changed viewModel from @StateObject to @ObservedObject using SearchViewModel.shared
+//  - This fixes candidates_shown always showing 0 (SearchMovieCard was reading from .shared
+//    while SearchView had its own instance with the actual results)
 
 import SwiftUI
 
 struct SearchView: View {
-    @StateObject private var viewModel = SearchViewModel()
+    // FIXED: Use shared instance so SearchMovieCard can read correct searchResults.count
+    @ObservedObject private var viewModel = SearchViewModel.shared
     // Use @ObservedObject for singleton to avoid recreating state
     @ObservedObject private var filterState = SearchFilterState.shared
     @StateObject private var speechRecognizer = SpeechRecognizer()
@@ -875,16 +883,22 @@ struct SearchMovieCard: View {
             return // Not a voice search, nothing to track
         }
         
-        // Get the number of candidates shown
+        // Get the number of candidates shown - now correctly reads from shared instance
         let candidatesShown = SearchViewModel.shared.searchResults.count
         
-        print("🎯 [VoiceSelection] User selected movie \(movie.id) (\(movie.title)) from \(candidatesShown) candidates")
+        // Convert movie.id from String to Int
+        guard let movieIdInt = Int(movie.id) else {
+            print("⚠️ [VoiceSelection] Could not convert movie.id '\(movie.id)' to Int")
+            return
+        }
+        
+        print("🎯 [VoiceSelection] User selected movie \(movieIdInt) (\(movie.title)) from \(candidatesShown) candidates")
         
         // Log the selection to Supabase
         Task {
             await VoiceAnalyticsLogger.updateVoiceEventSelection(
                 eventId: eventId,
-                selectedMovieId: Int(movie.id) ?? 0,
+                selectedMovieId: movieIdInt,
                 candidatesShown: candidatesShown
             )
             
