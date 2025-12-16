@@ -478,6 +478,8 @@ enum VoiceIntentRouter {
             // Update SearchViewModel with results
             await MainActor.run {
                 let viewModel = SearchViewModel.shared
+                // Set flag to prevent debounced search from overwriting these results
+                viewModel.skipNextSearch = true
                 viewModel.searchQuery = moviePhrase
                 viewModel.searchResults = movies
                 viewModel.hasSearched = true

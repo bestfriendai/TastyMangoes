@@ -69,6 +69,9 @@ class SearchViewModel: ObservableObject {
     // FIX: Prevent parallel searches
     private var isSearchInFlight = false
     
+    // Flag to prevent debounced search from overwriting hint-based search results
+    var skipNextSearch = false
+    
     // MARK: - Initialization
     
     init() {
@@ -177,6 +180,13 @@ class SearchViewModel: ObservableObject {
     /// Execute the actual search - using Supabase endpoint with filters
     @MainActor
     private func performSearch() async {
+        // Check if we should skip this search (hint-based search is setting results)
+        if skipNextSearch {
+            print("⏭️ [SearchViewModel] Skipping debounced search - hint-based search is handling results")
+            skipNextSearch = false // Reset flag after skipping
+            return
+        }
+        
         // FIX: Prevent parallel searches
         guard !isSearchInFlight else {
             print("⚠️ [SearchViewModel] Search already in flight, skipping duplicate")
