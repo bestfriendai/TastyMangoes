@@ -19,7 +19,7 @@ enum OpenAIConfig {
     }
     
     /// The default model used for classification
-    static let defaultModel: String = "gpt-4o-mini"
+    static let defaultModel: String = "gpt-4o"
     
     /// Base URL for the OpenAI API
     static let baseURL: String = "https://api.openai.com/v1"

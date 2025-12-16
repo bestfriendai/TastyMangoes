@@ -130,10 +130,10 @@ private struct DiscoveryChatResponse: Codable {
 class AIDiscoveryService {
     static let shared = AIDiscoveryService()
     
-    // Cost per 1M tokens for gpt-4o-mini (as of Dec 2025)
-    // Input: $0.15 per 1M, Output: $0.60 per 1M
-    private let inputCostPer1MTokens: Double = 0.15
-    private let outputCostPer1MTokens: Double = 0.60
+    // Cost per 1M tokens for gpt-4o (as of Dec 2025)
+    // Input: $2.50 per 1M, Output: $10.00 per 1M
+    private let inputCostPer1MTokens: Double = 2.50
+    private let outputCostPer1MTokens: Double = 10.00
     
     private init() {
         #if DEBUG
@@ -247,7 +247,7 @@ class AIDiscoveryService {
             ],
             responseFormat: DiscoveryResponseFormat(type: "json_object"),
             temperature: 0.3,
-            maxTokens: 1000  // Limit response size for cost control
+            maxTokens: 1500  // Limit response size for cost control (increased for 15 movies)
         )
         
         var request = URLRequest(url: url)
@@ -343,7 +343,7 @@ class AIDiscoveryService {
         IMPORTANT RULES:
         1. Return ONLY real movies that actually exist
         2. Include the TMDB ID if you know it (this is critical for our database)
-        3. Limit to 10 most relevant results
+        3. Limit to 15 most relevant results
         4. For remake queries, return ALL versions (e.g., all Batman movies with the specified actor)
         5. Order by relevance to the query
         

@@ -2,10 +2,12 @@
 //  TastyMangoes
 //
 //  Created by Claude on 2025-12-15 at 20:15 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude: 2025-12-15 at 21:00 (America/Los_Angeles - Pacific Time) / 05:00 UTC
+//  Last modified by Claude: 2025-12-15 at 21:30 (America/Los_Angeles - Pacific Time) / 05:30 UTC
 //  Notes: Coordinates hint-based movie search across local database, AI discovery, and TMDB ingestion.
 //         Shows local results instantly, then enriches with AI-discovered movies.
 //  Fixes: Added import Combine, fixed type conversions for tmdbId and posterURL
+//  Updates: Added TMDB ID verification - AI IDs are not trusted, we search TMDB by title+year
+//           to get correct IDs before ingestion. Prevents hallucinated ID issues.
 
 import Foundation
 import Combine
@@ -63,6 +65,8 @@ class HintSearchCoordinator: ObservableObject {
     @Published var localResults: [HintSearchResult] = []
     @Published var allResults: [HintSearchResult] = []
     @Published var isSearching = false
+    
+    private let tmdbService = TMDBService.shared
     
     private init() {}
     
@@ -128,17 +132,17 @@ class HintSearchCoordinator: ObservableObject {
                 // Step 4: Filter out movies we already have locally
                 let localTmdbIds = Set(localMovies.map { $0.tmdbId })
                 let newAIMovies = aiResponse.movies.filter { suggestion in
-                    guard let tmdbId = suggestion.tmdbId else { return false }
+                    guard let tmdbId = suggestion.tmdbId else { return true } // Keep if no ID, we'll look it up
                     return !localTmdbIds.contains(tmdbId)
                 }
                 
                 #if DEBUG
-                print("🤖 [HintSearch] New movies to ingest: \(newAIMovies.count)")
+                print("🤖 [HintSearch] New movies to verify and ingest: \(newAIMovies.count)")
                 #endif
                 
-                // Step 5: Ingest new movies
+                // Step 5: Verify TMDB IDs and ingest new movies
                 if !newAIMovies.isEmpty {
-                    let (ingestedResults, successCount) = await ingestMovies(newAIMovies)
+                    let (ingestedResults, successCount) = await verifyAndIngestMovies(newAIMovies)
                     aiMovies = ingestedResults
                     newlyIngested = successCount
                     
@@ -288,37 +292,134 @@ class HintSearchCoordinator: ObservableObject {
         return []
     }
     
+    // MARK: - TMDB ID Verification
+    
+    /// Verify a TMDB ID by searching TMDB for the title and finding the best match
+    /// Returns the verified TMDB ID, or nil if not found
+    private func verifyTmdbId(title: String, year: Int?) async -> Int? {
+        do {
+            // Search TMDB for the title
+            let searchResponse = try await tmdbService.searchMovies(query: title)
+            
+            guard !searchResponse.results.isEmpty else {
+                #if DEBUG
+                print("⚠️ [HintSearch] TMDB search returned no results for: \(title)")
+                #endif
+                return nil
+            }
+            
+            // Find the best match by title and year
+            let normalizedTitle = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            for result in searchResponse.results {
+                let resultTitle = result.title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Extract year from release_date (format: "YYYY-MM-DD")
+                var resultYear: Int? = nil
+                if let releaseDate = result.releaseDate, releaseDate.count >= 4 {
+                    resultYear = Int(releaseDate.prefix(4))
+                }
+                
+                // Check for title match (exact or very close)
+                let titleMatches = resultTitle == normalizedTitle ||
+                                   resultTitle.contains(normalizedTitle) ||
+                                   normalizedTitle.contains(resultTitle)
+                
+                // Check for year match (if we have both years)
+                let yearMatches = year == nil || resultYear == nil || year == resultYear
+                
+                if titleMatches && yearMatches {
+                    #if DEBUG
+                    print("✅ [HintSearch] Verified TMDB ID for '\(title)' (\(year ?? 0)): \(result.id) -> '\(result.title)' (\(resultYear ?? 0))")
+                    #endif
+                    return result.id
+                }
+            }
+            
+            // If no exact match, return the first result if title is close enough
+            if let firstResult = searchResponse.results.first {
+                let firstTitle = firstResult.title.lowercased()
+                // Use Levenshtein-like check: if first few words match
+                let titleWords = normalizedTitle.split(separator: " ").prefix(2).joined(separator: " ")
+                let resultWords = firstTitle.split(separator: " ").prefix(2).joined(separator: " ")
+                
+                if titleWords == resultWords {
+                    #if DEBUG
+                    print("⚠️ [HintSearch] Using first TMDB result for '\(title)': \(firstResult.id) -> '\(firstResult.title)'")
+                    #endif
+                    return firstResult.id
+                }
+            }
+            
+            #if DEBUG
+            print("⚠️ [HintSearch] No good TMDB match found for: \(title) (\(year ?? 0))")
+            #endif
+            return nil
+            
+        } catch {
+            #if DEBUG
+            print("⚠️ [HintSearch] TMDB search failed for '\(title)': \(error)")
+            #endif
+            return nil
+        }
+    }
+    
     // MARK: - Ingestion
     
-    /// Ingest multiple movies from AI suggestions
-    private func ingestMovies(_ suggestions: [AIMovieSuggestion]) async -> (results: [HintSearchResult], successCount: Int) {
+    /// Verify TMDB IDs and ingest multiple movies from AI suggestions
+    /// AI-provided TMDB IDs are NOT trusted - we search TMDB by title+year to get correct IDs
+    private func verifyAndIngestMovies(_ suggestions: [AIMovieSuggestion]) async -> (results: [HintSearchResult], successCount: Int) {
         var results: [HintSearchResult] = []
         var successCount = 0
         
         for (index, suggestion) in suggestions.enumerated() {
             progress = .ingesting(current: index + 1, total: suggestions.count)
             
-            guard let tmdbId = suggestion.tmdbId else {
+            #if DEBUG
+            print("🔍 [HintSearch] Verifying TMDB ID for: \(suggestion.title) (\(suggestion.year ?? 0)) - AI said: \(suggestion.tmdbId ?? -1)")
+            #endif
+            
+            // CRITICAL: Don't trust AI's TMDB ID - verify by searching TMDB
+            guard let verifiedTmdbId = await verifyTmdbId(title: suggestion.title, year: suggestion.year) else {
                 #if DEBUG
-                print("⚠️ [HintSearch] Skipping \(suggestion.title) - no TMDB ID")
+                print("⚠️ [HintSearch] Could not verify TMDB ID for: \(suggestion.title)")
                 #endif
+                
+                // Still add to results as AI-discovered (without ingestion)
+                if let aiTmdbId = suggestion.tmdbId {
+                    results.append(HintSearchResult(
+                        tmdbId: aiTmdbId,
+                        title: suggestion.title,
+                        year: suggestion.year,
+                        posterURL: nil,
+                        source: .aiDiscovered,
+                        matchReason: suggestion.reason
+                    ))
+                }
                 continue
             }
             
+            // Log if AI's ID was wrong
+            #if DEBUG
+            if let aiId = suggestion.tmdbId, aiId != verifiedTmdbId {
+                print("🔧 [HintSearch] CORRECTED TMDB ID: AI said \(aiId), actual is \(verifiedTmdbId) for '\(suggestion.title)'")
+            }
+            #endif
+            
             do {
-                // Call ingestMovie to fetch from TMDB and store locally
-                let _ = try await SupabaseService.shared.ingestMovie(tmdbId: String(tmdbId))
+                // Call ingestMovie with the VERIFIED TMDB ID
+                let _ = try await SupabaseService.shared.ingestMovie(tmdbId: String(verifiedTmdbId))
                 
                 // Fetch the card to get poster URL
-                let card = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(tmdbId))
+                let card = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(verifiedTmdbId))
                 
                 // Extract poster URL from PosterUrls struct (use medium size)
                 let posterURLString = card?.poster?.medium ?? card?.poster?.small ?? card?.poster?.large
                 
                 results.append(HintSearchResult(
-                    tmdbId: tmdbId,
-                    title: suggestion.title,
-                    year: suggestion.year,
+                    tmdbId: verifiedTmdbId,
+                    title: card?.title ?? suggestion.title,  // Use title from TMDB if available
+                    year: card?.year ?? suggestion.year,
                     posterURL: posterURLString,
                     source: .aiIngested,
                     matchReason: suggestion.reason
@@ -327,7 +428,7 @@ class HintSearchCoordinator: ObservableObject {
                 successCount += 1
                 
                 #if DEBUG
-                print("✅ [HintSearch] Ingested: \(suggestion.title) (\(suggestion.year ?? 0))")
+                print("✅ [HintSearch] Ingested: \(card?.title ?? suggestion.title) (\(card?.year ?? suggestion.year ?? 0)) [TMDB: \(verifiedTmdbId)]")
                 #endif
                 
             } catch {
@@ -337,7 +438,7 @@ class HintSearchCoordinator: ObservableObject {
                 
                 // Still add to results as AI-discovered (will ingest when user views)
                 results.append(HintSearchResult(
-                    tmdbId: tmdbId,
+                    tmdbId: verifiedTmdbId,
                     title: suggestion.title,
                     year: suggestion.year,
                     posterURL: nil,
