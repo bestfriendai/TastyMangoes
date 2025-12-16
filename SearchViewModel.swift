@@ -6,6 +6,7 @@
 //  Modified by Claude on 2025-12-02 at 12:15 AM (Pacific Time)
 //  Modified by Claude on 2025-12-15 at 11:50 AM (Pacific Time) - Fixed voice selection tracking
 //  Modified by Claude on 2025-12-15 at 4:00 PM (Pacific Time) - Fixed duplicate observer & parallel search bugs
+//  Modified by Claude on 2025-12-15 at 4:30 PM (Pacific Time) - Disabled self-healing to debug single-result freeze
 //
 //  Changes made by Claude (2025-12-02):
 //  - Fixed flashing "no movies found" issue during typing
@@ -22,6 +23,9 @@
 //  - Added isSearchInFlight guard to prevent parallel searches
 //  - Removed auto-open single result feature (was causing UI freezes)
 //  - Added proper observer cleanup in deinit
+//
+//  Changes made by Claude (2025-12-15 4:30 PM):
+//  - Temporarily disabled checkAndTriggerSelfHealing to debug single-result freeze
 
 import Foundation
 import SwiftUI
@@ -344,15 +348,17 @@ class SearchViewModel: ObservableObject {
                         }
                     }()
                     
-                    // Use the proper extension method with correct types
-                    VoiceIntentRouter.checkAndTriggerSelfHealing(
-                        utterance: utterance,
-                        originalCommand: originalCommand,
-                        handlerResult: handlerResult,
-                        screen: "SearchView",
-                        movieContext: nil,
-                        voiceEventId: eventId
-                    )
+                    // TEMPORARILY DISABLED: Self-healing check may be causing freeze on single-result searches
+                    // TODO: Investigate and re-enable once freeze is resolved
+                    // VoiceIntentRouter.checkAndTriggerSelfHealing(
+                    //     utterance: utterance,
+                    //     originalCommand: originalCommand,
+                    //     handlerResult: handlerResult,
+                    //     screen: "SearchView",
+                    //     movieContext: nil,
+                    //     voiceEventId: eventId
+                    // )
+                    print("⏸️ [VoiceAnalytics] Self-healing check temporarily disabled for debugging")
                     
                     // NOTE: Do NOT clear pendingVoiceEventId here!
                     // SearchMovieCard needs it to track which movie the user selects.
@@ -393,15 +399,16 @@ class SearchViewModel: ObservableObject {
                     let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
                     let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
                     
-                    // Use the proper extension method with correct types
-                    VoiceIntentRouter.checkAndTriggerSelfHealing(
-                        utterance: utterance,
-                        originalCommand: originalCommand,
-                        handlerResult: .networkError,
-                        screen: "SearchView",
-                        movieContext: nil,
-                        voiceEventId: eventId
-                    )
+                    // TEMPORARILY DISABLED: Self-healing check may be causing freeze
+                    // VoiceIntentRouter.checkAndTriggerSelfHealing(
+                    //     utterance: utterance,
+                    //     originalCommand: originalCommand,
+                    //     handlerResult: .networkError,
+                    //     screen: "SearchView",
+                    //     movieContext: nil,
+                    //     voiceEventId: eventId
+                    // )
+                    print("⏸️ [VoiceAnalytics] Self-healing check temporarily disabled for debugging")
                     
                     // NOTE: Do NOT clear pendingVoiceEventId here!
                     // Keep it for potential retry or selection tracking.
