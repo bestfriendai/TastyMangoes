@@ -51,6 +51,7 @@
 		C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */; };
 		C57267652EF10B7F005C191B /* AIDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57267642EF10B7F005C191B /* AIDiscoveryService.swift */; };
 		C57267672EF10BAD005C191B /* HintSearchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57267662EF10BAD005C191B /* HintSearchCoordinator.swift */; };
+		C572676A2EF1177C005C191B /* SupabaseService+AIBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57267692EF1177C005C191B /* SupabaseService+AIBudget.swift */; };
 		C59E8B822EE696D000F15ED6 /* SelfHealingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */; };
 		C59E8B842EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */; };
 		C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */; };
@@ -165,6 +166,7 @@
 		C561D02D2EDFCF01007FDD69 /* YouTubePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubePlayerView.swift; sourceTree = "<group>"; };
 		C57267642EF10B7F005C191B /* AIDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIDiscoveryService.swift; sourceTree = "<group>"; };
 		C57267662EF10BAD005C191B /* HintSearchCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HintSearchCoordinator.swift; sourceTree = "<group>"; };
+		C57267692EF1177C005C191B /* SupabaseService+AIBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SupabaseService+AIBudget.swift"; sourceTree = "<group>"; };
 		C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfHealingVoiceService.swift; sourceTree = "<group>"; };
 		C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VoiceIntentRouter+SelfHealing.swift"; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
@@ -260,6 +262,7 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C57267692EF1177C005C191B /* SupabaseService+AIBudget.swift */,
 				C57267662EF10BAD005C191B /* HintSearchCoordinator.swift */,
 				C57267642EF10B7F005C191B /* AIDiscoveryService.swift */,
 				C517CD042EC9806C00EAE1FE /* Assets.xcassets */,
@@ -520,6 +523,7 @@
 			files = (
 				C517CD222EC9806C00EAE1FE /* CategoryItem.swift in Sources */,
 				C517CD232EC9806C00EAE1FE /* Color+Hex.swift in Sources */,
+				C572676A2EF1177C005C191B /* SupabaseService+AIBudget.swift in Sources */,
 				C5B95D352ECB32E200B47098 /* SortByBottomSheet.swift in Sources */,
 				C5B95D392ECB330000B47098 /* DeleteListBottomSheet.swift in Sources */,
 				C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */,

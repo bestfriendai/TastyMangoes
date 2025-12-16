@@ -350,7 +350,7 @@ enum MovieHintExtractor {
         for pattern in titlePatterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 if let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)) {
-                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: lower) {
+                    if match.numberOfRanges > 1 {
                         let title = String(utterance[Range(match.range(at: 1), in: utterance)!])
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         // Only return if it looks like a title (not too long)

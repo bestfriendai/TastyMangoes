@@ -103,10 +103,11 @@ class SearchViewModel: ObservableObject {
             }
             
             // Execute on MainActor
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 print("🍋 [SearchViewModel] Received mangoPerformMovieQuery notification with query: '\(query)'")
-                self?.isMangoInitiatedSearch = true
-                self?.search(query: query)
+                self.isMangoInitiatedSearch = true
+                self.search(query: query)
             }
         }
         
@@ -332,24 +333,21 @@ class SearchViewModel: ObservableObject {
                         resultCount: resultCount
                     )
                     
-                    // Trigger self-healing if needed (for search commands)
-                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
-                    let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
-                    
-                    // Convert string result to VoiceHandlerResult enum
-                    let handlerResult: VoiceHandlerResult? = {
-                        switch result {
-                        case "success": return .success
-                        case "no_results": return .noResults
-                        case "ambiguous": return .ambiguous
-                        case "network_error": return .networkError
-                        case "parse_error": return .parseError
-                        default: return nil
-                        }
-                    }()
-                    
                     // TEMPORARILY DISABLED: Self-healing check may be causing freeze on single-result searches
                     // TODO: Investigate and re-enable once freeze is resolved
+                    // Trigger self-healing if needed (for search commands)
+                    // let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    // let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
+                    // let handlerResult: VoiceHandlerResult? = {
+                    //     switch result {
+                    //     case "success": return .success
+                    //     case "no_results": return .noResults
+                    //     case "ambiguous": return .ambiguous
+                    //     case "network_error": return .networkError
+                    //     case "parse_error": return .parseError
+                    //     default: return nil
+                    //     }
+                    // }()
                     // VoiceIntentRouter.checkAndTriggerSelfHealing(
                     //     utterance: utterance,
                     //     originalCommand: originalCommand,
@@ -395,11 +393,10 @@ class SearchViewModel: ObservableObject {
                         errorMessage: searchError.localizedDescription
                     )
                     
-                    // Trigger self-healing if needed (for network errors with action words)
-                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
-                    let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
-                    
                     // TEMPORARILY DISABLED: Self-healing check may be causing freeze
+                    // Trigger self-healing if needed (for network errors with action words)
+                    // let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    // let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
                     // VoiceIntentRouter.checkAndTriggerSelfHealing(
                     //     utterance: utterance,
                     //     originalCommand: originalCommand,

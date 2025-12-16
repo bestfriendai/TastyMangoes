@@ -2,10 +2,12 @@
 //  TastyMangoes
 //
 //  Created by Claude on 2025-12-15 at 19:30 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude: 2025-12-15 at 19:30 (America/Los_Angeles - Pacific Time) / 03:30 UTC
+//  Last modified by Claude: 2025-12-15 at 21:45 (America/Los_Angeles - Pacific Time) / 05:45 UTC
 //  Notes: OpenAI-powered movie discovery service for hint-based searches.
 //         Discovers movies by actor, director, year, or fuzzy descriptions.
 //         Tracks usage against $10/day budget with rate limiting.
+//  Updates: Wired up Supabase budget tracking - calls get_ai_budget_status(),
+//           can_make_ai_request(), and logs to ai_discovery_requests table.
 
 import Foundation
 
@@ -143,38 +145,66 @@ class AIDiscoveryService {
     
     /// Check current budget status from Supabase
     func checkBudgetStatus() async throws -> AIBudgetStatus {
-        // TODO: Call Supabase RPC function get_ai_budget_status()
-        // For now, return a default status
         #if DEBUG
         print("🎬 [AIDiscovery] Checking budget status...")
         #endif
         
-        // Placeholder - will integrate with SupabaseService
-        return AIBudgetStatus(
-            spentTodayDollars: 0,
-            budgetDollars: 10.0,
-            remainingDollars: 10.0,
-            requestsToday: 0,
-            tokensToday: 0,
-            isOverBudget: false,
-            spendRatePerHour: 0
-        )
+        do {
+            let response = try await SupabaseService.shared.getAIBudgetStatus()
+            
+            return AIBudgetStatus(
+                spentTodayDollars: response.spentTodayCents / 100.0,
+                budgetDollars: response.budgetCents / 100.0,
+                remainingDollars: response.remainingCents / 100.0,
+                requestsToday: response.requestsToday,
+                tokensToday: response.tokensToday,
+                isOverBudget: response.isOverBudget,
+                spendRatePerHour: response.spendRateCentsPerHour / 100.0
+            )
+        } catch {
+            #if DEBUG
+            print("⚠️ [AIDiscovery] Failed to get budget status: \(error)")
+            #endif
+            // Return safe defaults on error (don't block requests)
+            return AIBudgetStatus(
+                spentTodayDollars: 0,
+                budgetDollars: 10.0,
+                remainingDollars: 10.0,
+                requestsToday: 0,
+                tokensToday: 0,
+                isOverBudget: false,
+                spendRatePerHour: 0
+            )
+        }
     }
     
     /// Check if we can make a request (rate limiting + budget)
     func canMakeRequest() async throws -> AIRateLimitCheck {
-        // TODO: Call Supabase RPC function can_make_ai_request()
         #if DEBUG
         print("🎬 [AIDiscovery] Checking rate limits...")
         #endif
         
-        // Placeholder - will integrate with SupabaseService
-        return AIRateLimitCheck(
-            allowed: true,
-            reason: "OK",
-            spentDollars: 0,
-            remainingDollars: 10.0
-        )
+        do {
+            let response = try await SupabaseService.shared.canMakeAIRequest()
+            
+            return AIRateLimitCheck(
+                allowed: response.allowed,
+                reason: response.reason,
+                spentDollars: response.spentCents / 100.0,
+                remainingDollars: response.remainingCents / 100.0
+            )
+        } catch {
+            #if DEBUG
+            print("⚠️ [AIDiscovery] Failed to check rate limits: \(error)")
+            #endif
+            // Allow request on error (fail open for better UX)
+            return AIRateLimitCheck(
+                allowed: true,
+                reason: "Rate limit check failed, allowing request",
+                spentDollars: 0,
+                remainingDollars: 10.0
+            )
+        }
     }
     
     // MARK: - Movie Discovery
@@ -385,11 +415,18 @@ class AIDiscoveryService {
         costCents: Double,
         responseTimeMs: Int
     ) async {
-        // TODO: Log to Supabase ai_discovery_requests table
-        // Will integrate with SupabaseService
-        #if DEBUG
-        print("🎬 [AIDiscovery] Logged request to Supabase (TODO: implement)")
-        #endif
+        await SupabaseService.shared.logAIDiscoveryRequest(
+            query: query,
+            hints: hints,
+            moviesFound: response.movies.count,
+            moviesIngested: 0,  // Will be updated by HintSearchCoordinator after ingestion
+            promptTokens: promptTokens,
+            completionTokens: completionTokens,
+            costCents: costCents,
+            responseTimeMs: responseTimeMs,
+            status: "success",
+            errorMessage: nil
+        )
     }
 }
 

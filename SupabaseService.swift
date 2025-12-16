@@ -17,7 +17,7 @@ import Combine
 class SupabaseService: ObservableObject {
     static let shared = SupabaseService()
     
-    private var client: SupabaseClient?
+    internal var client: SupabaseClient?
     
     private init() {
         setupClient()
