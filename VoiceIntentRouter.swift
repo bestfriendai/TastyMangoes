@@ -1,11 +1,10 @@
 //  VoiceIntentRouter.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 09:45 PST (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude: 2025-12-15 at 08:30 (America/Los_Angeles - Pacific Time) / 16:30 UTC
-//  Notes: Added handleMarkWatchedCommand - processes "mark as watched/unwatched" commands
-//         when invoked from MoviePageView. Requires currentMovieId context.
-//  Phase 2: Added SearchIntentClassifier and MovieHintExtractor integration for
-//           intent tracking and hint extraction. Data now logged to voice_utterance_events.
+//  Last modified by Claude: 2025-12-15 at 20:45 (America/Los_Angeles - Pacific Time) / 04:45 UTC
+//  Notes: Phase 3 - Added hint-based search path using HintSearchCoordinator.
+//         When actor/director/year hints are present, uses AI discovery + batch ingestion
+//         instead of simple TMDB search. Shows local results instantly, then AI results.
 
 import Foundation
 
@@ -348,6 +347,216 @@ enum VoiceIntentRouter {
             print("🍋 Final command - recommender: \(recommender)")
         }
         
+        // ═══════════════════════════════════════════════════════════════════════
+        // Phase 3: Hint-Based Search Path
+        // If hints are present (actor, director, year), use HintSearchCoordinator
+        // for local-first + AI discovery + batch ingestion
+        // ═══════════════════════════════════════════════════════════════════════
+        if extractedHints.hasAnyHints {
+            print("🎬 [Phase3] Hints detected - using HintSearchCoordinator path")
+            await handleHintBasedSearch(
+                query: text,
+                moviePhrase: moviePhrase,
+                extractedHints: extractedHints,
+                searchIntent: searchIntent,
+                confidence: intentConfidence,
+                finalCommand: finalCommand,
+                mangoCommand: mangoCommand,
+                llmUsed: llmUsed,
+                llmIntent: llmIntent,
+                llmError: llmError
+            )
+            return
+        }
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        // Standard path: No hints - use existing notification-based search
+        await handleStandardSearch(
+            text: text,
+            moviePhrase: moviePhrase,
+            finalCommand: finalCommand,
+            mangoCommand: mangoCommand,
+            llmUsed: llmUsed,
+            llmIntent: llmIntent,
+            llmError: llmError,
+            searchIntent: searchIntent,
+            confidence: intentConfidence,
+            extractedHints: extractedHints
+        )
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MARK: - Phase 3: Hint-Based Search
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /// Handle search with extracted hints using HintSearchCoordinator
+    /// This path provides: local results instantly → AI discovery → batch ingestion
+    private static func handleHintBasedSearch(
+        query: String,
+        moviePhrase: String,
+        extractedHints: ExtractedHints,
+        searchIntent: VoiceSearchIntent,
+        confidence: Double,
+        finalCommand: MangoCommand,
+        mangoCommand: MangoCommand,
+        llmUsed: Bool,
+        llmIntent: LLMIntent?,
+        llmError: Error?
+    ) async {
+        print("🎬 [Phase3] Starting hint-based search for: '\(query)'")
+        print("🎬 [Phase3] Hints: actors=\(extractedHints.actors), director=\(extractedHints.director ?? "nil"), year=\(extractedHints.year?.description ?? "nil")")
+        
+        // Store recommender in FilterState for AddToListView
+        await MainActor.run {
+            SearchFilterState.shared.detectedRecommender = finalCommand.recommender
+            if let recommender = finalCommand.recommender {
+                print("🍋 Stored recommender '\(recommender)' in SearchFilterState for AddToListView")
+            }
+            
+            // Navigate to Search tab first
+            print("🍋 [Phase3] Posting mangoNavigateToSearch notification")
+            NotificationCenter.default.post(
+                name: .mangoNavigateToSearch,
+                object: nil
+            )
+            
+            // Speak initial acknowledgment
+            MangoSpeaker.shared.speak("Let me search for that.")
+        }
+        
+        // Log the interaction with Phase 2 data
+        let eventId = await VoiceAnalyticsLogger.shared.log(
+            utterance: query,
+            mangoCommand: mangoCommand,
+            llmUsed: llmUsed,
+            finalCommand: finalCommand,
+            llmIntent: llmIntent,
+            llmError: llmError,
+            searchIntent: searchIntent,
+            confidenceScore: confidence,
+            extractedHints: extractedHints
+        )
+        
+        // Convert ExtractedHints to ExtractedMovieHints for coordinator
+        let hints = ExtractedMovieHints(from: extractedHints)
+        
+        do {
+            // Call HintSearchCoordinator for local + AI search
+            // Swift automatically handles MainActor hop for async method calls
+            let response = try await HintSearchCoordinator.shared.search(query: query, hints: hints, enableAI: true)
+            
+            let localCount = response.localResults.count
+            let totalCount = response.allResults.count
+            let newlyIngested = response.newlyIngested
+            
+            print("🎬 [Phase3] Search complete: \(localCount) local, \(totalCount) total, \(newlyIngested) newly ingested")
+            
+            // Convert HintSearchResults to Movies for SearchViewModel
+            let movies = response.allResults.map { result in
+                Movie(
+                    id: String(result.tmdbId),
+                    title: result.title,
+                    year: result.year ?? 0,
+                    trailerURL: nil,
+                    trailerDuration: nil,
+                    posterImageURL: result.posterURL,
+                    tastyScore: nil,
+                    aiScore: nil,
+                    genres: [],
+                    rating: nil,
+                    director: nil,
+                    writer: nil,
+                    screenplay: nil,
+                    composer: nil,
+                    runtime: nil,
+                    releaseDate: result.year != nil ? String(result.year!) : nil,
+                    language: nil,
+                    overview: result.matchReason
+                )
+            }
+            
+            // Update SearchViewModel with results
+            await MainActor.run {
+                let viewModel = SearchViewModel.shared
+                viewModel.searchQuery = moviePhrase
+                viewModel.searchResults = movies
+                viewModel.hasSearched = true
+                viewModel.isSearching = false
+                viewModel.isMangoInitiatedSearch = true
+                
+                // Store voice event ID for selection tracking
+                SearchFilterState.shared.pendingVoiceEventId = eventId
+                SearchFilterState.shared.pendingVoiceUtterance = query
+                SearchFilterState.shared.pendingVoiceCommand = finalCommand
+                
+                // Speak results summary
+                if totalCount == 0 {
+                    MangoSpeaker.shared.speak("I couldn't find any movies matching that.")
+                } else if totalCount == 1 {
+                    let movie = response.allResults.first!
+                    MangoSpeaker.shared.speak("I found \(movie.title).")
+                } else if newlyIngested > 0 {
+                    MangoSpeaker.shared.speak("Found \(totalCount) movies. I added \(newlyIngested) new ones to our database.")
+                } else {
+                    MangoSpeaker.shared.speak("Found \(totalCount) movies.")
+                }
+            }
+            
+            // Update voice event with success
+            if let eventId = eventId {
+                let result: String
+                if totalCount == 0 {
+                    result = "no_results"
+                } else if totalCount >= 10 {
+                    result = "ambiguous"
+                } else {
+                    result = "success"
+                }
+                
+                await VoiceAnalyticsLogger.updateVoiceEventResult(
+                    eventId: eventId,
+                    result: result,
+                    resultCount: totalCount
+                )
+            }
+            
+        } catch {
+            print("❌ [Phase3] HintSearchCoordinator error: \(error)")
+            
+            // Fall back to standard search on error
+            await MainActor.run {
+                MangoSpeaker.shared.speak("Let me try a different approach.")
+            }
+            
+            // Use standard search as fallback
+            await handleStandardSearch(
+                text: query,
+                moviePhrase: moviePhrase,
+                finalCommand: finalCommand,
+                mangoCommand: mangoCommand,
+                llmUsed: llmUsed,
+                llmIntent: llmIntent,
+                llmError: error,
+                searchIntent: searchIntent,
+                confidence: confidence,
+                extractedHints: extractedHints
+            )
+        }
+    }
+    
+    /// Standard search path using notification-based flow (existing behavior)
+    private static func handleStandardSearch(
+        text: String,
+        moviePhrase: String,
+        finalCommand: MangoCommand,
+        mangoCommand: MangoCommand,
+        llmUsed: Bool,
+        llmIntent: LLMIntent?,
+        llmError: Error?,
+        searchIntent: VoiceSearchIntent,
+        confidence: Double,
+        extractedHints: ExtractedHints
+    ) async {
         // Store recommender in FilterState for AddToListView
         await MainActor.run {
             SearchFilterState.shared.detectedRecommender = finalCommand.recommender
@@ -387,7 +596,7 @@ enum VoiceIntentRouter {
             llmIntent: llmIntent,
             llmError: llmError,
             searchIntent: searchIntent,
-            confidenceScore: intentConfidence,
+            confidenceScore: confidence,
             extractedHints: extractedHints
         )
         
@@ -400,6 +609,10 @@ enum VoiceIntentRouter {
             }
         }
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MARK: - Command Handlers (existing)
+    // ═══════════════════════════════════════════════════════════════════════════
     
     /// Handle create watchlist command locally
     private static func handleCreateWatchlistCommand(listName: String, rawText: String, searchIntent: VoiceSearchIntent, confidence: Double, hints: ExtractedHints) async {
