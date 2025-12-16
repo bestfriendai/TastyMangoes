@@ -5,6 +5,7 @@
 //  Originally created by Claude on 11/13/25 at 9:07 PM
 //  Modified by Claude on 2025-12-02 at 12:15 AM (Pacific Time)
 //  Modified by Claude on 2025-12-15 at 11:50 AM (Pacific Time) - Fixed voice selection tracking
+//  Modified by Claude on 2025-12-15 at 4:00 PM (Pacific Time) - Fixed duplicate observer & parallel search bugs
 //
 //  Changes made by Claude (2025-12-02):
 //  - Fixed flashing "no movies found" issue during typing
@@ -12,9 +13,15 @@
 //  - Only show empty state after debounced search truly completes with no results
 //  - Fixed Task cancellation not resetting isSearching state
 //
-//  Changes made by Claude (2025-12-15):
+//  Changes made by Claude (2025-12-15 11:50 AM):
 //  - Moved pendingVoiceEventId clearing from performSearch() to clearSearch()
-//  - This allows SearchMovieCard to track which movie user selects after voice search
+//  - This allows SearchMovieCard to track which movie the user selects
+//
+//  Changes made by Claude (2025-12-15 4:00 PM):
+//  - Fixed duplicate NotificationCenter observer registration causing 3x search execution
+//  - Added isSearchInFlight guard to prevent parallel searches
+//  - Removed auto-open single result feature (was causing UI freezes)
+//  - Added proper observer cleanup in deinit
 
 import Foundation
 import SwiftUI
@@ -51,11 +58,36 @@ class SearchViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private let historyManager = SearchHistoryManager.shared
     
+    // FIX: Prevent duplicate observer registration
+    private static var observerRegistered = false
+    private var notificationObserver: NSObjectProtocol?
+    
+    // FIX: Prevent parallel searches
+    private var isSearchInFlight = false
+    
     // MARK: - Initialization
     
     init() {
+        setupNotificationObserver()
+    }
+    
+    deinit {
+        // Clean up observer
+        if let observer = notificationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    
+    private func setupNotificationObserver() {
+        // FIX: Only register observer once across all instances
+        guard !SearchViewModel.observerRegistered else {
+            print("⚠️ [SearchViewModel] Observer already registered, skipping duplicate")
+            return
+        }
+        SearchViewModel.observerRegistered = true
+        
         // Listen for Mango-initiated queries
-        NotificationCenter.default.addObserver(
+        notificationObserver = NotificationCenter.default.addObserver(
             forName: Notification.Name.mangoPerformMovieQuery,
             object: nil,
             queue: .main
@@ -66,13 +98,15 @@ class SearchViewModel: ObservableObject {
                 return
             }
             
-            // Execute on MainActor (closure is already on main queue, but ensure MainActor isolation)
-            MainActor.assumeIsolated {
+            // Execute on MainActor
+            Task { @MainActor in
                 print("🍋 [SearchViewModel] Received mangoPerformMovieQuery notification with query: '\(query)'")
                 self?.isMangoInitiatedSearch = true
                 self?.search(query: query)
             }
         }
+        
+        print("✅ [SearchViewModel] Notification observer registered")
     }
     
     // MARK: - Search Methods
@@ -138,6 +172,14 @@ class SearchViewModel: ObservableObject {
     /// Execute the actual search - using Supabase endpoint with filters
     @MainActor
     private func performSearch() async {
+        // FIX: Prevent parallel searches
+        guard !isSearchInFlight else {
+            print("⚠️ [SearchViewModel] Search already in flight, skipping duplicate")
+            return
+        }
+        isSearchInFlight = true
+        defer { isSearchInFlight = false }
+        
         error = nil
         showSuggestions = false
         
@@ -267,11 +309,14 @@ class SearchViewModel: ObservableObject {
             
             // Update voice event with search results if this was a Mango-initiated search
             if isMangoInitiatedSearch, let eventId = SearchFilterState.shared.pendingVoiceEventId {
+                // Capture result count for the async task
+                let resultCount = searchResults.count
+                
                 Task {
                     let result: String
-                    if searchResults.isEmpty {
+                    if resultCount == 0 {
                         result = "no_results"
-                    } else if searchResults.count >= 10 {
+                    } else if resultCount >= 10 {
                         result = "ambiguous"
                     } else {
                         result = "success"
@@ -280,7 +325,7 @@ class SearchViewModel: ObservableObject {
                     await VoiceAnalyticsLogger.updateVoiceEventResult(
                         eventId: eventId,
                         result: result,
-                        resultCount: searchResults.count
+                        resultCount: resultCount
                     )
                     
                     // Trigger self-healing if needed (for search commands)
@@ -318,15 +363,9 @@ class SearchViewModel: ObservableObject {
             // Reset Mango flag after search completes (speech will be handled by SearchView onChange)
             isMangoInitiatedSearch = false
             
-            // Optional: Auto-open movie page if exactly one result (for TalkToMango)
-            if searchResults.count == 1, let singleMovie = searchResults.first {
-                print("🍋 Single result found - posting notification to open movie page")
-                NotificationCenter.default.post(
-                    name: Notification.Name.mangoOpenMoviePage,
-                    object: nil,
-                    userInfo: ["movieId": singleMovie.id]
-                )
-            }
+            // NOTE: Removed auto-open single result feature - it was causing UI freezes
+            // If we want this feature back, it needs proper async handling and state management
+            // See: https://github.com/user/repo/issues/XXX
             
         } catch let searchError {
             // Only show error if this search is still relevant

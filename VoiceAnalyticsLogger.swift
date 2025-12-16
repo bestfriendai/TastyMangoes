@@ -1,11 +1,12 @@
 //  VoiceAnalyticsLogger.swift
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-12-03 at 22:21 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude: 2025-12-15 at 09:00 (America/Los_Angeles - Pacific Time) / 17:00 UTC
+//  Last modified by Claude: 2025-12-15 at 12:05 PM (America/Los_Angeles - Pacific Time)
 //  Notes: Added failure reason tracking (handler_result, result_count, error_message)
 //         Added markWatched case to mangoCommandTypeString
 //         Added updateVoiceEventResult method and modified log to return UUID
 //  Phase 2: Added search_intent, confidence_score, extracted_hints parameters
+//  Fix: Removed Task wrappers from update methods so await actually waits for completion
 
 import Foundation
 import Supabase
@@ -169,31 +170,30 @@ class VoiceAnalyticsLogger {
             return
         }
         
-        Task {
-            do {
-                // Create a Codable struct for the update
-                struct VoiceEventUpdate: Codable {
-                    let handler_result: String
-                    let result_count: Int?
-                    let error_message: String?
-                }
-                
-                let updateData = VoiceEventUpdate(
-                    handler_result: result,
-                    result_count: resultCount,
-                    error_message: errorMessage
-                )
-                
-                try await client
-                    .from("voice_utterance_events")
-                    .update(updateData)
-                    .eq("id", value: eventId.uuidString)
-                    .execute()
-                
-                print("✅ [VoiceAnalytics] Updated event \(eventId) with result: \(result)")
-            } catch {
-                print("❌ [VoiceAnalytics] Failed to update event result: \(error)")
+        // FIXED: Removed Task wrapper - await now actually waits for completion
+        do {
+            // Create a Codable struct for the update
+            struct VoiceEventUpdate: Codable {
+                let handler_result: String
+                let result_count: Int?
+                let error_message: String?
             }
+            
+            let updateData = VoiceEventUpdate(
+                handler_result: result,
+                result_count: resultCount,
+                error_message: errorMessage
+            )
+            
+            try await client
+                .from("voice_utterance_events")
+                .update(updateData)
+                .eq("id", value: eventId.uuidString)
+                .execute()
+            
+            print("✅ [VoiceAnalytics] Updated event \(eventId) with result: \(result)")
+        } catch {
+            print("❌ [VoiceAnalytics] Failed to update event result: \(error)")
         }
     }
     
@@ -212,28 +212,27 @@ class VoiceAnalyticsLogger {
             return
         }
         
-        Task {
-            do {
-                struct VoiceEventSelectionUpdate: Codable {
-                    let selected_movie_id: Int
-                    let candidates_shown: Int
-                }
-                
-                let updateData = VoiceEventSelectionUpdate(
-                    selected_movie_id: selectedMovieId,
-                    candidates_shown: candidatesShown
-                )
-                
-                try await client
-                    .from("voice_utterance_events")
-                    .update(updateData)
-                    .eq("id", value: eventId.uuidString)
-                    .execute()
-                
-                print("✅ [VoiceAnalytics] Updated event \(eventId) with selection: movie \(selectedMovieId) from \(candidatesShown) candidates")
-            } catch {
-                print("❌ [VoiceAnalytics] Failed to update event selection: \(error)")
+        // FIXED: Removed Task wrapper - await now actually waits for completion
+        do {
+            struct VoiceEventSelectionUpdate: Codable {
+                let selected_movie_id: Int
+                let candidates_shown: Int
             }
+            
+            let updateData = VoiceEventSelectionUpdate(
+                selected_movie_id: selectedMovieId,
+                candidates_shown: candidatesShown
+            )
+            
+            try await client
+                .from("voice_utterance_events")
+                .update(updateData)
+                .eq("id", value: eventId.uuidString)
+                .execute()
+            
+            print("✅ [VoiceAnalytics] Updated event \(eventId) with selection: movie \(selectedMovieId) from \(candidatesShown) candidates")
+        } catch {
+            print("❌ [VoiceAnalytics] Failed to update event selection: \(error)")
         }
     }
     
