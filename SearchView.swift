@@ -635,12 +635,23 @@ struct SearchView: View {
                     if !viewModel.searchResults.isEmpty || filterState.hasActiveFilters {
                         HStack {
                             // Show count based on whether we have search results or just filters
-                            let resultsText = !viewModel.searchResults.isEmpty
-                                ? "\(viewModel.searchResults.count) results found"
-                                : (filterState.hasActiveFilters ? "0 results found" : "")
-                            
-                            if !resultsText.isEmpty {
-                                Text(resultsText)
+                            if !viewModel.searchResults.isEmpty {
+                                // Show animated indicator if hint search is in progress
+                                if hintSearchCoordinator.isSearching || hintSearchCoordinator.isAISearching {
+                                    HStack(spacing: 0) {
+                                        Text("\(viewModel.searchResults.count) results")
+                                            .font(.custom("Inter-SemiBold", size: 14))
+                                            .foregroundColor(Color(hex: "#666666"))
+                                        
+                                        AnimatedEllipsisView()
+                                    }
+                                } else {
+                                    Text("\(viewModel.searchResults.count) results found")
+                                        .font(.custom("Inter-SemiBold", size: 14))
+                                        .foregroundColor(Color(hex: "#666666"))
+                                }
+                            } else if filterState.hasActiveFilters {
+                                Text("0 results found")
                                     .font(.custom("Inter-SemiBold", size: 14))
                                     .foregroundColor(Color(hex: "#666666"))
                             }
@@ -1012,6 +1023,31 @@ struct SearchSuggestionItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Animated Ellipsis View
+
+struct AnimatedEllipsisView: View {
+    @State private var dotCount = 1
+    @State private var timer: Timer?
+    
+    var body: some View {
+        Text(String(repeating: ".", count: dotCount))
+            .font(.custom("Inter-SemiBold", size: 14))
+            .foregroundColor(Color(hex: "#666666"))
+            .onAppear {
+                // Cycle through 1, 2, 3 dots every 0.5 seconds
+                timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        dotCount = (dotCount % 3) + 1
+                    }
+                }
+            }
+            .onDisappear {
+                timer?.invalidate()
+                timer = nil
+            }
     }
 }
 
