@@ -120,7 +120,38 @@ class HintSearchCoordinator: ObservableObject {
         var newlyIngested = 0
         var aiCost: Double? = nil
         
-        if enableAI, let hints = searchHints, hints.hasHints {
+        // Determine search type and value from hints for cache checking
+        var searchType: String? = nil
+        var searchValue: String? = nil
+        
+        if let hints = searchHints {
+            if let director = hints.director {
+                searchType = "director"
+                searchValue = director
+            } else if let actor = hints.actors.first {
+                searchType = "actor"
+                searchValue = actor
+            }
+        }
+        
+        // Check if we've done this comprehensive search recently
+        var shouldCallAI = true
+        if let type = searchType, let value = searchValue {
+            do {
+                let hasRecent = try await SupabaseService.shared.hasRecentComprehensiveSearch(type: type, value: value)
+                if hasRecent {
+                    print("⏭️ [HintSearch] Skipping AI - recent comprehensive search exists for \(type): \(value)")
+                    shouldCallAI = false
+                } else {
+                    print("✅ [HintSearch] Cache MISS - will call AI for \(type): \(value)")
+                }
+            } catch {
+                print("⚠️ [HintSearch] Error checking comprehensive search cache: \(error)")
+                // Continue with AI on error
+            }
+        }
+        
+        if shouldCallAI && enableAI, let hints = searchHints, hints.hasHints {
             isAISearching = true
             progress = .searchingAI
             
@@ -164,6 +195,18 @@ class HintSearchCoordinator: ObservableObject {
                     newlyIngested = successCount
                     
                     progress = .aiComplete(count: aiResponse.movies.count, newCount: successCount)
+                    
+                    // Save comprehensive search to cache after successful verification
+                    if let type = searchType, let value = searchValue {
+                        let tmdbIds = ingestedResults.map { String($0.tmdbId) }
+                        do {
+                            try await SupabaseService.shared.saveComprehensiveSearch(type: type, value: value, tmdbIds: tmdbIds)
+                            print("💾 [HintSearch] Saved comprehensive search: \(type)=\(value), \(tmdbIds.count) movies")
+                        } catch {
+                            print("⚠️ [HintSearch] Failed to save comprehensive search: \(error)")
+                            // Don't fail the search if cache save fails
+                        }
+                    }
                 } else {
                     // AI found movies but they're all in local DB already
                     aiMovies = aiResponse.movies.compactMap { suggestion in
@@ -183,6 +226,18 @@ class HintSearchCoordinator: ObservableObject {
                     // Update results with AI-discovered movies (already in DB)
                     let merged = mergeResults(local: localMovies, ai: aiMovies)
                     onProgress?(merged)
+                    
+                    // Save comprehensive search to cache even if all movies were already in DB
+                    if let type = searchType, let value = searchValue {
+                        let tmdbIds = aiMovies.map { String($0.tmdbId) }
+                        do {
+                            try await SupabaseService.shared.saveComprehensiveSearch(type: type, value: value, tmdbIds: tmdbIds)
+                            print("💾 [HintSearch] Saved comprehensive search: \(type)=\(value), \(tmdbIds.count) movies")
+                        } catch {
+                            print("⚠️ [HintSearch] Failed to save comprehensive search: \(error)")
+                            // Don't fail the search if cache save fails
+                        }
+                    }
                 }
                 
             } catch {
@@ -219,104 +274,131 @@ class HintSearchCoordinator: ObservableObject {
     
     /// Search local Supabase database for movies matching hints
     private func searchLocal(query: String, hints: ExtractedMovieHints?) async throws -> [HintSearchResult] {
-        // For now, use the existing search infrastructure
-        // TODO: Add direct JSONB queries for cast/crew filtering
-        
         var results: [HintSearchResult] = []
         
-        // If we have a likely title, search for it
-        let searchQuery = hints?.titleLikely ?? query
-        
         do {
-            // Use existing search endpoint
-            let searchResults = try await SupabaseService.shared.searchMovies(query: searchQuery)
-            
-            // Filter by hints if present
-            for movie in searchResults {
-                var matchReason: String? = nil
-                
-                // For now, include all search results
-                // TODO: Filter by actor/director/year when we have that data in search results
-                if hints?.year != nil && movie.year == hints?.year {
-                    matchReason = "Year match"
-                }
-                
-                // Convert tmdbId from String to Int
-                guard let tmdbIdInt = Int(movie.tmdbId) else {
-                    #if DEBUG
-                    print("⚠️ [HintSearch] Skipping movie with invalid tmdbId: \(movie.tmdbId)")
-                    #endif
-                    continue
-                }
-                
-                results.append(HintSearchResult(
-                    tmdbId: tmdbIdInt,
-                    title: movie.title,
-                    year: movie.year,
-                    posterURL: movie.posterUrl,
-                    source: .local,
-                    matchReason: matchReason
-                ))
-            }
-            
-            // If we have actor/director hints, also search our local works_meta
-            if let hints = hints, !hints.actors.isEmpty {
-                let actorResults = try await searchByActor(actors: hints.actors, titleHint: hints.titleLikely)
-                
-                // Add any results not already in the list
-                let existingIds = Set(results.map { $0.tmdbId })
-                for result in actorResults {
-                    if !existingIds.contains(result.tmdbId) {
-                        results.append(result)
-                    }
-                }
-            }
-            
+            // Priority 1: If we have director hint, search by director first
             if let director = hints?.director {
-                let directorResults = try await searchByDirector(director: director)
+                #if DEBUG
+                print("🎬 [HintSearch] Searching by director: \(director)")
+                #endif
+                
+                let directorResults = try await SupabaseService.shared.searchMoviesByDirector(director)
+                
+                for movie in directorResults {
+                    // Convert tmdbId from String to Int
+                    guard let tmdbIdInt = Int(movie.tmdbId) else {
+                        #if DEBUG
+                        print("⚠️ [HintSearch] Skipping movie with invalid tmdbId: \(movie.tmdbId)")
+                        #endif
+                        continue
+                    }
+                    
+                    var matchReason: String? = "Director match"
+                    if hints?.year != nil && movie.year == hints?.year {
+                        matchReason = "Director + year match"
+                    }
+                    
+                    results.append(HintSearchResult(
+                        tmdbId: tmdbIdInt,
+                        title: movie.title,
+                        year: movie.year,
+                        posterURL: movie.posterUrl,
+                        source: .local,
+                        matchReason: matchReason
+                    ))
+                }
+                
+                #if DEBUG
+                print("🎬 [HintSearch] Found \(results.count) movies by director \(director)")
+                #endif
+            }
+            
+            // Priority 2: If we have actor hint (and no director), search by actor
+            if let hints = hints, !hints.actors.isEmpty, hints.director == nil {
+                #if DEBUG
+                print("🎬 [HintSearch] Searching by actor: \(hints.actors.first!)")
+                #endif
+                
+                // Search by first actor (most specific)
+                let actorResults = try await SupabaseService.shared.searchMoviesByActor(hints.actors.first!)
                 
                 let existingIds = Set(results.map { $0.tmdbId })
-                for result in directorResults {
-                    if !existingIds.contains(result.tmdbId) {
-                        results.append(result)
+                for movie in actorResults {
+                    // Skip if already added from director search
+                    guard let tmdbIdInt = Int(movie.tmdbId), !existingIds.contains(tmdbIdInt) else {
+                        continue
                     }
+                    
+                    var matchReason: String? = "Actor match"
+                    if hints.year != nil && movie.year == hints.year {
+                        matchReason = "Actor + year match"
+                    }
+                    
+                    results.append(HintSearchResult(
+                        tmdbId: tmdbIdInt,
+                        title: movie.title,
+                        year: movie.year,
+                        posterURL: movie.posterUrl,
+                        source: .local,
+                        matchReason: matchReason
+                    ))
                 }
+                
+                #if DEBUG
+                print("🎬 [HintSearch] Found \(actorResults.count) movies with actor \(hints.actors.first!)")
+                #endif
+            }
+            
+            // Priority 3: If no director/actor hints, do text search
+            if hints?.director == nil && (hints?.actors.isEmpty ?? true) {
+                let searchQuery = hints?.titleLikely ?? query
+                
+                #if DEBUG
+                print("🔍 [HintSearch] Text search for: \(searchQuery)")
+                #endif
+                
+                let searchResults = try await SupabaseService.shared.searchMovies(query: searchQuery)
+                
+                for movie in searchResults {
+                    // Convert tmdbId from String to Int
+                    guard let tmdbIdInt = Int(movie.tmdbId) else {
+                        #if DEBUG
+                        print("⚠️ [HintSearch] Skipping movie with invalid tmdbId: \(movie.tmdbId)")
+                        #endif
+                        continue
+                    }
+                    
+                    var matchReason: String? = nil
+                    if hints?.year != nil && movie.year == hints?.year {
+                        matchReason = "Year match"
+                    }
+                    
+                    results.append(HintSearchResult(
+                        tmdbId: tmdbIdInt,
+                        title: movie.title,
+                        year: movie.year,
+                        posterURL: movie.posterUrl,
+                        source: .local,
+                        matchReason: matchReason
+                    ))
+                }
+                
+                #if DEBUG
+                print("🔍 [HintSearch] Text search found \(searchResults.count) movies")
+                #endif
             }
             
         } catch {
             #if DEBUG
             print("⚠️ [HintSearch] Local search error: \(error)")
             #endif
+            // Don't throw - return empty results on error
         }
         
         return results
     }
     
-    /// Search local database by actor name using JSONB query
-    private func searchByActor(actors: [String], titleHint: String?) async throws -> [HintSearchResult] {
-        // Build SQL query to search cast_members JSONB
-        // This queries works + works_meta tables
-        
-        // TODO: Implement direct JSONB query via SupabaseService.executeSQL()
-        // For now, we'll skip this and rely on AI discovery
-        
-        for actor in actors {
-            #if DEBUG
-            print("🔍 [HintSearch] Would search for actor: \(actor)")
-            #endif
-        }
-        
-        return []
-    }
-    
-    /// Search local database by director name
-    private func searchByDirector(director: String) async throws -> [HintSearchResult] {
-        // Similar to searchByActor but for crew_members where job = 'Director'
-        #if DEBUG
-        print("🔍 [HintSearch] Would search for director: \(director)")
-        #endif
-        return []
-    }
     
     // MARK: - TMDB ID Verification
     

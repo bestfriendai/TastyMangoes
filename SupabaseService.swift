@@ -1137,6 +1137,120 @@ class SupabaseService: ObservableObject {
             return try decoder.decode(MovieCard.self, from: data)
         }
     }
+    
+    // MARK: - Director/Actor Search
+    
+    /// Search work_cards_cache by director name using JSONB query
+    /// - Parameter director: Director name to search for
+    /// - Returns: Array of MovieSearchResult for movies by that director
+    func searchMoviesByDirector(_ director: String) async throws -> [MovieSearchResult] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Searching by director: \(director)")
+        #endif
+        
+        struct CacheEntry: Codable {
+            let work_id: Int
+            let payload: MovieCard
+        }
+        
+        // The Supabase Swift SDK doesn't support JSONB operators in filters directly
+        // So we fetch entries and filter in Swift using partial matching
+        // This allows searching "Scorsese" to match "Martin Scorsese"
+        let allEntries: [CacheEntry] = try await client
+            .from("work_cards_cache")
+            .select("work_id, payload")
+            .limit(500) // Reasonable limit - adjust based on your database size
+            .execute()
+            .value
+        
+        // Filter entries where director name contains the search term (case-insensitive, partial match)
+        // This handles cases like searching "Scorsese" matching "Martin Scorsese"
+        let entries = allEntries.filter { entry in
+            guard let directorName = entry.payload.director else { return false }
+            // Use localizedCaseInsensitiveContains for partial matching
+            // This is equivalent to SQL: WHERE payload->>'director' ILIKE '%Scorsese%'
+            return directorName.localizedCaseInsensitiveContains(director)
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Found \(entries.count) movies by director \(director)")
+        #endif
+        
+        // Convert to MovieSearchResult format
+        return entries.map { entry in
+            let card = entry.payload
+            return MovieSearchResult(
+                tmdbId: card.tmdbId,
+                title: card.title,
+                year: card.year,
+                posterUrl: card.poster?.medium,
+                overviewShort: card.overviewShort,
+                voteAverage: card.sourceScores?.tmdb?.score,
+                voteCount: card.sourceScores?.tmdb?.votes
+            )
+        }
+    }
+    
+    /// Search work_cards_cache by actor name
+    /// - Parameter actor: Actor name to search for
+    /// - Returns: Array of MovieSearchResult for movies with that actor
+    func searchMoviesByActor(_ actor: String) async throws -> [MovieSearchResult] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Searching by actor: \(actor)")
+        #endif
+        
+        struct CacheEntry: Codable {
+            let work_id: Int
+            let payload: MovieCard
+        }
+        
+        // For actor search, we need to check the cast array
+        // PostgREST doesn't easily support searching within JSONB arrays
+        // So we'll fetch a reasonable set and filter in Swift
+        // In production, consider creating a Supabase function for this
+        
+        // Fetch entries (limit to reasonable number for performance)
+        let allEntries: [CacheEntry] = try await client
+            .from("work_cards_cache")
+            .select("work_id, payload")
+            .limit(500) // Reasonable limit - adjust based on your database size
+            .execute()
+            .value
+        
+        // Filter entries where cast contains the actor name (case-insensitive)
+        let matchingEntries = allEntries.filter { entry in
+            guard let cast = entry.payload.cast else { return false }
+            return cast.contains { castMember in
+                castMember.name.localizedCaseInsensitiveContains(actor)
+            }
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Found \(matchingEntries.count) movies with actor \(actor) (searched \(allEntries.count) entries)")
+        #endif
+        
+        // Convert to MovieSearchResult format
+        return matchingEntries.map { entry in
+            let card = entry.payload
+            return MovieSearchResult(
+                tmdbId: card.tmdbId,
+                title: card.title,
+                year: card.year,
+                posterUrl: card.poster?.medium,
+                overviewShort: card.overviewShort,
+                voteAverage: card.sourceScores?.tmdb?.score,
+                voteCount: card.sourceScores?.tmdb?.votes
+            )
+        }
+    }
 }
 
 // MARK: - Helper for Dynamic JSON Decoding
