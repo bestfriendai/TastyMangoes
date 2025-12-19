@@ -763,6 +763,39 @@ struct SearchMovieCard: View {
     let movie: Movie
     @State private var showMoviePage = false
     
+    private let watchlistManager = WatchlistManager.shared
+    
+    // Check if movie is in any watchlist
+    private var isInWatchlist: Bool {
+        !watchlistManager.getListsForMovie(movieId: movie.id).isEmpty
+    }
+    
+    // Check if movie is watched
+    private var isWatched: Bool {
+        watchlistManager.isWatched(movieId: movie.id)
+    }
+    
+    // Calculate Tasty Score from aiScore (aiScore × 10, e.g., 71.6 → 716%)
+    // aiScore is on 0-100 scale, we want to show as percentage × 10
+    // So 71.6 becomes 7.16 (on 0-1 scale), which displays as 716% when multiplied by 100
+    private var tastyScore: Double? {
+        if let aiScore = movie.aiScore {
+            return aiScore / 10.0 // Convert 71.6 to 7.16 (0-1 scale), displays as 716%
+        }
+        return movie.tastyScore
+    }
+    
+    // Calculate Tasty Score percentage directly (aiScore × 10)
+    private var tastyScorePercentage: Int? {
+        if let aiScore = movie.aiScore {
+            return Int(aiScore * 10) // 71.6 → 716
+        }
+        if let tastyScore = movie.tastyScore {
+            return Int(tastyScore * 100) // Already on 0-1 scale
+        }
+        return nil
+    }
+    
     var body: some View {
         Button(action: {
             // Phase 2: Track movie selection if this was a voice search
@@ -775,51 +808,46 @@ struct SearchMovieCard: View {
                 // Poster
                 MoviePosterImage(
                     posterURL: movie.posterImageURL,
-                    width: 80,
-                    height: 120,
+                    width: 60,
+                    height: 90,
                     cornerRadius: 8
                 )
                 
-                // Content
-                VStack(alignment: .leading, spacing: 8) {
+                // Movie Info
+                VStack(alignment: .leading, spacing: 6) {
                     // Title
                     Text(movie.title)
                         .font(.custom("Nunito-Bold", size: 16))
                         .foregroundColor(Color(hex: "#1a1a1a"))
-                        .lineLimit(2)
+                        .lineLimit(1)
                     
-                    // Year, Genres, Runtime
-                    HStack(spacing: 4) {
-                        if movie.year > 0 {
-                            Text(String(movie.year))
-                            Text("·")
-                        }
-                        
-                        if !movie.genres.isEmpty {
-                            Text(movie.genres.prefix(2).joined(separator: "/"))
-                            if let runtime = movie.runtime, !runtime.isEmpty {
-                                Text("·")
-                                Text(runtime)
-                            }
-                        } else if let runtime = movie.runtime, !runtime.isEmpty {
-                            Text(runtime)
-                        }
+                    // Year, Genre, Runtime
+                    let genresText = movie.genres.isEmpty ? "" : movie.genres.joined(separator: "/")
+                    let runtimeText = movie.runtime ?? ""
+                    let metadataParts = [
+                        movie.year > 0 ? String(movie.year) : nil,
+                        genresText.isEmpty ? nil : genresText,
+                        runtimeText.isEmpty ? nil : runtimeText
+                    ].compactMap { $0 }
+                    
+                    if !metadataParts.isEmpty {
+                        Text(metadataParts.joined(separator: " · "))
+                            .font(.custom("Inter-Regular", size: 12))
+                            .foregroundColor(Color(hex: "#666666"))
+                            .lineLimit(1)
                     }
-                    .font(.custom("Inter-Regular", size: 12))
-                    .foregroundColor(Color(hex: "#666666"))
                     
-                    // Scores
+                    // Scores and Friends
                     HStack(spacing: 12) {
-                        // Tasty Score
-                        if let tastyScore = movie.tastyScore {
+                        // Tasty Score (use aiScore × 10 if available)
+                        if let tastyScorePercent = tastyScorePercentage {
                             HStack(spacing: 4) {
                                 Image("TastyScoreIcon")
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
-                                    .frame(width: 12, height: 12)
-                                
-                                Text("\(Int(tastyScore * 100))%")
-                                    .font(.custom("Inter-SemiBold", size: 14))
+                                    .frame(width: 14, height: 14)
+                                Text("\(tastyScorePercent)%")
+                                    .font(.custom("Inter-SemiBold", size: 12))
                                     .foregroundColor(Color(hex: "#1a1a1a"))
                             }
                         }
@@ -829,62 +857,70 @@ struct SearchMovieCard: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "star.fill")
                                     .font(.system(size: 12))
-                                    .foregroundColor(Color(hex: "#FFD60A"))
-                                
+                                    .foregroundColor(Color(hex: "#FEA500"))
                                 Text(String(format: "%.1f", aiScore))
-                                    .font(.custom("Inter-SemiBold", size: 14))
+                                    .font(.custom("Inter-SemiBold", size: 12))
                                     .foregroundColor(Color(hex: "#1a1a1a"))
                             }
                         }
-                    }
-                    
-                    // Watch on and Liked by (placeholder avatars)
-                    HStack(spacing: 16) {
-                        // Watch on
-                        HStack(spacing: 4) {
-                            Text("Watch on:")
-                                .font(.custom("Inter-Regular", size: 12))
-                                .foregroundColor(Color(hex: "#666666"))
-                            
-                            HStack(spacing: -4) {
-                                ForEach(0..<3, id: \.self) { _ in
-                                    Circle()
-                                        .fill(Color(hex: "#E0E0E0"))
-                                        .frame(width: 20, height: 20)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 1)
-                                        )
-                                }
-                            }
-                        }
                         
-                        // Liked by
+                        // Friends (placeholder)
                         HStack(spacing: 4) {
-                            Text("Liked by:")
+                            Image(systemName: "hand.thumbsup.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color(hex: "#666666"))
+                            Text("0 friends")
                                 .font(.custom("Inter-Regular", size: 12))
                                 .foregroundColor(Color(hex: "#666666"))
-                            
-                            HStack(spacing: -4) {
-                                ForEach(0..<3, id: \.self) { _ in
-                                    Circle()
-                                        .fill(Color(hex: "#E0E0E0"))
-                                        .frame(width: 20, height: 20)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: 1)
-                                        )
-                                }
-                            }
                         }
                     }
                     
-                    Spacer()
+                    // Recommendation Indicator (if available)
+                    if let recommendation = watchlistManager.getRecommendationData(movieId: movie.id),
+                       let recommender = recommendation.recommenderName {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "#666666"))
+                            
+                            Text("Recommended by \(recommender)")
+                                .font(.custom("Inter-Regular", size: 12))
+                                .foregroundColor(Color(hex: "#666666"))
+                        }
+                        .padding(.top, 2)
+                    }
                 }
                 
                 Spacer()
+                
+                // Action Buttons
+                HStack(spacing: 8) {
+                    // Watched indicator (checkmark if watched)
+                    if isWatched {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color(hex: "#648d00"))
+                    }
+                    
+                    // Green checkmark if in any watchlist
+                    if isInWatchlist {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color(hex: "#648d00"))
+                    }
+                    
+                    // Menu
+                    Button(action: {
+                        // Show menu
+                    }) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color(hex: "#666666"))
+                    }
+                }
             }
-            .padding(12)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
             .background(Color.white)
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)

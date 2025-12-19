@@ -22,6 +22,9 @@ struct HintSearchResult: Identifiable {
     let posterURL: String?
     let source: ResultSource
     let matchReason: String?
+    let genres: [String]?
+    let runtimeDisplay: String?
+    let aiScore: Double?
     
     var id: Int { tmdbId }
     
@@ -217,7 +220,10 @@ class HintSearchCoordinator: ObservableObject {
                             year: suggestion.year,
                             posterURL: nil,
                             source: .aiDiscovered,
-                            matchReason: suggestion.reason
+                            matchReason: suggestion.reason,
+                            genres: nil,
+                            runtimeDisplay: nil,
+                            aiScore: nil
                         )
                     }
                     progress = .aiComplete(count: aiMovies.count, newCount: 0)
@@ -305,7 +311,10 @@ class HintSearchCoordinator: ObservableObject {
                         year: movie.year,
                         posterURL: movie.posterUrl,
                         source: .local,
-                        matchReason: matchReason
+                        matchReason: matchReason,
+                        genres: movie.genres,
+                        runtimeDisplay: movie.runtimeDisplay,
+                        aiScore: movie.aiScore
                     ))
                 }
                 
@@ -341,7 +350,10 @@ class HintSearchCoordinator: ObservableObject {
                         year: movie.year,
                         posterURL: movie.posterUrl,
                         source: .local,
-                        matchReason: matchReason
+                        matchReason: matchReason,
+                        genres: movie.genres,
+                        runtimeDisplay: movie.runtimeDisplay,
+                        aiScore: movie.aiScore
                     ))
                 }
                 
@@ -380,7 +392,10 @@ class HintSearchCoordinator: ObservableObject {
                         year: movie.year,
                         posterURL: movie.posterUrl,
                         source: .local,
-                        matchReason: matchReason
+                        matchReason: matchReason,
+                        genres: movie.genres,
+                        runtimeDisplay: movie.runtimeDisplay,
+                        aiScore: movie.aiScore
                     ))
                 }
                 
@@ -509,7 +524,10 @@ class HintSearchCoordinator: ObservableObject {
                         year: suggestion.year,
                         posterURL: nil,
                         source: .aiDiscovered,
-                        matchReason: suggestion.reason
+                        matchReason: suggestion.reason,
+                        genres: nil,
+                        runtimeDisplay: nil,
+                        aiScore: nil
                     )
                     results.append(result)
                     // Call progress callback with updated results
@@ -541,7 +559,10 @@ class HintSearchCoordinator: ObservableObject {
                     year: card?.year ?? suggestion.year,
                     posterURL: posterURLString,
                     source: .aiIngested,
-                    matchReason: suggestion.reason
+                    matchReason: suggestion.reason,
+                    genres: card?.genres,
+                    runtimeDisplay: card?.runtimeDisplay,
+                    aiScore: card?.aiScore
                 )
                 results.append(result)
                 successCount += 1
@@ -565,7 +586,10 @@ class HintSearchCoordinator: ObservableObject {
                     year: suggestion.year,
                     posterURL: nil,
                     source: .aiDiscovered,
-                    matchReason: suggestion.reason
+                    matchReason: suggestion.reason,
+                    genres: nil,
+                    runtimeDisplay: nil,
+                    aiScore: nil
                 )
                 results.append(result)
                 // Call progress callback even for failed ingestion

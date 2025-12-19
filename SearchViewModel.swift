@@ -255,15 +255,15 @@ class SearchViewModel: ObservableObject {
                     trailerURL: nil,
                     trailerDuration: nil,
                     posterImageURL: result.posterUrl,
-                    tastyScore: nil,
-                    aiScore: result.voteAverage,
-                    genres: [],
+                    tastyScore: nil, // Will be calculated from aiScore in SearchMovieCard
+                    aiScore: result.aiScore ?? result.voteAverage, // Prefer aiScore, fallback to voteAverage
+                    genres: result.genres ?? [],
                     rating: nil,
                     director: nil,
                     writer: nil,
                     screenplay: nil,
                     composer: nil,
-                    runtime: nil,
+                    runtime: result.runtimeDisplay,
                     releaseDate: nil,
                     language: nil,
                     overview: result.overviewShort

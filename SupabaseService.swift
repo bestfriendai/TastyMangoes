@@ -1181,7 +1181,7 @@ class SupabaseService: ObservableObject {
         #endif
         
         // Convert to MovieSearchResult format
-        return entries.map { entry in
+        var results = entries.map { entry in
             let card = entry.payload
             return MovieSearchResult(
                 tmdbId: card.tmdbId,
@@ -1190,9 +1190,17 @@ class SupabaseService: ObservableObject {
                 posterUrl: card.poster?.medium,
                 overviewShort: card.overviewShort,
                 voteAverage: card.sourceScores?.tmdb?.score,
-                voteCount: card.sourceScores?.tmdb?.votes
+                voteCount: card.sourceScores?.tmdb?.votes,
+                genres: card.genres,
+                runtimeDisplay: card.runtimeDisplay,
+                aiScore: card.aiScore
             )
         }
+        
+        // Sort by aiScore descending (highest rated first)
+        results.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+        
+        return results
     }
     
     /// Search work_cards_cache by actor name
@@ -1238,7 +1246,7 @@ class SupabaseService: ObservableObject {
         #endif
         
         // Convert to MovieSearchResult format
-        return matchingEntries.map { entry in
+        var results = matchingEntries.map { entry in
             let card = entry.payload
             return MovieSearchResult(
                 tmdbId: card.tmdbId,
@@ -1247,9 +1255,17 @@ class SupabaseService: ObservableObject {
                 posterUrl: card.poster?.medium,
                 overviewShort: card.overviewShort,
                 voteAverage: card.sourceScores?.tmdb?.score,
-                voteCount: card.sourceScores?.tmdb?.votes
+                voteCount: card.sourceScores?.tmdb?.votes,
+                genres: card.genres,
+                runtimeDisplay: card.runtimeDisplay,
+                aiScore: card.aiScore
             )
         }
+        
+        // Sort by aiScore descending (highest rated first)
+        results.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+        
+        return results
     }
 }
 

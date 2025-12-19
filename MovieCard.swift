@@ -148,6 +148,9 @@ struct MovieSearchResult: Codable, Identifiable {
     let overviewShort: String?
     let voteAverage: Double?
     let voteCount: Int?
+    let genres: [String]?
+    let runtimeDisplay: String?
+    let aiScore: Double?
     
     var id: String { tmdbId }
     
@@ -159,6 +162,9 @@ struct MovieSearchResult: Codable, Identifiable {
         case overviewShort = "overview_short"
         case voteAverage = "vote_average"
         case voteCount = "vote_count"
+        case genres
+        case runtimeDisplay = "runtime_display"
+        case aiScore = "ai_score"
     }
 }
 
