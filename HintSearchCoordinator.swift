@@ -91,6 +91,14 @@ class HintSearchCoordinator: ObservableObject {
         onProgress: (([HintSearchResult]) -> Void)? = nil
     ) async throws -> HintSearchResponse {
         
+        // Clear previous results immediately when starting new search
+        await MainActor.run {
+            allResults = []
+            localResults = []
+            // Clear results in SearchViewModel if we have access to it
+            onProgress?([])
+        }
+        
         isSearching = true
         progress = .searchingLocal
         verificationProgress = nil

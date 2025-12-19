@@ -93,7 +93,13 @@ struct SearchView: View {
     // Extract bottom button to help compiler
     @ViewBuilder
     private var bottomButton: some View {
-        if totalSelections > 0 || !viewModel.searchQuery.isEmpty {
+        // Hide button when there are search results or when searching is in progress
+        let shouldShowButton = (totalSelections > 0 || !viewModel.searchQuery.isEmpty) 
+            && viewModel.searchResults.isEmpty 
+            && !hintSearchCoordinator.isSearching
+            && !hintSearchCoordinator.isAISearching
+        
+        if shouldShowButton {
             VStack(spacing: 0) {
                 let buttonText = totalSelections > 0
                     ? "Start Searching (\(totalSelections))"
@@ -248,6 +254,9 @@ struct SearchView: View {
         isSearchFocused = false  // Added by Claude - dismiss keyboard
         // Wire up NAVIGATE connection: Search button → Category Results View
         // Navigate to results view with selected filters
+        // NOTE: CategoryResultsView makes a separate API call and doesn't share SearchViewModel.shared.searchResults
+        // This can cause "No movies found" to appear briefly until the API call completes
+        // Consider refactoring CategoryResultsView to use SearchViewModel.shared.searchResults if query matches
         navigateToResults = true
     }
     
@@ -636,19 +645,32 @@ struct SearchView: View {
                         HStack {
                             // Show count based on whether we have search results or just filters
                             if !viewModel.searchResults.isEmpty {
-                                // Show animated indicator if hint search is in progress
-                                if hintSearchCoordinator.isSearching || hintSearchCoordinator.isAISearching {
-                                    HStack(spacing: 0) {
-                                        Text("\(viewModel.searchResults.count) results")
+                                VStack(alignment: .leading, spacing: 4) {
+                                    // Show animated indicator if hint search is in progress
+                                    if hintSearchCoordinator.isSearching || hintSearchCoordinator.isAISearching {
+                                        HStack(spacing: 0) {
+                                            Text("\(viewModel.searchResults.count) results")
+                                                .font(.custom("Inter-SemiBold", size: 14))
+                                                .foregroundColor(Color(hex: "#666666"))
+                                            
+                                            AnimatedEllipsisView()
+                                        }
+                                        
+                                        // Show verification progress if available
+                                        if let progress = hintSearchCoordinator.verificationProgress {
+                                            Text("Verifying \(progress.current) of \(progress.total)...")
+                                                .font(.custom("Inter-Regular", size: 12))
+                                                .foregroundColor(Color(hex: "#999999"))
+                                        } else if hintSearchCoordinator.isAISearching {
+                                            Text("Loading more results...")
+                                                .font(.custom("Inter-Regular", size: 12))
+                                                .foregroundColor(Color(hex: "#999999"))
+                                        }
+                                    } else {
+                                        Text("\(viewModel.searchResults.count) results found")
                                             .font(.custom("Inter-SemiBold", size: 14))
                                             .foregroundColor(Color(hex: "#666666"))
-                                        
-                                        AnimatedEllipsisView()
                                     }
-                                } else {
-                                    Text("\(viewModel.searchResults.count) results found")
-                                        .font(.custom("Inter-SemiBold", size: 14))
-                                        .foregroundColor(Color(hex: "#666666"))
                                 }
                             } else if filterState.hasActiveFilters {
                                 Text("0 results found")

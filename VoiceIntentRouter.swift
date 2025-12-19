@@ -472,6 +472,7 @@ enum VoiceIntentRouter {
             // Set flag to prevent debounced search from overwriting these results
             viewModel.skipNextSearch = true
             viewModel.searchQuery = moviePhrase
+            // Clear previous results immediately when starting new search
             viewModel.searchResults = []
             viewModel.hasSearched = true
             viewModel.isSearching = true

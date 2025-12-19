@@ -195,6 +195,9 @@ class SearchViewModel: ObservableObject {
         isSearchInFlight = true
         defer { isSearchInFlight = false }
         
+        // Clear previous results immediately when starting new search
+        searchResults = []
+        
         error = nil
         showSuggestions = false
         
