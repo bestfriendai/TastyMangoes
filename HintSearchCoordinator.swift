@@ -411,6 +411,9 @@ class HintSearchCoordinator: ObservableObject {
             // Don't throw - return empty results on error
         }
         
+        // Sort by AI score descending (highest rated first)
+        results.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+        
         return results
     }
     
@@ -623,18 +626,8 @@ class HintSearchCoordinator: ObservableObject {
             }
         }
         
-        // Sort: local first, then by year descending
-        merged.sort { result1, result2 in
-            // Local results come first
-            if result1.source == .local && result2.source != .local {
-                return true
-            }
-            if result1.source != .local && result2.source == .local {
-                return false
-            }
-            // Then sort by year (newest first)
-            return (result1.year ?? 0) > (result2.year ?? 0)
-        }
+        // Sort by AI score descending (highest rated first)
+        merged.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
         
         return merged
     }
