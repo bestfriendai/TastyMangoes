@@ -440,19 +440,9 @@ enum VoiceIntentRouter {
         // Convert ExtractedHints to ExtractedMovieHints for coordinator
         let hints = ExtractedMovieHints(from: extractedHints)
         
-        do {
-            // Call HintSearchCoordinator for local + AI search
-            // Swift automatically handles MainActor hop for async method calls
-            let response = try await HintSearchCoordinator.shared.search(query: query, hints: hints, enableAI: true)
-            
-            let localCount = response.localResults.count
-            let totalCount = response.allResults.count
-            let newlyIngested = response.newlyIngested
-            
-            print("🎬 [Phase3] Search complete: \(localCount) local, \(totalCount) total, \(newlyIngested) newly ingested")
-            
-            // Convert HintSearchResults to Movies for SearchViewModel
-            let movies = response.allResults.map { result in
+        // Helper function to convert HintSearchResult to Movie
+        let convertToMovies: ([HintSearchResult]) -> [Movie] = { results in
+            return results.map { result in
                 Movie(
                     id: String(result.tmdbId),
                     title: result.title,
@@ -474,22 +464,57 @@ enum VoiceIntentRouter {
                     overview: result.matchReason
                 )
             }
+        }
+        
+        // Initialize SearchViewModel state before search starts
+        await MainActor.run {
+            let viewModel = SearchViewModel.shared
+            // Set flag to prevent debounced search from overwriting these results
+            viewModel.skipNextSearch = true
+            viewModel.searchQuery = moviePhrase
+            viewModel.searchResults = []
+            viewModel.hasSearched = true
+            viewModel.isSearching = true
+            viewModel.isMangoInitiatedSearch = true
             
-            // Update SearchViewModel with results
+            // Store voice event ID for selection tracking
+            SearchFilterState.shared.pendingVoiceEventId = eventId
+            SearchFilterState.shared.pendingVoiceUtterance = query
+            SearchFilterState.shared.pendingVoiceCommand = finalCommand
+        }
+        
+        do {
+            // Call HintSearchCoordinator with progressive callback
+            let response = try await HintSearchCoordinator.shared.search(
+                query: query,
+                hints: hints,
+                enableAI: true,
+                onProgress: { incrementalResults in
+                    // Update SearchViewModel incrementally on MainActor
+                    Task { @MainActor in
+                        let viewModel = SearchViewModel.shared
+                        let movies = convertToMovies(incrementalResults)
+                        viewModel.searchResults = movies
+                        
+                        #if DEBUG
+                        print("🎬 [Phase3] Progressive update: \(incrementalResults.count) results")
+                        #endif
+                    }
+                }
+            )
+            
+            let localCount = response.localResults.count
+            let totalCount = response.allResults.count
+            let newlyIngested = response.newlyIngested
+            
+            print("🎬 [Phase3] Search complete: \(localCount) local, \(totalCount) total, \(newlyIngested) newly ingested")
+            
+            // Final update to ensure SearchViewModel has complete results
             await MainActor.run {
                 let viewModel = SearchViewModel.shared
-                // Set flag to prevent debounced search from overwriting these results
-                viewModel.skipNextSearch = true
-                viewModel.searchQuery = moviePhrase
+                let movies = convertToMovies(response.allResults)
                 viewModel.searchResults = movies
-                viewModel.hasSearched = true
                 viewModel.isSearching = false
-                viewModel.isMangoInitiatedSearch = true
-                
-                // Store voice event ID for selection tracking
-                SearchFilterState.shared.pendingVoiceEventId = eventId
-                SearchFilterState.shared.pendingVoiceUtterance = query
-                SearchFilterState.shared.pendingVoiceCommand = finalCommand
                 
                 // Speak results summary
                 if totalCount == 0 {

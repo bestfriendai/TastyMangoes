@@ -65,6 +65,8 @@ class HintSearchCoordinator: ObservableObject {
     @Published var localResults: [HintSearchResult] = []
     @Published var allResults: [HintSearchResult] = []
     @Published var isSearching = false
+    @Published var isAISearching = false
+    @Published var verificationProgress: (current: Int, total: Int)? = nil
     
     private let tmdbService = TMDBService.shared
     
@@ -77,15 +79,18 @@ class HintSearchCoordinator: ObservableObject {
     ///   - query: The raw user query/utterance
     ///   - hints: Pre-extracted hints (optional, will extract if nil)
     ///   - enableAI: Whether to use AI discovery (default true)
+    ///   - onProgress: Optional callback that receives incremental result updates
     /// - Returns: Complete search response with all results
     func search(
         query: String,
         hints: ExtractedMovieHints? = nil,
-        enableAI: Bool = true
+        enableAI: Bool = true,
+        onProgress: (([HintSearchResult]) -> Void)? = nil
     ) async throws -> HintSearchResponse {
         
         isSearching = true
         progress = .searchingLocal
+        verificationProgress = nil
         
         // Step 1: Extract hints if not provided
         let searchHints = hints ?? extractHints(from: query)
@@ -103,6 +108,9 @@ class HintSearchCoordinator: ObservableObject {
         allResults = localMovies
         progress = .localComplete(count: localMovies.count)
         
+        // Immediately call progress callback with local results
+        onProgress?(localMovies)
+        
         #if DEBUG
         print("🔍 [HintSearch] Local results: \(localMovies.count)")
         #endif
@@ -113,6 +121,7 @@ class HintSearchCoordinator: ObservableObject {
         var aiCost: Double? = nil
         
         if enableAI, let hints = searchHints, hints.hasHints {
+            isAISearching = true
             progress = .searchingAI
             
             do {
@@ -140,9 +149,17 @@ class HintSearchCoordinator: ObservableObject {
                 print("🤖 [HintSearch] New movies to verify and ingest: \(newAIMovies.count)")
                 #endif
                 
-                // Step 5: Verify TMDB IDs and ingest new movies
+                // Step 5: Verify TMDB IDs and ingest new movies with progressive updates
                 if !newAIMovies.isEmpty {
-                    let (ingestedResults, successCount) = await verifyAndIngestMovies(newAIMovies)
+                    let (ingestedResults, successCount) = await verifyAndIngestMovies(
+                        newAIMovies,
+                        onProgress: { [weak self] incrementalResults in
+                            guard let self = self else { return }
+                            // Merge local + incremental AI results and call callback
+                            let merged = self.mergeResults(local: localMovies, ai: incrementalResults)
+                            onProgress?(merged)
+                        }
+                    )
                     aiMovies = ingestedResults
                     newlyIngested = successCount
                     
@@ -161,6 +178,11 @@ class HintSearchCoordinator: ObservableObject {
                         )
                     }
                     progress = .aiComplete(count: aiMovies.count, newCount: 0)
+                    verificationProgress = nil
+                    
+                    // Update results with AI-discovered movies (already in DB)
+                    let merged = mergeResults(local: localMovies, ai: aiMovies)
+                    onProgress?(merged)
                 }
                 
             } catch {
@@ -168,15 +190,19 @@ class HintSearchCoordinator: ObservableObject {
                 print("⚠️ [HintSearch] AI discovery failed: \(error)")
                 #endif
                 // Don't fail the whole search if AI fails
+                verificationProgress = nil
             }
+            
+            isAISearching = false
         }
         
-        // Step 5: Merge and deduplicate results
+        // Step 6: Merge and deduplicate results
         let merged = mergeResults(local: localMovies, ai: aiMovies)
         allResults = merged
         
         progress = .complete
         isSearching = false
+        verificationProgress = nil
         
         return HintSearchResponse(
             query: query,
@@ -368,12 +394,20 @@ class HintSearchCoordinator: ObservableObject {
     
     /// Verify TMDB IDs and ingest multiple movies from AI suggestions
     /// AI-provided TMDB IDs are NOT trusted - we search TMDB by title+year to get correct IDs
-    private func verifyAndIngestMovies(_ suggestions: [AIMovieSuggestion]) async -> (results: [HintSearchResult], successCount: Int) {
+    /// - Parameters:
+    ///   - suggestions: AI movie suggestions to verify and ingest
+    ///   - onProgress: Optional callback that receives incremental results as each movie is processed
+    /// - Returns: Tuple of (results, successCount)
+    private func verifyAndIngestMovies(
+        _ suggestions: [AIMovieSuggestion],
+        onProgress: (([HintSearchResult]) -> Void)? = nil
+    ) async -> (results: [HintSearchResult], successCount: Int) {
         var results: [HintSearchResult] = []
         var successCount = 0
         
         for (index, suggestion) in suggestions.enumerated() {
             progress = .ingesting(current: index + 1, total: suggestions.count)
+            verificationProgress = (current: index + 1, total: suggestions.count)
             
             #if DEBUG
             print("🔍 [HintSearch] Verifying TMDB ID for: \(suggestion.title) (\(suggestion.year ?? 0)) - AI said: \(suggestion.tmdbId ?? -1)")
@@ -387,14 +421,17 @@ class HintSearchCoordinator: ObservableObject {
                 
                 // Still add to results as AI-discovered (without ingestion)
                 if let aiTmdbId = suggestion.tmdbId {
-                    results.append(HintSearchResult(
+                    let result = HintSearchResult(
                         tmdbId: aiTmdbId,
                         title: suggestion.title,
                         year: suggestion.year,
                         posterURL: nil,
                         source: .aiDiscovered,
                         matchReason: suggestion.reason
-                    ))
+                    )
+                    results.append(result)
+                    // Call progress callback with updated results
+                    onProgress?(results)
                 }
                 continue
             }
@@ -416,16 +453,19 @@ class HintSearchCoordinator: ObservableObject {
                 // Extract poster URL from PosterUrls struct (use medium size)
                 let posterURLString = card?.poster?.medium ?? card?.poster?.small ?? card?.poster?.large
                 
-                results.append(HintSearchResult(
+                let result = HintSearchResult(
                     tmdbId: verifiedTmdbId,
                     title: card?.title ?? suggestion.title,  // Use title from TMDB if available
                     year: card?.year ?? suggestion.year,
                     posterURL: posterURLString,
                     source: .aiIngested,
                     matchReason: suggestion.reason
-                ))
-                
+                )
+                results.append(result)
                 successCount += 1
+                
+                // Call progress callback with updated results after each successful ingestion
+                onProgress?(results)
                 
                 #if DEBUG
                 print("✅ [HintSearch] Ingested: \(card?.title ?? suggestion.title) (\(card?.year ?? suggestion.year ?? 0)) [TMDB: \(verifiedTmdbId)]")
@@ -437,16 +477,22 @@ class HintSearchCoordinator: ObservableObject {
                 #endif
                 
                 // Still add to results as AI-discovered (will ingest when user views)
-                results.append(HintSearchResult(
+                let result = HintSearchResult(
                     tmdbId: verifiedTmdbId,
                     title: suggestion.title,
                     year: suggestion.year,
                     posterURL: nil,
                     source: .aiDiscovered,
                     matchReason: suggestion.reason
-                ))
+                )
+                results.append(result)
+                // Call progress callback even for failed ingestion
+                onProgress?(results)
             }
         }
+        
+        // Reset verification progress when done
+        verificationProgress = nil
         
         return (results, successCount)
     }

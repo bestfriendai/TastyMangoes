@@ -178,23 +178,15 @@ class WatchlistManager: ObservableObject {
     }
     
     /// Toggle watched status
-    func toggleWatched(movieId: String, movieTitle: String? = nil) {
+    func toggleWatched(movieId: String) {
         let currentStatus = isWatched(movieId: movieId)
-        let newStatus = !currentStatus
-        watchedMovies[movieId] = newStatus
+        watchedMovies[movieId] = !currentStatus
         // Notify observers that watched status changed
         NotificationCenter.default.post(name: Notification.Name("WatchlistManagerDidUpdate"), object: nil)
         
         // Sync to Supabase
         Task {
-            await syncWatchedStatusToSupabase(movieId: movieId, watched: newStatus)
-            
-            // Log analytics after successful sync
-            if newStatus {
-                AnalyticsService.shared.logMarkWatched(movieId: movieId, movieTitle: movieTitle ?? "unknown")
-            } else {
-                AnalyticsService.shared.logUnmarkWatched(movieId: movieId, movieTitle: movieTitle ?? "unknown")
-            }
+            await syncWatchedStatusToSupabase(movieId: movieId, watched: !currentStatus)
         }
     }
     

@@ -30,6 +30,7 @@ struct SearchView: View {
     @ObservedObject private var viewModel = SearchViewModel.shared
     // Use @ObservedObject for singleton to avoid recreating state
     @ObservedObject private var filterState = SearchFilterState.shared
+    @ObservedObject private var hintSearchCoordinator = HintSearchCoordinator.shared
     @StateObject private var speechRecognizer = SpeechRecognizer()
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
@@ -53,10 +54,10 @@ struct SearchView: View {
         } else if !viewModel.searchResults.isEmpty {
             ZStack {
                 resultsListView
-                if viewModel.isSearching {
-                    VStack {
-                        HStack {
-                            Spacer()
+                VStack {
+                    HStack {
+                        Spacer()
+                        if viewModel.isSearching {
                             ProgressView()
                                 .padding(8)
                                 .background(Color.white.opacity(0.9))
@@ -64,9 +65,20 @@ struct SearchView: View {
                                 .shadow(radius: 2)
                                 .padding(.trailing, 20)
                                 .padding(.top, 8)
+                        } else if let progress = hintSearchCoordinator.verificationProgress {
+                            Text("Verifying \(progress.current) of \(progress.total)...")
+                                .font(.custom("Nunito-Regular", size: 14))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.9))
+                                .cornerRadius(8)
+                                .shadow(radius: 2)
+                                .padding(.trailing, 20)
+                                .padding(.top, 8)
                         }
-                        Spacer()
                     }
+                    Spacer()
                 }
             }
         } else if viewModel.isSearching {
@@ -869,7 +881,7 @@ struct SearchMovieCard: View {
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $showMoviePage) {
             NavigationStack {
-                MoviePageView(movieId: movie.id, source: "search")
+                MoviePageView(movieId: movie.id)
             }
         }
     }

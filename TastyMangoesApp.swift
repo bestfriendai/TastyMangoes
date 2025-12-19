@@ -30,9 +30,6 @@ struct TastyMangoesApp: App {
                 }
             }
             .task {
-                // Log app open analytics (before auth check)
-                AnalyticsService.shared.logAppOpen()
-                
                 // Check auth status on app launch
                 await authManager.checkAuthStatus()
                 

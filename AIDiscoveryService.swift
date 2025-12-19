@@ -247,7 +247,7 @@ class AIDiscoveryService {
             ],
             responseFormat: DiscoveryResponseFormat(type: "json_object"),
             temperature: 0.3,
-            maxTokens: 1500  // Limit response size for cost control (increased for 15 movies)
+            maxTokens: 2500  // Limit response size for cost control (increased for 25 movies)
         )
         
         var request = URLRequest(url: url)
@@ -343,7 +343,7 @@ class AIDiscoveryService {
         IMPORTANT RULES:
         1. Return ONLY real movies that actually exist
         2. Include the TMDB ID if you know it (this is critical for our database)
-        3. Limit to 15 most relevant results
+        3. Limit to 25 most relevant results
         4. For remake queries, return ALL versions (e.g., all Batman movies with the specified actor)
         5. Order by relevance to the query
         

@@ -220,7 +220,6 @@ struct SignUpView: View {
         Task {
             do {
                 try await authManager.signUp(email: email, password: password, username: username)
-                AnalyticsService.shared.logSignUp()
                 isLoading = false
             } catch {
                 errorMessage = error.localizedDescription

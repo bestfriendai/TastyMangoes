@@ -184,7 +184,7 @@ struct CategoryResultsView: View {
                             // Movie Cards with Navigation
                             VStack(spacing: 8) {
                                 ForEach(movies) { movie in
-                                    NavigationLink(destination: MoviePageView(movieId: movie.id, source: "search")) {
+                                    NavigationLink(destination: MoviePageView(movieId: movie.id)) {
                                         MovieCardHorizontal(movie: movie)
                                     }
                                     .buttonStyle(PlainButtonStyle())

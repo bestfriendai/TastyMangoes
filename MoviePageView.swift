@@ -32,8 +32,6 @@ struct MoviePageView: View {
     @StateObject private var viewModel: MovieDetailViewModel
     @Environment(\.dismiss) private var dismiss
     
-    private let source: String // Track where user came from ("search" or "list")
-    
     @State private var selectedSection: MovieSection = .overview
     @State private var showMenuBottomSheet = false
     @State private var showAddToList = false
@@ -65,16 +63,14 @@ struct MoviePageView: View {
     
     // MARK: - Initialization
     
-    init(movieId: String, source: String = "list") {
+    init(movieId: String) {
         self.movieId = movieId
-        self.source = source
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieStringId: movieId))
     }
     
     // Alternative initializer for Int IDs
-    init(movieId: Int, source: String = "list") {
+    init(movieId: Int) {
         self.movieId = String(movieId)
-        self.source = source
         _viewModel = StateObject(wrappedValue: MovieDetailViewModel(movieId: movieId))
     }
     
@@ -92,15 +88,6 @@ struct MoviePageView: View {
         }
         .task {
             await viewModel.loadMovie()
-            
-            // Log analytics after movie loads successfully
-            if let movie = viewModel.movie {
-                AnalyticsService.shared.logMovieView(
-                    movieId: String(movie.id),
-                    movieTitle: movie.title,
-                    source: source
-                )
-            }
         }
     }
     
@@ -1525,8 +1512,7 @@ struct MoviePageView: View {
                     let wasWatched = isWatched
                     // Toggle watched status (CHANGE_TO connection - changes button state)
                     // This will automatically sync to Supabase and trigger a full sync
-                    let movieTitle = viewModel.movie?.title
-                    WatchlistManager.shared.toggleWatched(movieId: movieId, movieTitle: movieTitle)
+                    WatchlistManager.shared.toggleWatched(movieId: movieId)
                     // Show rate bottom sheet only when marking as watched (per Figma prototype connection)
                     if !wasWatched {
                         showRateBottomSheet = true
