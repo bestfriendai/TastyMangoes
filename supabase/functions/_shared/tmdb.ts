@@ -308,6 +308,44 @@ export async function fetchMovieKeywords(tmdbId: string): Promise<TMDBKeywordsRe
   return response.json();
 }
 
+export interface TMDBWatchProvider {
+  provider_id: number;
+  provider_name: string;
+  logo_path: string | null;
+  display_priority: number;
+}
+
+export interface TMDBWatchProviderCountry {
+  link?: string;
+  flatrate?: TMDBWatchProvider[];  // Subscription streaming (Netflix, etc.)
+  rent?: TMDBWatchProvider[];      // Rent (Apple TV, Amazon, etc.)
+  buy?: TMDBWatchProvider[];       // Purchase
+  ads?: TMDBWatchProvider[];       // Free with ads (Tubi, etc.)
+  free?: TMDBWatchProvider[];      // Free (Kanopy, etc.)
+}
+
+export interface TMDBWatchProvidersResponse {
+  id: number;
+  results: {
+    [countryCode: string]: TMDBWatchProviderCountry;
+  };
+}
+
+export async function fetchMovieWatchProviders(tmdbId: string): Promise<TMDBWatchProvidersResponse> {
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY environment variable not set');
+  }
+  
+  const url = `${TMDB_BASE}/movie/${tmdbId}/watch/providers?api_key=${TMDB_API_KEY}`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`TMDB watch providers error: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
 export function buildImageUrl(path: string | null, size: string = 'w500'): string {
   if (!path) return '';
   return `${TMDB_IMAGE_BASE}/${size}${path}`;

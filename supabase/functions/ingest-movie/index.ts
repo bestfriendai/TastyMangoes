@@ -14,6 +14,7 @@ import {
   fetchMovieReleaseDates,
   fetchMovieImages,
   fetchMovieKeywords,
+  fetchMovieWatchProviders,
   buildImageUrl,
   formatRuntime,
   downloadImage,
@@ -26,7 +27,7 @@ const STORAGE_BUCKET = 'movie-images';
 const STORAGE_BASE_URL = `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}`;
 
 // Schema versioning for lazy re-ingestion
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 /**
  * Upgrade movie schema from one version to another
@@ -388,6 +389,70 @@ serve(async (req) => {
     } catch (error) {
       console.warn(`[INGEST] Failed to fetch keywords:`, error);
       // Continue without keywords
+    }
+    
+    // Fetch watch providers (streaming availability)
+    let watchProviders: {
+      us?: {
+        link?: string;
+        flatrate?: Array<{ provider_id: number; provider_name: string; logo_path: string | null }>;
+        rent?: Array<{ provider_id: number; provider_name: string; logo_path: string | null }>;
+        buy?: Array<{ provider_id: number; provider_name: string; logo_path: string | null }>;
+        ads?: Array<{ provider_id: number; provider_name: string; logo_path: string | null }>;
+        free?: Array<{ provider_id: number; provider_name: string; logo_path: string | null }>;
+      };
+      updated_at?: string;
+    } = {};
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const providersResponse = await fetchMovieWatchProviders(tmdb_id.toString());
+      
+      // Extract US providers (primary market) - can expand to other regions later
+      const usProviders = providersResponse.results?.US;
+      if (usProviders) {
+        watchProviders = {
+          us: {
+            link: usProviders.link,
+            flatrate: usProviders.flatrate?.map(p => ({
+              provider_id: p.provider_id,
+              provider_name: p.provider_name,
+              logo_path: p.logo_path
+            })),
+            rent: usProviders.rent?.map(p => ({
+              provider_id: p.provider_id,
+              provider_name: p.provider_name,
+              logo_path: p.logo_path
+            })),
+            buy: usProviders.buy?.map(p => ({
+              provider_id: p.provider_id,
+              provider_name: p.provider_name,
+              logo_path: p.logo_path
+            })),
+            ads: usProviders.ads?.map(p => ({
+              provider_id: p.provider_id,
+              provider_name: p.provider_name,
+              logo_path: p.logo_path
+            })),
+            free: usProviders.free?.map(p => ({
+              provider_id: p.provider_id,
+              provider_name: p.provider_name,
+              logo_path: p.logo_path
+            })),
+          },
+          updated_at: new Date().toISOString()
+        };
+        
+        const flatrateCount = usProviders.flatrate?.length || 0;
+        const rentCount = usProviders.rent?.length || 0;
+        const adsCount = usProviders.ads?.length || 0;
+        console.log(`[INGEST] Fetched watch providers: ${flatrateCount} streaming, ${rentCount} rental, ${adsCount} free w/ads`);
+      } else {
+        console.log(`[INGEST] No US watch providers found`);
+      }
+    } catch (error) {
+      console.warn(`[INGEST] Failed to fetch watch providers:`, error);
+      // Continue without watch providers
     }
     
     console.log(`[INGEST] Fetched TMDB data for: ${details.title}`);
@@ -781,6 +846,7 @@ serve(async (req) => {
       cast_members: castMembers,
       crew_members: crewMembers,
       keywords: keywordNames.length > 0 ? keywordNames : null,
+      streaming: Object.keys(watchProviders).length > 0 ? watchProviders : null,
       original_language: details.original_language || null,
       spoken_languages: details.spoken_languages?.map(l => l.english_name || l.name) || null,
       production_companies: details.production_companies?.map(c => ({
@@ -934,6 +1000,7 @@ serve(async (req) => {
       },
       still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
       trailers: trailersArray.length > 0 ? trailersArray : null, // Schema v2: trailers array
+      streaming: Object.keys(watchProviders).length > 0 ? watchProviders : null,
       last_updated: new Date().toISOString(),
     };
     
