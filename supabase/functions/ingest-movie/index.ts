@@ -13,6 +13,7 @@ import {
   fetchSimilarMovies,
   fetchMovieReleaseDates,
   fetchMovieImages,
+  fetchMovieKeywords,
   buildImageUrl,
   formatRuntime,
   downloadImage,
@@ -25,7 +26,7 @@ const STORAGE_BUCKET = 'movie-images';
 const STORAGE_BASE_URL = `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}`;
 
 // Schema versioning for lazy re-ingestion
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 /**
  * Upgrade movie schema from one version to another
@@ -181,6 +182,7 @@ serve(async (req) => {
       const maxWaitTime = 30000; // 30 seconds
       const checkInterval = 500; // Check every 500ms
       const startTime = Date.now();
+      let shouldProceedWithReingestion = false;
       
       while (Date.now() - startTime < maxWaitTime) {
         await new Promise(resolve => setTimeout(resolve, checkInterval));
@@ -192,87 +194,58 @@ serve(async (req) => {
           .single();
         
         if (updatedWork && updatedWork.ingestion_status === 'complete') {
-          // Return cached card, but check for schema upgrade first
-          const { data: cachedCard } = await supabaseAdmin
-            .from('work_cards_cache')
-            .select('payload')
+          // Check schema version - if outdated, force full re-ingestion instead of surgical upgrade
+          const { data: workMeta } = await supabaseAdmin
+            .from('works_meta')
+            .select('schema_version')
             .eq('work_id', existingWork.work_id)
             .single();
           
-          if (cachedCard) {
-            // Check if schema upgrade is needed
-            const { data: workMeta } = await supabaseAdmin
-              .from('works_meta')
-              .select('schema_version')
+          const schemaVersion = workMeta?.schema_version || 1;
+          
+          if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+            console.log(`[INGEST] Schema outdated (v${schemaVersion} < v${CURRENT_SCHEMA_VERSION}), forcing full re-ingestion`);
+            // Don't return cached - fall through to full re-ingestion below
+            shouldProceedWithReingestion = true;
+            break; // Exit the while loop to proceed with full re-ingestion
+          } else {
+            // Schema is current, return cached card
+            const { data: cachedCard } = await supabaseAdmin
+              .from('work_cards_cache')
+              .select('payload')
               .eq('work_id', existingWork.work_id)
               .single();
             
-            const schemaVersion = workMeta?.schema_version || 1;
-            
-            if (schemaVersion < CURRENT_SCHEMA_VERSION) {
-              console.log(`[INGEST] Cached card needs schema upgrade: v${schemaVersion} → v${CURRENT_SCHEMA_VERSION}`);
-              
-              try {
-                // Perform schema upgrade
-                const upgradeResult = await upgradeSchemaIfNeeded(
-                  supabaseAdmin,
-                  existingWork.work_id,
-                  schemaVersion,
-                  tmdb_id.toString()
-                );
-                
-                // Merge upgraded data into cached card
-                let upgradedCard = { ...cachedCard.payload };
-                if (upgradeResult.trailers) {
-                  upgradedCard.trailers = upgradeResult.trailers;
-                }
-                
-                // Update cache with upgraded card
-                await supabaseAdmin
-                  .from('work_cards_cache')
-                  .update({
-                    payload: upgradedCard,
-                    computed_at: new Date().toISOString(),
-                  })
-                  .eq('work_id', existingWork.work_id);
-                
-                console.log(`[INGEST] Schema upgrade complete, returning upgraded card for work_id: ${existingWork.work_id}`);
-                return new Response(
-                  JSON.stringify({ 
-                    status: 'upgraded', 
-                    work_id: existingWork.work_id,
-                    card: upgradedCard 
-                  }),
-                  { headers: { 'Content-Type': 'application/json' } }
-                );
-              } catch (upgradeError) {
-                console.error(`[INGEST] Schema upgrade failed:`, upgradeError);
-                // Return original cached card if upgrade fails
-                console.log(`[INGEST] Returning original cached card despite upgrade failure`);
-              }
+            if (cachedCard) {
+              console.log(`[INGEST] Duplicate ingestion completed, returning cached card for work_id: ${existingWork.work_id}`);
+              return new Response(
+                JSON.stringify({ 
+                  status: 'cached', 
+                  work_id: existingWork.work_id,
+                  card: cachedCard.payload 
+                }),
+                { headers: { 'Content-Type': 'application/json' } }
+              );
             }
-            
-            console.log(`[INGEST] Duplicate ingestion completed, returning cached card for work_id: ${existingWork.work_id}`);
-            return new Response(
-              JSON.stringify({ 
-                status: 'cached', 
-                work_id: existingWork.work_id,
-                card: cachedCard.payload 
-              }),
-              { headers: { 'Content-Type': 'application/json' } }
-            );
           }
         } else if (updatedWork && updatedWork.ingestion_status === 'failed') {
           console.log(`[INGEST] Previous ingestion failed, retrying...`);
+          shouldProceedWithReingestion = true;
           break; // Break out and retry
         }
       }
       
-      // If we timed out, return error
-      return new Response(
-        JSON.stringify({ error: 'Ingestion timeout - another process is still ingesting this movie' }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } }
-      );
+      // If we broke out due to schema being outdated or failed ingestion, proceed with full re-ingestion
+      if (shouldProceedWithReingestion) {
+        console.log(`[INGEST] Proceeding with full re-ingestion due to outdated schema or failed status`);
+        // Fall through to full ingestion below
+      } else {
+        // If we timed out, return error
+        return new Response(
+          JSON.stringify({ error: 'Ingestion timeout - another process is still ingesting this movie' }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
     }
     
     // SKIP cache check entirely if force_refresh is true
@@ -289,75 +262,37 @@ serve(async (req) => {
           console.warn('[INGEST] Error checking staleness:', staleError);
           // Continue with refresh if staleness check fails
         } else if (!isStale) {
-          // Return cached card, but check for schema upgrade first
-          const { data: cachedCard } = await supabaseAdmin
-            .from('work_cards_cache')
-            .select('payload')
+          // Check schema version - if outdated, force full re-ingestion instead of surgical upgrade
+          const { data: workMeta } = await supabaseAdmin
+            .from('works_meta')
+            .select('schema_version')
             .eq('work_id', existingWork.work_id)
             .single();
           
-          if (cachedCard) {
-            // Check if schema upgrade is needed
-            const { data: workMeta } = await supabaseAdmin
-              .from('works_meta')
-              .select('schema_version')
+          const schemaVersion = workMeta?.schema_version || 1;
+          
+          if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+            console.log(`[INGEST] Schema outdated (v${schemaVersion} < v${CURRENT_SCHEMA_VERSION}), forcing full re-ingestion`);
+            // Don't return cached - fall through to full re-ingestion below
+          } else {
+            // Schema is current, return cached card
+            const { data: cachedCard } = await supabaseAdmin
+              .from('work_cards_cache')
+              .select('payload')
               .eq('work_id', existingWork.work_id)
               .single();
             
-            const schemaVersion = workMeta?.schema_version || 1;
-            
-            if (schemaVersion < CURRENT_SCHEMA_VERSION) {
-              console.log(`[INGEST] Cached card needs schema upgrade: v${schemaVersion} → v${CURRENT_SCHEMA_VERSION}`);
-              
-              try {
-                // Perform schema upgrade
-                const upgradeResult = await upgradeSchemaIfNeeded(
-                  supabaseAdmin,
-                  existingWork.work_id,
-                  schemaVersion,
-                  tmdb_id.toString()
-                );
-                
-                // Merge upgraded data into cached card
-                let upgradedCard = { ...cachedCard.payload };
-                if (upgradeResult.trailers) {
-                  upgradedCard.trailers = upgradeResult.trailers;
-                }
-                
-                // Update cache with upgraded card
-                await supabaseAdmin
-                  .from('work_cards_cache')
-                  .update({
-                    payload: upgradedCard,
-                    computed_at: new Date().toISOString(),
-                  })
-                  .eq('work_id', existingWork.work_id);
-                
-                console.log(`[INGEST] Schema upgrade complete, returning upgraded card for work_id: ${existingWork.work_id}`);
-                return new Response(
-                  JSON.stringify({ 
-                    status: 'cached_upgraded', 
-                    work_id: existingWork.work_id,
-                    card: upgradedCard 
-                  }),
-                  { headers: { 'Content-Type': 'application/json' } }
-                );
-              } catch (upgradeError) {
-                console.error(`[INGEST] Schema upgrade failed:`, upgradeError);
-                // Return original cached card if upgrade fails
-                console.log(`[INGEST] Returning original cached card despite upgrade failure`);
-              }
+            if (cachedCard) {
+              console.log(`[INGEST] Returning cached card for work_id: ${existingWork.work_id}`);
+              return new Response(
+                JSON.stringify({ 
+                  status: 'cached', 
+                  work_id: existingWork.work_id,
+                  card: cachedCard.payload 
+                }),
+                { headers: { 'Content-Type': 'application/json' } }
+              );
             }
-            
-            console.log(`[INGEST] Returning cached card for work_id: ${existingWork.work_id}`);
-            return new Response(
-              JSON.stringify({ 
-                status: 'cached', 
-                work_id: existingWork.work_id,
-                card: cachedCard.payload 
-              }),
-              { headers: { 'Content-Type': 'application/json' } }
-            );
           }
         }
       }
@@ -388,19 +323,19 @@ serve(async (req) => {
     const videos = await fetchMovieVideos(tmdb_id.toString());
     await new Promise(resolve => setTimeout(resolve, 250));
     
-    // TODO: Similar movies disabled to reduce TMDB API usage
     // Fetch similar movies (limit to first 10)
-    let similarMovieIds: number[] = [];
-    // try {
-    //   const similarMovies = await fetchSimilarMovies(tmdb_id.toString());
-    //   similarMovieIds = similarMovies.results
-    //     .slice(0, 10)
-    //     .map(m => m.id);
-    //   console.log(`[INGEST] Fetched ${similarMovieIds.length} similar movie IDs`);
-    // } catch (error) {
-    //   console.warn(`[INGEST] Failed to fetch similar movies:`, error);
-    //   // Continue without similar movies
-    // }
+    let similarMovieData: Array<{ tmdb_id: number; title: string }> = [];
+    try {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const similarMovies = await fetchSimilarMovies(tmdb_id.toString());
+      similarMovieData = similarMovies.results
+        .slice(0, 10)
+        .map(m => ({ tmdb_id: m.id, title: m.title }));
+      console.log(`[INGEST] Fetched ${similarMovieData.length} similar movies from TMDB`);
+    } catch (error) {
+      console.warn(`[INGEST] Failed to fetch similar movies:`, error);
+      // Continue without similar movies
+    }
     
     // Fetch release dates to get US certification
     let certification: string | null = null;
@@ -441,6 +376,18 @@ serve(async (req) => {
     } catch (error) {
       console.warn(`[INGEST] Failed to fetch images:`, error);
       // Continue without still images
+    }
+    
+    // Fetch keywords
+    let keywordNames: string[] = [];
+    try {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const keywordsResponse = await fetchMovieKeywords(tmdb_id.toString());
+      keywordNames = keywordsResponse.keywords.map(k => k.name);
+      console.log(`[INGEST] Fetched ${keywordNames.length} keywords`);
+    } catch (error) {
+      console.warn(`[INGEST] Failed to fetch keywords:`, error);
+      // Continue without keywords
     }
     
     console.log(`[INGEST] Fetched TMDB data for: ${details.title}`);
@@ -812,7 +759,7 @@ serve(async (req) => {
     
     console.log(`[DATABASE] Updating works_meta with storage URLs...`);
     
-    // Upsert into works_meta table with storage URLs and similar_movie_ids
+    // Upsert into works_meta table with storage URLs
     const metaData = {
       work_id: work.work_id,
       runtime_minutes: details.runtime || null,
@@ -833,7 +780,23 @@ serve(async (req) => {
       trailer_thumbnail: storageUrls.trailerThumb || null,
       cast_members: castMembers,
       crew_members: crewMembers,
-      similar_movie_ids: similarMovieIds.length > 0 ? similarMovieIds : null, // Store array of TMDB IDs
+      keywords: keywordNames.length > 0 ? keywordNames : null,
+      original_language: details.original_language || null,
+      spoken_languages: details.spoken_languages?.map(l => l.english_name || l.name) || null,
+      production_companies: details.production_companies?.map(c => ({
+        id: c.id,
+        name: c.name,
+        logo_path: c.logo_path
+      })) || null,
+      production_countries: details.production_countries?.map(c => c.name) || null,
+      budget: details.budget || null,
+      revenue_worldwide: details.revenue || null,
+      collection: details.belongs_to_collection ? {
+        id: details.belongs_to_collection.id,
+        name: details.belongs_to_collection.name,
+        poster_path: details.belongs_to_collection.poster_path,
+        backdrop_path: details.belongs_to_collection.backdrop_path
+      } : null,
       still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
       trailers: trailersArray.length > 0 ? trailersArray : null, // Schema v2: trailers array with thumbnails
       schema_version: CURRENT_SCHEMA_VERSION, // Set to current schema version
@@ -842,6 +805,33 @@ serve(async (req) => {
     };
     
     console.log(`[DATABASE] Updating works_meta with ${stillImageStorageUrls.length} still images`);
+    
+    // Insert similar movies into similar_movies table
+    if (similarMovieData.length > 0) {
+      const similarMovieRows = similarMovieData.map((sm, index) => ({
+        work_id: work.work_id,
+        similar_tmdb_id: sm.tmdb_id.toString(),
+        source: 'tmdb',
+        rank_order: index + 1,
+        confidence: 0.3,  // Low confidence for TMDB recommendations
+        notes: `TMDB similar movie #${index + 1}`,
+        created_at: new Date().toISOString()
+      }));
+      
+      const { error: similarError } = await supabaseAdmin
+        .from('similar_movies')
+        .upsert(similarMovieRows, { 
+          onConflict: 'work_id,similar_tmdb_id,source',
+          ignoreDuplicates: true 
+        });
+      
+      if (similarError) {
+        console.warn(`[INGEST] Failed to insert similar movies:`, similarError);
+        // Non-fatal, continue with ingestion
+      } else {
+        console.log(`[INGEST] Inserted ${similarMovieRows.length} similar movies`);
+      }
+    }
     
     const { error: metaError } = await supabaseAdmin
       .from('works_meta')
@@ -942,7 +932,6 @@ serve(async (req) => {
       source_scores: {
         tmdb: { score: aiScore, votes: details.vote_count }
       },
-      similar_movie_ids: similarMovieIds, // Include similar movie IDs in card
       still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
       trailers: trailersArray.length > 0 ? trailersArray : null, // Schema v2: trailers array
       last_updated: new Date().toISOString(),

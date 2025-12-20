@@ -94,11 +94,18 @@ enum MovieHintExtractor {
     
     /// Patterns that indicate an author mention (for book adaptations)
     private static let authorPatterns: [String] = [
-        "books by (\\w+(?:\\s+\\w+)?)",
-        "based on books by (\\w+(?:\\s+\\w+)?)",
-        "written by (\\w+(?:\\s+\\w+)?)",
-        "author (\\w+(?:\\s+\\w+)?)",
-        "novels by (\\w+(?:\\s+\\w+)?)"
+        // "by author [Name]" or "by the author [Name]" - capture 2+ words after
+        "by (?:the )?author (\\w+(?:\\s+\\w+)+)",
+        // "the author [Name]" at start of phrase
+        "the author (\\w+(?:\\s+\\w+)+)",
+        // "books/book by [Name]" - handle singular and plural, skip optional filler
+        "books? by (?:the )?(?:author )?(\\w+(?:\\s+\\w+)+)",
+        // "based on books/book by [Name]"
+        "based on (?:the )?(?:a )?books? by (?:the )?(?:author )?(\\w+(?:\\s+\\w+)+)",
+        // "novels/novel by [Name]"
+        "novels? by (?:the )?(?:author )?(\\w+(?:\\s+\\w+)+)",
+        // "written by [Name]" in any context
+        "written by (\\w+(?:\\s+\\w+)+)"
     ]
     
     // MARK: - Known Directors (for better matching)

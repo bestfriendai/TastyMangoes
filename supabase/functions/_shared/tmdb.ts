@@ -29,9 +29,15 @@ export interface TMDBMovie {
   production_companies?: Array<{ id: number; name: string; logo_path?: string }>;
   production_countries?: Array<{ iso_3166_1: string; name: string }>;
   revenue?: number;
-  spoken_languages?: Array<{ iso_639_1: string; name: string }>;
+  spoken_languages?: Array<{ iso_639_1: string; name: string; english_name?: string }>;
   status?: string;
   video?: boolean;
+  belongs_to_collection?: {
+    id: number;
+    name: string;
+    poster_path?: string;
+    backdrop_path?: string;
+  } | null;
 }
 
 export interface TMDBCastMember {
@@ -277,6 +283,26 @@ export async function fetchMovieImages(tmdbId: string): Promise<TMDBImagesRespon
   
   if (!response.ok) {
     throw new Error(`TMDB images error: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+export interface TMDBKeywordsResponse {
+  id: number;
+  keywords: Array<{ id: number; name: string }>;
+}
+
+export async function fetchMovieKeywords(tmdbId: string): Promise<TMDBKeywordsResponse> {
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY environment variable not set');
+  }
+  
+  const url = `${TMDB_BASE}/movie/${tmdbId}/keywords?api_key=${TMDB_API_KEY}`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`TMDB keywords error: ${response.status} ${response.statusText}`);
   }
   
   return response.json();
