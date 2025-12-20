@@ -262,7 +262,7 @@ class AIDiscoveryService {
         #if DEBUG
         print("🎬 [AIDiscovery] Query: \"\(query)\"")
         if let hints = hints {
-            print("🎬 [AIDiscovery] Hints: actor=\(hints.actors.isEmpty ? "nil" : hints.actors.joined(separator: ", ")), director=\(hints.director ?? "nil"), year=\(hints.year?.description ?? "nil")")
+            print("🎬 [AIDiscovery] Hints: actor=\(hints.actors.isEmpty ? "nil" : hints.actors.joined(separator: ", ")), director=\(hints.director ?? "nil"), author=\(hints.author ?? "nil"), year=\(hints.year?.description ?? "nil")")
         }
         #endif
         
@@ -379,6 +379,9 @@ class AIDiscoveryService {
             if let director = hints.director {
                 hintParts.append("Director: \(director)")
             }
+            if let author = hints.author {
+                hintParts.append("Author: \(author)")
+            }
             if let year = hints.year {
                 hintParts.append("Year: \(year)")
             }
@@ -471,6 +474,7 @@ struct ExtractedMovieHints: Codable {
     var decade: Int?
     var actors: [String]
     var director: String?
+    var author: String?
     var keywords: [String]
     var plotClues: [String]
     var isRemakeHint: Bool
@@ -481,6 +485,7 @@ struct ExtractedMovieHints: Codable {
         case decade
         case actors
         case director
+        case author
         case keywords
         case plotClues = "plot_clues"
         case isRemakeHint = "is_remake_hint"
@@ -493,6 +498,7 @@ struct ExtractedMovieHints: Codable {
         decade: Int? = nil,
         actors: [String] = [],
         director: String? = nil,
+        author: String? = nil,
         keywords: [String] = [],
         plotClues: [String] = [],
         isRemakeHint: Bool = false
@@ -502,6 +508,7 @@ struct ExtractedMovieHints: Codable {
         self.decade = decade
         self.actors = actors
         self.director = director
+        self.author = author
         self.keywords = keywords
         self.plotClues = plotClues
         self.isRemakeHint = isRemakeHint
@@ -514,6 +521,7 @@ struct ExtractedMovieHints: Codable {
         self.decade = extractorHints.decade
         self.actors = extractorHints.actors
         self.director = extractorHints.director
+        self.author = extractorHints.author
         self.keywords = extractorHints.keywords
         self.plotClues = extractorHints.plotClues
         self.isRemakeHint = extractorHints.isRemakeHint
@@ -526,6 +534,7 @@ struct ExtractedMovieHints: Codable {
         decade != nil ||
         !actors.isEmpty ||
         director != nil ||
+        author != nil ||
         !keywords.isEmpty ||
         !plotClues.isEmpty ||
         isRemakeHint

@@ -14,6 +14,7 @@ struct ExtractedHints: Codable {
     var decade: Int?
     var actors: [String]
     var director: String?
+    var author: String?
     var keywords: [String]
     var plotClues: [String]
     var isRemakeHint: Bool
@@ -24,6 +25,7 @@ struct ExtractedHints: Codable {
         decade: Int? = nil,
         actors: [String] = [],
         director: String? = nil,
+        author: String? = nil,
         keywords: [String] = [],
         plotClues: [String] = [],
         isRemakeHint: Bool = false
@@ -33,6 +35,7 @@ struct ExtractedHints: Codable {
         self.decade = decade
         self.actors = actors
         self.director = director
+        self.author = author
         self.keywords = keywords
         self.plotClues = plotClues
         self.isRemakeHint = isRemakeHint
@@ -53,6 +56,7 @@ struct ExtractedHints: Codable {
                decade != nil ||
                !actors.isEmpty ||
                director != nil ||
+               author != nil ||
                !keywords.isEmpty ||
                !plotClues.isEmpty ||
                isRemakeHint
@@ -84,6 +88,17 @@ enum MovieHintExtractor {
         "(\\w+(?:\\s+\\w+)?) directed",
         "a (\\w+(?:\\s+\\w+)?) film",
         "a (\\w+(?:\\s+\\w+)?) movie"
+    ]
+    
+    // MARK: - Author Patterns
+    
+    /// Patterns that indicate an author mention (for book adaptations)
+    private static let authorPatterns: [String] = [
+        "books by (\\w+(?:\\s+\\w+)?)",
+        "based on books by (\\w+(?:\\s+\\w+)?)",
+        "written by (\\w+(?:\\s+\\w+)?)",
+        "author (\\w+(?:\\s+\\w+)?)",
+        "novels by (\\w+(?:\\s+\\w+)?)"
     ]
     
     // MARK: - Known Directors (for better matching)
@@ -157,6 +172,9 @@ enum MovieHintExtractor {
         
         // Extract director
         hints.director = extractDirector(from: lower)
+        
+        // Extract author
+        hints.author = extractAuthor(from: lower)
         
         // Extract genre keywords
         hints.keywords = extractKeywords(from: lower)
@@ -271,6 +289,50 @@ enum MovieHintExtractor {
                 if let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
                     if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
                         return String(text[range]).trimmingCharacters(in: .whitespaces).capitalized
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    private static func extractAuthor(from text: String) -> String? {
+        // Try pattern matching for author-related phrases
+        // Note: We check for "written by" but need to avoid matching screenplay writers
+        // So we prioritize patterns that clearly indicate book authors
+        
+        // First check for explicit author patterns
+        for pattern in authorPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                if let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
+                        let author = String(text[range]).trimmingCharacters(in: .whitespaces).capitalized
+                        // Only return if it looks like a name (not too short)
+                        if author.count > 2 {
+                            return author
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check for "written by" but only if it's in context of books/novels
+        // This avoids matching screenplay writers
+        let bookContextPatterns = [
+            "based on.*written by (\\w+(?:\\s+\\w+)?)",
+            "book.*written by (\\w+(?:\\s+\\w+)?)",
+            "novel.*written by (\\w+(?:\\s+\\w+)?)"
+        ]
+        
+        for pattern in bookContextPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                if let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
+                        let author = String(text[range]).trimmingCharacters(in: .whitespaces).capitalized
+                        if author.count > 2 {
+                            return author
+                        }
                     }
                 }
             }

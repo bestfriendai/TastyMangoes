@@ -3,7 +3,7 @@
 //  Created on: 2025-12-03 at 09:45 PST (America/Los_Angeles - Pacific Time)
 //  Last modified by Claude: 2025-12-15 at 20:45 (America/Los_Angeles - Pacific Time) / 04:45 UTC
 //  Notes: Phase 3 - Added hint-based search path using HintSearchCoordinator.
-//         When actor/director/year hints are present, uses AI discovery + batch ingestion
+//         When actor/director/author/year hints are present, uses AI discovery + batch ingestion
 //         instead of simple TMDB search. Shows local results instantly, then AI results.
 
 import Foundation
@@ -179,6 +179,9 @@ enum VoiceIntentRouter {
         if let director = extractedHints.director {
             print("🔍 [Phase2] Extracted director: \(director)")
         }
+        if let author = extractedHints.author {
+            print("🔍 [Phase2] Extracted author: \(author)")
+        }
         if let title = extractedHints.titleLikely {
             print("🔍 [Phase2] Likely title: \(title)")
         }
@@ -349,7 +352,7 @@ enum VoiceIntentRouter {
         
         // ═══════════════════════════════════════════════════════════════════════
         // Phase 3: Hint-Based Search Path
-        // If hints are present (actor, director, year), use HintSearchCoordinator
+        // If hints are present (actor, director, author, year), use HintSearchCoordinator
         // for local-first + AI discovery + batch ingestion
         // ═══════════════════════════════════════════════════════════════════════
         if extractedHints.hasAnyHints {
@@ -404,7 +407,7 @@ enum VoiceIntentRouter {
         llmError: Error?
     ) async {
         print("🎬 [Phase3] Starting hint-based search for: '\(query)'")
-        print("🎬 [Phase3] Hints: actors=\(extractedHints.actors), director=\(extractedHints.director ?? "nil"), year=\(extractedHints.year?.description ?? "nil")")
+        print("🎬 [Phase3] Hints: actors=\(extractedHints.actors), director=\(extractedHints.director ?? "nil"), author=\(extractedHints.author ?? "nil"), year=\(extractedHints.year?.description ?? "nil")")
         
         // Store recommender in FilterState for AddToListView
         await MainActor.run {

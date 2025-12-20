@@ -109,7 +109,7 @@ class HintSearchCoordinator: ObservableObject {
         #if DEBUG
         print("🔍 [HintSearch] Query: \"\(query)\"")
         if let h = searchHints, h.hasHints {
-            print("🔍 [HintSearch] Hints: actor=\(h.actors.isEmpty ? "nil" : h.actors.joined(separator: ", ")), director=\(h.director ?? "nil"), year=\(h.year?.description ?? "nil")")
+            print("🔍 [HintSearch] Hints: actor=\(h.actors.isEmpty ? "nil" : h.actors.joined(separator: ", ")), director=\(h.director ?? "nil"), author=\(h.author ?? "nil"), year=\(h.year?.description ?? "nil")")
         }
         #endif
         
@@ -142,6 +142,9 @@ class HintSearchCoordinator: ObservableObject {
             } else if let actor = hints.actors.first {
                 searchType = "actor"
                 searchValue = actor
+            } else if let author = hints.author {
+                searchType = "author"
+                searchValue = author
             }
         }
         
