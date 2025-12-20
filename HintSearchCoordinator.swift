@@ -263,6 +263,228 @@ class HintSearchCoordinator: ObservableObject {
                 verificationProgress = nil
             }
             
+            // TMDB Fallback: If AI returned 0 results, try direct TMDB title search
+            if aiMovies.isEmpty && enableAI {
+                print("🎬 [HintSearch] AI returned 0 - trying TMDB title search as fallback")
+                
+                // Extract the likely title from hints or use cleaned query
+                let searchTitle: String
+                if let titleLikely = searchHints?.titleLikely, !titleLikely.isEmpty {
+                    searchTitle = titleLikely
+                } else {
+                    // Clean query: remove common words and trim
+                    let cleanedQuery = query
+                        .replacingOccurrences(of: "the movie", with: "", options: [.caseInsensitive])
+                        .replacingOccurrences(of: "movie", with: "", options: [.caseInsensitive])
+                        .replacingOccurrences(of: "film", with: "", options: [.caseInsensitive])
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    searchTitle = cleanedQuery.isEmpty ? query : cleanedQuery
+                }
+                
+                do {
+                    // Call TMDB search API directly
+                    let tmdbResponse = try await tmdbService.searchMovies(query: searchTitle, page: 1)
+                    
+                    if !tmdbResponse.results.isEmpty {
+                        print("🎬 [HintSearch] TMDB fallback found \(tmdbResponse.results.count) movies - ingesting top results")
+                        
+                        // Ingest top 5 TMDB results
+                        let topResults = Array(tmdbResponse.results.prefix(5))
+                        var tmdbIngested: [HintSearchResult] = []
+                        
+                        for (index, tmdbMovie) in topResults.enumerated() {
+                            progress = .ingesting(current: index + 1, total: topResults.count)
+                            verificationProgress = (current: index + 1, total: topResults.count)
+                            
+                            print("🎬 [HintSearch] TMDB fallback: ingesting \(tmdbMovie.title) (TMDB ID: \(tmdbMovie.id))")
+                            
+                            do {
+                                // Ingest the movie
+                                let _ = try await SupabaseService.shared.ingestMovie(tmdbId: String(tmdbMovie.id))
+                                
+                                // Fetch the card to get full details
+                                let card = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(tmdbMovie.id))
+                                
+                                // Extract poster URL
+                                let posterURLString = card?.poster?.medium ?? card?.poster?.small ?? card?.poster?.large
+                                
+                                // Extract year from release date if needed
+                                let year: Int?
+                                if let cardYear = card?.year {
+                                    year = cardYear
+                                } else if let releaseDate = tmdbMovie.releaseDate, let yearInt = Int(releaseDate.prefix(4)) {
+                                    year = yearInt
+                                } else {
+                                    year = nil
+                                }
+                                
+                                let result = HintSearchResult(
+                                    tmdbId: tmdbMovie.id,
+                                    title: card?.title ?? tmdbMovie.title,
+                                    year: year,
+                                    posterURL: posterURLString,
+                                    source: .aiIngested,
+                                    matchReason: "TMDB fallback search",
+                                    genres: card?.genres,
+                                    runtimeDisplay: card?.runtimeDisplay,
+                                    aiScore: card?.aiScore
+                                )
+                                tmdbIngested.append(result)
+                                newlyIngested += 1
+                                
+                                // Update results incrementally
+                                let merged = mergeResults(local: localMovies, ai: tmdbIngested)
+                                onProgress?(merged)
+                                
+                            } catch {
+                                print("⚠️ [HintSearch] Failed to ingest TMDB movie \(tmdbMovie.title): \(error)")
+                                // Continue with next movie
+                            }
+                        }
+                        
+                        // Add TMDB results to aiMovies
+                        aiMovies = tmdbIngested
+                        progress = .aiComplete(count: tmdbIngested.count, newCount: newlyIngested)
+                        verificationProgress = nil
+                        
+                        // Update final results
+                        let merged = mergeResults(local: localMovies, ai: aiMovies)
+                        onProgress?(merged)
+                        
+                        print("🎬 [HintSearch] TMDB fallback completed: ingested \(tmdbIngested.count) movies")
+                    } else {
+                        print("🎬 [HintSearch] TMDB fallback also returned 0 results")
+                        
+                        // Actor fallback: If title search failed and we have an actor hint, search by actor
+                        if let actorName = searchHints?.actors.first, !actorName.isEmpty {
+                            print("🎬 [HintSearch] TMDB title search failed - trying TMDB person search for: \(actorName)")
+                            
+                            do {
+                                // Step 1: Search for the person
+                                let personSearchResponse = try await tmdbService.searchPerson(name: actorName, page: 1)
+                                
+                                if let person = personSearchResponse.results.first {
+                                    print("🎬 [HintSearch] Found person: \(person.name) (ID: \(person.id))")
+                                    
+                                    // Step 2: Get their movie credits
+                                    let creditsResponse = try await tmdbService.getPersonMovieCredits(personId: person.id)
+                                    
+                                    // Combine cast and crew movies, deduplicate by ID
+                                    var allMovies: [TMDBMovie] = []
+                                    var seenIds = Set<Int>()
+                                    
+                                    for movie in creditsResponse.cast {
+                                        if !seenIds.contains(movie.id) {
+                                            allMovies.append(movie)
+                                            seenIds.insert(movie.id)
+                                        }
+                                    }
+                                    
+                                    for movie in creditsResponse.crew {
+                                        if !seenIds.contains(movie.id) {
+                                            allMovies.append(movie)
+                                            seenIds.insert(movie.id)
+                                        }
+                                    }
+                                    
+                                    // Sort by popularity (if available) or release date, take top 10
+                                    let sortedMovies = allMovies.sorted { movie1, movie2 in
+                                        let pop1 = movie1.popularity ?? 0
+                                        let pop2 = movie2.popularity ?? 0
+                                        if pop1 != pop2 {
+                                            return pop1 > pop2
+                                        }
+                                        // Fallback to release date
+                                        let date1 = movie1.releaseDate ?? ""
+                                        let date2 = movie2.releaseDate ?? ""
+                                        return date1 > date2
+                                    }
+                                    
+                                    let topMovies = Array(sortedMovies.prefix(10))
+                                    
+                                    if !topMovies.isEmpty {
+                                        print("🎬 [HintSearch] TMDB person search found \(topMovies.count) movies for \(actorName)")
+                                        
+                                        var tmdbActorIngested: [HintSearchResult] = []
+                                        
+                                        for (index, tmdbMovie) in topMovies.enumerated() {
+                                            progress = .ingesting(current: index + 1, total: topMovies.count)
+                                            verificationProgress = (current: index + 1, total: topMovies.count)
+                                            
+                                            print("🎬 [HintSearch] TMDB fallback: ingesting \(tmdbMovie.title) (TMDB ID: \(tmdbMovie.id))")
+                                            
+                                            do {
+                                                // Ingest the movie
+                                                let _ = try await SupabaseService.shared.ingestMovie(tmdbId: String(tmdbMovie.id))
+                                                
+                                                // Fetch the card to get full details
+                                                let card = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(tmdbMovie.id))
+                                                
+                                                // Extract poster URL
+                                                let posterURLString = card?.poster?.medium ?? card?.poster?.small ?? card?.poster?.large
+                                                
+                                                // Extract year from release date if needed
+                                                let year: Int?
+                                                if let cardYear = card?.year {
+                                                    year = cardYear
+                                                } else if let releaseDate = tmdbMovie.releaseDate, let yearInt = Int(releaseDate.prefix(4)) {
+                                                    year = yearInt
+                                                } else {
+                                                    year = nil
+                                                }
+                                                
+                                                let result = HintSearchResult(
+                                                    tmdbId: tmdbMovie.id,
+                                                    title: card?.title ?? tmdbMovie.title,
+                                                    year: year,
+                                                    posterURL: posterURLString,
+                                                    source: .aiIngested,
+                                                    matchReason: "TMDB actor fallback: \(actorName)",
+                                                    genres: card?.genres,
+                                                    runtimeDisplay: card?.runtimeDisplay,
+                                                    aiScore: card?.aiScore
+                                                )
+                                                tmdbActorIngested.append(result)
+                                                newlyIngested += 1
+                                                
+                                                // Update results incrementally
+                                                let merged = mergeResults(local: localMovies, ai: tmdbActorIngested)
+                                                onProgress?(merged)
+                                                
+                                            } catch {
+                                                print("⚠️ [HintSearch] Failed to ingest TMDB movie \(tmdbMovie.title): \(error)")
+                                                // Continue with next movie
+                                            }
+                                        }
+                                        
+                                        // Add TMDB actor results to aiMovies
+                                        aiMovies = tmdbActorIngested
+                                        progress = .aiComplete(count: tmdbActorIngested.count, newCount: newlyIngested)
+                                        verificationProgress = nil
+                                        
+                                        // Update final results
+                                        let merged = mergeResults(local: localMovies, ai: aiMovies)
+                                        onProgress?(merged)
+                                        
+                                        print("🎬 [HintSearch] TMDB actor fallback completed: ingested \(tmdbActorIngested.count) movies for \(actorName)")
+                                    } else {
+                                        print("🎬 [HintSearch] TMDB person search returned 0 movies for \(actorName)")
+                                    }
+                                } else {
+                                    print("🎬 [HintSearch] No person found for: \(actorName)")
+                                }
+                            } catch {
+                                print("⚠️ [HintSearch] TMDB actor fallback search failed: \(error)")
+                                // Don't fail the whole search if actor fallback fails
+                            }
+                        }
+                    }
+                } catch {
+                    print("⚠️ [HintSearch] TMDB fallback search failed: \(error)")
+                    // Don't fail the whole search if TMDB fallback fails
+                }
+            }
+            
             isAISearching = false
         }
         
