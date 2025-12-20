@@ -116,7 +116,8 @@ extension MovieCard {
             status: "Released",
             voteAverage: aiScore,
             voteCount: sourceScores?.tmdb?.votes,
-            popularity: nil
+            popularity: nil,
+            streaming: streaming
         )
     }
     

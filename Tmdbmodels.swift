@@ -354,7 +354,8 @@ extension TMDBMovieDetail {
             status: status,
             voteAverage: voteAverage,
             voteCount: voteCount,
-            popularity: popularity
+            popularity: popularity,
+            streaming: nil
         )
     }
 }

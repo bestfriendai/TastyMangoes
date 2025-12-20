@@ -1,10 +1,11 @@
 //  index.ts
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 19:30 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-26 at 14:30 (America/Los_Angeles - Pacific Time)
-//  Notes: Search TMDB and return matching movies with year range and genre filtering support
+//  Last modified: 2025-01-15 at 19:30 (America/Los_Angeles - Pacific Time)
+//  Notes: Hybrid search - queries local database first, then supplements with TMDB results. Deduplicates by tmdb_id (prefers local results).
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { searchMovies, discoverMovies, buildImageUrl } from '../_shared/tmdb.ts';
 
 // TMDB genre ID mapping (genre name -> genre ID)
@@ -103,8 +104,122 @@ serve(async (req) => {
       );
     }
     
+    // Initialize Supabase client for local database queries
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    
     let allResults: Array<{ id: number; title: string; release_date: string; poster_path: string; overview: string; vote_average: number; vote_count: number; genre_ids?: number[] }> = [];
+    let localResults: Array<{ tmdb_id: string; title: string; year: number | null; poster_url: string | null; overview_short: string | null; vote_average: number; vote_count: number }> = [];
+    let localTmdbIds = new Set<string>();
     let apiCallsMade = 0;
+    
+    // Step 1: Query local database first (only if we have a text query)
+    if (hasQuery) {
+      try {
+        console.log(`[SEARCH] Querying local database for: "${queryTrimmed}"`);
+        
+        // Build query with ILIKE title matching
+        // Use left joins to works_meta and aggregates (optional)
+        let localQuery = supabase
+          .from('works')
+          .select(`
+            tmdb_id,
+            title,
+            year,
+            release_date,
+            works_meta(
+              poster_url_medium,
+              overview_short,
+              genres
+            ),
+            aggregates(
+              ai_score,
+              source_scores
+            )
+          `)
+          .ilike('title', `%${queryTrimmed}%`)
+          .limit(20);
+        
+        // Apply year filter if provided
+        if (yearFromInt) {
+          localQuery = localQuery.gte('year', yearFromInt);
+        }
+        if (yearToInt) {
+          localQuery = localQuery.lte('year', yearToInt);
+        }
+        
+        const { data: localMovies, error: localError } = await localQuery;
+        
+        if (localError) {
+          console.warn(`[SEARCH] Local database query error:`, localError);
+        } else if (localMovies && localMovies.length > 0) {
+          console.log(`[SEARCH] Found ${localMovies.length} movies in local database`);
+          
+          // Get genre names from genre IDs for filtering
+          const genreNames: string[] = [];
+          if (genreIds.length > 0 && genresParam) {
+            // Use the original genre names from the request
+            genreNames.push(...genresParam.split(',').map(g => g.trim()));
+          }
+          
+          // Transform local results to match expected format
+          localResults = localMovies
+            .map((movie: any) => {
+              const tmdbId = movie.tmdb_id;
+              
+              // Get poster URL from works_meta (it's an array from the join, take first if exists)
+              const meta = Array.isArray(movie.works_meta) && movie.works_meta.length > 0 
+                ? movie.works_meta[0] 
+                : null;
+              
+              // Filter by genres if provided
+              if (genreNames.length > 0 && meta?.genres) {
+                const movieGenres = Array.isArray(meta.genres) ? meta.genres : [];
+                const hasMatchingGenre = genreNames.some(genreName => 
+                  movieGenres.some((g: string) => g.toLowerCase() === genreName.toLowerCase())
+                );
+                if (!hasMatchingGenre) {
+                  return null; // Filter out this movie
+                }
+              }
+              
+              localTmdbIds.add(tmdbId);
+              const posterUrl = meta?.poster_url_medium || null;
+              
+              // Get overview from works_meta
+              const overviewShort = meta?.overview_short || null;
+              
+              // Get vote_average from aggregates (ai_score) or source_scores
+              const agg = Array.isArray(movie.aggregates) && movie.aggregates.length > 0
+                ? movie.aggregates[0]
+                : null;
+              const aiScore = agg?.ai_score;
+              const sourceScores = agg?.source_scores;
+              const voteAverage = aiScore ? aiScore / 10 : (sourceScores?.tmdb?.score || 0); // Convert 0-100 to 0-10 scale
+              const voteCount = sourceScores?.tmdb?.votes || 0;
+              
+              return {
+                tmdb_id: tmdbId,
+                title: movie.title,
+                year: movie.year,
+                poster_url: posterUrl,
+                overview_short: overviewShort,
+                vote_average: voteAverage,
+                vote_count: voteCount,
+              };
+            })
+            .filter((result: any) => result !== null); // Remove filtered out movies
+          
+          console.log(`[SEARCH] Local results: ${localResults.length} movies (tmdb_ids: ${Array.from(localTmdbIds).slice(0, 5).join(', ')}${localTmdbIds.size > 5 ? '...' : ''})`);
+        } else {
+          console.log(`[SEARCH] No local movies found for: "${queryTrimmed}"`);
+        }
+      } catch (localError) {
+        console.warn(`[SEARCH] Error querying local database:`, localError);
+        // Continue with TMDB search even if local query fails
+      }
+    }
     
     // Logic flow:
     // 1. If query is empty AND filters are active → use discover endpoint (1 call)
@@ -266,8 +381,22 @@ serve(async (req) => {
       }
     }
     
-    // Transform to our format - ensure we always have an array
-    const movies = (allResults || []).slice(0, 50).map((m) => {
+    // Step 2: Filter out TMDB results that are already in local database (deduplication)
+    if (localTmdbIds.size > 0) {
+      const beforeCount = allResults.length;
+      allResults = allResults.filter((movie) => {
+        const tmdbId = movie.id?.toString();
+        const isDuplicate = tmdbId && localTmdbIds.has(tmdbId);
+        if (isDuplicate) {
+          console.log(`[SEARCH] Filtering out duplicate TMDB result: ${movie.title} (tmdb_id: ${tmdbId}) - already in local database`);
+        }
+        return !isDuplicate;
+      });
+      console.log(`[SEARCH] Deduplication: ${beforeCount} -> ${allResults.length} TMDB results (removed ${beforeCount - allResults.length} duplicates)`);
+    }
+    
+    // Transform TMDB results to our format
+    const tmdbMovies = (allResults || []).slice(0, 50).map((m) => {
       // Safely handle potentially missing fields
       const year = m.release_date ? parseInt(m.release_date.substring(0, 4)) : null;
       const overview = m.overview || '';
@@ -284,7 +413,11 @@ serve(async (req) => {
       };
     });
     
-    console.log(`[SEARCH] Query: "${queryTrimmed || '(none)'}", Year: ${yearFromInt || 'any'}-${yearToInt || 'any'}, Genres: ${genreIds.length > 0 ? genreIds.join(',') : 'any'}, Results: ${movies.length}, API Calls: ${apiCallsMade}`);
+    // Combine local results (preferred) with TMDB results
+    // Local results come first, then TMDB results
+    const movies = [...localResults, ...tmdbMovies].slice(0, 50);
+    
+    console.log(`[SEARCH] Query: "${queryTrimmed || '(none)'}", Year: ${yearFromInt || 'any'}-${yearToInt || 'any'}, Genres: ${genreIds.length > 0 ? genreIds.join(',') : 'any'}, Results: ${movies.length} (${localResults.length} local + ${tmdbMovies.length} TMDB), API Calls: ${apiCallsMade}`);
     
     // Always return a valid response with movies array
     const responseBody = { movies: movies || [] };

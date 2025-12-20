@@ -37,6 +37,7 @@ struct MovieCard: Codable, Identifiable {
     let similarMovieIds: [Int]?
     let stillImages: [String]?
     let trailers: [MovieClip]?
+    let streaming: StreamingInfo?
     let lastUpdated: String?
     
     var id: Int { workId }
@@ -71,6 +72,7 @@ struct MovieCard: Codable, Identifiable {
         case similarMovieIds = "similar_movie_ids"
         case stillImages = "still_images"
         case trailers
+        case streaming
         case lastUpdated = "last_updated"
     }
 }

@@ -49,6 +49,9 @@ struct MovieDetail: Codable, Identifiable {
     // Store original string ID if needed
     var stringId: String?
     
+    // Streaming providers
+    let streaming: StreamingInfo?
+    
     // Computed Properties
     var posterURL: URL? {
         guard let posterPath = posterPath else { return nil }
@@ -120,6 +123,7 @@ struct MovieDetail: Codable, Identifiable {
         case voteAverage = "vote_average"
         case voteCount = "vote_count"
         case popularity
+        case streaming
     }
 }
 
@@ -174,6 +178,47 @@ struct CrewMember: Codable, Identifiable {
     }
 }
 
+// MARK: - Streaming Models
+
+struct StreamingInfo: Codable {
+    let us: StreamingCountry?
+    let updatedAt: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case us
+        case updatedAt = "updated_at"
+    }
+}
+
+struct StreamingCountry: Codable {
+    let link: String?
+    let flatrate: [StreamingProvider]?
+    let rent: [StreamingProvider]?
+    let buy: [StreamingProvider]?
+    let ads: [StreamingProvider]?
+    let free: [StreamingProvider]?
+}
+
+struct StreamingProvider: Codable, Identifiable {
+    let providerId: Int
+    let providerName: String
+    let logoPath: String?
+    
+    var id: Int { providerId }
+    
+    var logoURL: URL? {
+        guard let logoPath = logoPath else { return nil }
+        // TMDB logo images use base URL + w92 size
+        return URL(string: "https://image.tmdb.org/t/p/w92\(logoPath)")
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case providerId = "provider_id"
+        case providerName = "provider_name"
+        case logoPath = "logo_path"
+    }
+}
+
 // MARK: - Mock Data for Previews
 
 extension MovieDetail {
@@ -214,7 +259,8 @@ extension MovieDetail {
             status: "Released",
             voteAverage: 8.433,
             voteCount: 28304,
-            popularity: 61.416
+            popularity: 61.416,
+            streaming: nil
         )
     }
 }

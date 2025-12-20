@@ -11,6 +11,7 @@
 
 import Foundation
 import Supabase
+import Auth
 import Combine
 
 @MainActor
@@ -32,7 +33,12 @@ class SupabaseService: ObservableObject {
         
         self.client = SupabaseClient(
             supabaseURL: url,
-            supabaseKey: SupabaseConfig.supabaseAnonKey
+            supabaseKey: SupabaseConfig.supabaseAnonKey,
+            options: SupabaseClientOptions(
+                auth: SupabaseClientOptions.AuthOptions(
+                    emitLocalSessionAsInitialSession: true
+                )
+            )
         )
     }
     
@@ -870,6 +876,7 @@ class SupabaseService: ObservableObject {
             similarMovieIds: card.similarMovieIds,
             stillImages: card.stillImages,
             trailers: card.trailers,
+            streaming: card.streaming,
             lastUpdated: card.lastUpdated
         )
     }

@@ -157,7 +157,7 @@ struct MoviePageView: View {
                         .padding(.top, -58)
                     
                     // Mango's Tips + Watch On / Liked By cards
-                    tipsAndCardsSection
+                    tipsAndCardsSection(movie: movie)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                     
@@ -773,7 +773,7 @@ struct MoviePageView: View {
     
     // MARK: - Tips and Cards Section
     
-    private var tipsAndCardsSection: some View {
+    private func tipsAndCardsSection(movie: MovieDetail) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             // Mango's Tips Badge and Text
             VStack(alignment: .leading, spacing: 8) {
@@ -800,39 +800,7 @@ struct MoviePageView: View {
             // Watch On / Liked By cards (wired from Figma: CHANGE_TO → Expanded states)
             HStack(spacing: 4) {
                 // Watch On / Platform Card (wired from Figma: CHANGE_TO → Property 1=4)
-                Button(action: {
-                    showPlatformBottomSheet = true
-                }) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Watch on:")
-                                .font(.custom("Nunito-Bold", size: 12))
-                                .foregroundColor(Color(hex: "#333333"))
-                            Spacer()
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10))
-                                .foregroundColor(.black)
-                        }
-                        
-                        HStack(spacing: -6) {
-                            ForEach(0..<3) { _ in
-                                Circle()
-                                    .fill(Color.blue)
-                                    .frame(width: 32, height: 32)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
-                                    )
-                            }
-                        }
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.white)
-                    .cornerRadius(8)
-                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
-                }
-                .buttonStyle(PlainButtonStyle())
+                watchOnCard(movie: movie)
                 
                 // Liked By / Friends Card (wired from Figma: CHANGE_TO → Property 1=2)
                 Button(action: {
@@ -870,6 +838,106 @@ struct MoviePageView: View {
                 .buttonStyle(PlainButtonStyle())
             }
         }
+    }
+    
+    // MARK: - Watch On Card
+    
+    private func watchOnCard(movie: MovieDetail) -> some View {
+        // Get providers in priority order: flatrate > free > ads
+        let providers: [StreamingProvider] = {
+            guard let streaming = movie.streaming,
+                  let us = streaming.us else {
+                return []
+            }
+            
+            var allProviders: [StreamingProvider] = []
+            
+            // Priority 1: Subscription streaming (most important)
+            if let flatrate = us.flatrate {
+                allProviders.append(contentsOf: flatrate)
+            }
+            
+            // Priority 2: Free streaming
+            if let free = us.free {
+                allProviders.append(contentsOf: free)
+            }
+            
+            // Priority 3: Free with ads
+            if let ads = us.ads {
+                allProviders.append(contentsOf: ads)
+            }
+            
+            // Limit to first 3 for display
+            return Array(allProviders.prefix(3))
+        }()
+        
+        let hasProviders = !providers.isEmpty
+        let tmdbLink = movie.streaming?.us?.link
+        
+        return Button(action: {
+            // If we have a TMDB link, open it in Safari
+            if let link = tmdbLink, let url = URL(string: link) {
+                UIApplication.shared.open(url)
+            } else {
+                // Otherwise show the bottom sheet
+                showPlatformBottomSheet = true
+            }
+        }) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Watch on:")
+                        .font(.custom("Nunito-Bold", size: 12))
+                        .foregroundColor(Color(hex: "#333333"))
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10))
+                        .foregroundColor(.black)
+                }
+                
+                if hasProviders {
+                    HStack(spacing: -6) {
+                        ForEach(providers) { provider in
+                            AsyncImage(url: provider.logoURL) { phase in
+                                switch phase {
+                                case .empty:
+                                    Circle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 32, height: 32)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 32, height: 32)
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color(hex: "#fdfdfd"), lineWidth: 2)
+                                        )
+                                case .failure:
+                                    Circle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 32, height: 32)
+                                @unknown default:
+                                    Circle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 32, height: 32)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text("Not streaming")
+                        .font(.custom("Inter-Regular", size: 12))
+                        .foregroundColor(Color(hex: "#999999"))
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(Color.white)
+            .cornerRadius(8)
+            .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 0)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
     
     // MARK: - Section Tabs Bar

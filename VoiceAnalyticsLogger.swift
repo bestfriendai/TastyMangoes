@@ -10,6 +10,7 @@
 
 import Foundation
 import Supabase
+import Auth
 
 /// Result of handling a voice command
 enum VoiceHandlerResult: String {
@@ -39,7 +40,12 @@ class VoiceAnalyticsLogger {
         
         self.supabaseClient = SupabaseClient(
             supabaseURL: url,
-            supabaseKey: SupabaseConfig.supabaseAnonKey
+            supabaseKey: SupabaseConfig.supabaseAnonKey,
+            options: SupabaseClientOptions(
+                auth: SupabaseClientOptions.AuthOptions(
+                    emitLocalSessionAsInitialSession: true
+                )
+            )
         )
     }
     

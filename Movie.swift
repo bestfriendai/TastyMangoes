@@ -127,7 +127,8 @@ extension Movie {
             status: "Released",
             voteAverage: aiScore,
             voteCount: nil,
-            popularity: nil
+            popularity: nil,
+            streaming: nil
         )
     }
     
