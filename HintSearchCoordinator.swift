@@ -145,16 +145,17 @@ class HintSearchCoordinator: ObservableObject {
             }
         }
         
-        // Check if we've done this comprehensive search recently
+        // Check if we've done this comprehensive search recently WITH results > 0
+        // Fix 1: Only skip AI if cached search has movies (not 0 results)
         var shouldCallAI = true
         if let type = searchType, let value = searchValue {
             do {
                 let hasRecent = try await SupabaseService.shared.hasRecentComprehensiveSearch(type: type, value: value)
                 if hasRecent {
-                    print("⏭️ [HintSearch] Skipping AI - recent comprehensive search exists for \(type): \(value)")
+                    print("⏭️ [HintSearch] Skipping AI - recent comprehensive search with results exists for \(type): \(value)")
                     shouldCallAI = false
                 } else {
-                    print("✅ [HintSearch] Cache MISS - will call AI for \(type): \(value)")
+                    print("✅ [HintSearch] Cache MISS or 0 results - will call AI for \(type): \(value)")
                 }
             } catch {
                 print("⚠️ [HintSearch] Error checking comprehensive search cache: \(error)")

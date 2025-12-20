@@ -12,10 +12,12 @@ import Supabase
 struct ComprehensiveSearchRecord: Codable {
     let id: String
     let last_searched: String
+    let movies_found: Int
     
     enum CodingKeys: String, CodingKey {
         case id
         case last_searched
+        case movies_found
     }
 }
 
@@ -48,7 +50,7 @@ extension SupabaseService {
         do {
             let response: [ComprehensiveSearchRecord] = try await client
                 .from("comprehensive_searches")
-                .select("id, last_searched")
+                .select("id, last_searched, movies_found")
                 .eq("search_type", value: type)
                 .eq("normalized_value", value: normalized)
                 .gte("last_searched", value: sevenDaysAgoString)
@@ -56,11 +58,17 @@ extension SupabaseService {
                 .execute()
                 .value
             
-            let hasRecent = !response.isEmpty
+            // Only consider it a cache hit if we have a recent search WITH results > 0
+            let hasRecent = !response.isEmpty && (response.first?.movies_found ?? 0) > 0
             
             #if DEBUG
-            if hasRecent {
-                print("✅ [ComprehensiveSearch] Cache HIT for \(type): \(value)")
+            if !response.isEmpty {
+                let record = response.first!
+                if record.movies_found > 0 {
+                    print("✅ [ComprehensiveSearch] Cache HIT for \(type): \(value) (\(record.movies_found) movies)")
+                } else {
+                    print("⏭️ [ComprehensiveSearch] Cache entry exists but has 0 results for \(type): \(value) - will retry AI")
+                }
             } else {
                 print("❌ [ComprehensiveSearch] Cache MISS for \(type): \(value)")
             }
@@ -80,9 +88,18 @@ extension SupabaseService {
     ///   - type: Search type ("director" or "actor")
     ///   - value: The search value (director name or actor name)
     ///   - tmdbIds: Array of TMDB IDs found by the search
+    /// - Note: Only saves if tmdbIds.count > 0 to avoid caching 0-result searches
     func saveComprehensiveSearch(type: String, value: String, tmdbIds: [String]) async throws {
         guard let client = client else {
             throw SupabaseError.notConfigured
+        }
+        
+        // Fix 2: Don't cache 0-result searches - they block future AI discovery
+        guard tmdbIds.count > 0 else {
+            #if DEBUG
+            print("⏭️ [ComprehensiveSearch] Skipping cache save for \(type): \(value) - 0 results (would block future AI)")
+            #endif
+            return
         }
         
         let normalized = value.lowercased().trimmingCharacters(in: .whitespaces)

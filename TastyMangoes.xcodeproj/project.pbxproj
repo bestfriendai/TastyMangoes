@@ -264,9 +264,6 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
-				C55014A22EF5359000B64881 /* SupabaseService+ComprehensiveSearch.swift */,
-				C57267692EF1177C005C191B /* SupabaseService+AIBudget.swift */,
-				C57267662EF10BAD005C191B /* HintSearchCoordinator.swift */,
 				C57267642EF10B7F005C191B /* AIDiscoveryService.swift */,
 				C517CD042EC9806C00EAE1FE /* Assets.xcassets */,
 				C5B95D442ECB3D9100B47098 /* AddMoviesToListView.swift */,
@@ -284,6 +281,7 @@
 				C5B95D382ECB330000B47098 /* DeleteListBottomSheet.swift */,
 				C5B95D462ECB416200B47098 /* EditListBottomSheet.swift */,
 				C5E27A422EC9979400065350 /* FriendsBottomSheet.swift */,
+				C57267662EF10BAD005C191B /* HintSearchCoordinator.swift */,
 				C517CD0B2EC9806C00EAE1FE /* HomeVew.swift */,
 				C5B95D322ECB32CD00B47098 /* IndividualListView.swift */,
 				C5EF8F342EDC198C0012E597 /* ListeningIndicator.swift */,
@@ -319,6 +317,8 @@
 				C5E27A482EC9979400065353 /* SignInView.swift */,
 				C5E27A4A2EC9979400065354 /* SignUpView.swift */,
 				C5E27A4E2EC9979400065356 /* SupabaseService.swift */,
+				C57267692EF1177C005C191B /* SupabaseService+AIBudget.swift */,
+				C55014A22EF5359000B64881 /* SupabaseService+ComprehensiveSearch.swift */,
 				C5E27A502EC9979400065357 /* SupabaseModels.swift */,
 				C5E27A522EC9979400065358 /* SupabaseConfig.swift */,
 				C50BE7092EE6346900883045 /* SupabaseWatchlistAdapter.swift */,
