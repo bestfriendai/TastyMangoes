@@ -389,7 +389,11 @@ struct MoviePageView: View {
                 }
             }
             .sheet(isPresented: $showPlatformBottomSheet) {
-                PlatformBottomSheet(isPresented: $showPlatformBottomSheet)
+                if let movie = viewModel.movie {
+                    PlatformBottomSheet(isPresented: $showPlatformBottomSheet, streaming: movie.streaming)
+                } else {
+                    PlatformBottomSheet(isPresented: $showPlatformBottomSheet, streaming: nil)
+                }
             }
             .sheet(isPresented: $showFriendsBottomSheet) {
                 FriendsBottomSheet(isPresented: $showFriendsBottomSheet)
@@ -875,13 +879,8 @@ struct MoviePageView: View {
         let tmdbLink = movie.streaming?.us?.link
         
         return Button(action: {
-            // If we have a TMDB link, open it in Safari
-            if let link = tmdbLink, let url = URL(string: link) {
-                UIApplication.shared.open(url)
-            } else {
-                // Otherwise show the bottom sheet
-                showPlatformBottomSheet = true
-            }
+            // Always show the bottom sheet with all streaming platforms
+            showPlatformBottomSheet = true
         }) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
