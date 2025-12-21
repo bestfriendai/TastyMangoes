@@ -877,6 +877,8 @@ class SupabaseService: ObservableObject {
             stillImages: card.stillImages,
             trailers: card.trailers,
             streaming: card.streaming,
+            budget: card.budget,
+            revenue: card.revenue,
             lastUpdated: card.lastUpdated
         )
     }

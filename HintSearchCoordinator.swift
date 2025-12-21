@@ -126,7 +126,10 @@ class HintSearchCoordinator: ObservableObject {
         print("🔍 [HintSearch] Local results: \(localMovies.count)")
         #endif
         
-        // Step 3: AI discovery (if enabled and hints present)
+        // Step 3: AI discovery (if enabled)
+        // Call AI if:
+        // 1. Hints are present (director/actor/author/year), OR
+        // 2. Local search returned 0 results (even without hints)
         var aiMovies: [HintSearchResult] = []
         var newlyIngested = 0
         var aiCost: Double? = nil
@@ -166,15 +169,50 @@ class HintSearchCoordinator: ObservableObject {
             }
         }
         
-        if shouldCallAI && enableAI, let hints = searchHints, hints.hasHints {
+        // Call AI if:
+        // 1. Hints are present (director/actor/author/year), OR
+        // 2. Local search returned 0 results (fallback to AI even without hints), OR
+        // 3. Local results don't match the year hint (e.g., user wants 2025 but we found old movies)
+        let localResultsMatchYear: Bool = {
+            guard let yearHint = searchHints?.year, !localMovies.isEmpty else { return true }
+            // Check if any local result matches the year hint
+            return localMovies.contains { $0.year == yearHint }
+        }()
+        
+        let shouldUseAI = shouldCallAI && enableAI && (
+            (searchHints?.hasHints ?? false) ||  // Has hints
+            localMovies.isEmpty ||  // No local results - use AI as fallback
+            !localResultsMatchYear  // Local results don't match year hint
+        )
+        
+        #if DEBUG
+        if shouldUseAI {
+            if localMovies.isEmpty {
+                print("🤖 [HintSearch] Will call AI - no local results found")
+            } else if !localResultsMatchYear, let yearHint = searchHints?.year {
+                print("🤖 [HintSearch] Will call AI - local results don't match year hint (\(yearHint))")
+            } else if searchHints?.hasHints == true {
+                print("🤖 [HintSearch] Will call AI - hints present")
+            }
+        } else {
+            print("⏭️ [HintSearch] Skipping AI - shouldCallAI=\(shouldCallAI), enableAI=\(enableAI), hasHints=\(searchHints?.hasHints ?? false), localCount=\(localMovies.count), matchYear=\(localResultsMatchYear)")
+        }
+        #endif
+        
+        if shouldUseAI {
             isAISearching = true
             progress = .searchingAI
+            
+            // Create hints if we don't have any (for AI fallback when local search returns 0)
+            let hintsForAI = searchHints ?? ExtractedMovieHints(
+                titleLikely: query.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
             
             do {
                 // Call AI discovery service
                 let aiResponse = try await AIDiscoveryService.shared.discoverMovies(
                     query: query,
-                    hints: hints
+                    hints: hintsForAI
                 )
                 
                 #if DEBUG
@@ -555,10 +593,36 @@ class HintSearchCoordinator: ObservableObject {
                 #if DEBUG
                 print("🎬 [HintSearch] Found \(results.count) movies by director \(director)")
                 #endif
+                
+                // Fallback: If director search found 0 results, try text search
+                if results.isEmpty {
+                    #if DEBUG
+                    print("🔍 [HintSearch] Director search returned 0 results, falling back to text search")
+                    #endif
+                    let searchQuery = hints?.titleLikely ?? query
+                    let searchResults = try await SupabaseService.shared.searchMovies(query: searchQuery)
+                    
+                    for movie in searchResults {
+                        guard let tmdbIdInt = Int(movie.tmdbId) else { continue }
+                        results.append(HintSearchResult(
+                            tmdbId: tmdbIdInt,
+                            title: movie.title,
+                            year: movie.year,
+                            posterURL: movie.posterUrl,
+                            source: .local,
+                            matchReason: "Text search fallback",
+                            genres: movie.genres,
+                            runtimeDisplay: movie.runtimeDisplay,
+                            aiScore: movie.aiScore
+                        ))
+                    }
+                    #if DEBUG
+                    print("🔍 [HintSearch] Text search fallback found \(searchResults.count) movies")
+                    #endif
+                }
             }
-            
             // Priority 2: If we have actor hint (and no director), search by actor
-            if let hints = hints, !hints.actors.isEmpty, hints.director == nil {
+            else if let hints = hints, !hints.actors.isEmpty {
                 #if DEBUG
                 print("🎬 [HintSearch] Searching by actor: \(hints.actors.first!)")
                 #endif
@@ -594,10 +658,36 @@ class HintSearchCoordinator: ObservableObject {
                 #if DEBUG
                 print("🎬 [HintSearch] Found \(actorResults.count) movies with actor \(hints.actors.first!)")
                 #endif
+                
+                // Fallback: If actor search found 0 results, try text search
+                if results.isEmpty {
+                    #if DEBUG
+                    print("🔍 [HintSearch] Actor search returned 0 results, falling back to text search")
+                    #endif
+                    let searchQuery = hints.titleLikely ?? query
+                    let searchResults = try await SupabaseService.shared.searchMovies(query: searchQuery)
+                    
+                    for movie in searchResults {
+                        guard let tmdbIdInt = Int(movie.tmdbId) else { continue }
+                        results.append(HintSearchResult(
+                            tmdbId: tmdbIdInt,
+                            title: movie.title,
+                            year: movie.year,
+                            posterURL: movie.posterUrl,
+                            source: .local,
+                            matchReason: "Text search fallback",
+                            genres: movie.genres,
+                            runtimeDisplay: movie.runtimeDisplay,
+                            aiScore: movie.aiScore
+                        ))
+                    }
+                    #if DEBUG
+                    print("🔍 [HintSearch] Text search fallback found \(searchResults.count) movies")
+                    #endif
+                }
             }
-            
             // Priority 3: If no director/actor hints, do text search
-            if hints?.director == nil && (hints?.actors.isEmpty ?? true) {
+            else {
                 let searchQuery = hints?.titleLikely ?? query
                 
                 #if DEBUG

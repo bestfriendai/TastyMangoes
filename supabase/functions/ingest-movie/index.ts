@@ -1001,6 +1001,8 @@ serve(async (req) => {
       still_images: stillImageStorageUrls.length > 0 ? stillImageStorageUrls : [], // Array of storage URLs (empty array instead of null)
       trailers: trailersArray.length > 0 ? trailersArray : null, // Schema v2: trailers array
       streaming: Object.keys(watchProviders).length > 0 ? watchProviders : null,
+      budget: details.budget || null, // Budget in US dollars
+      revenue: details.revenue || null, // Revenue in US dollars
       last_updated: new Date().toISOString(),
     };
     

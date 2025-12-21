@@ -69,25 +69,28 @@ enum MovieHintExtractor {
     // MARK: - Actor Patterns
     
     /// Patterns that indicate an actor mention
+    /// Updated to capture 3+ word names like "Oscar Isaac"
     private static let actorPatterns: [String] = [
-        "with (\\w+(?:\\s+\\w+)?)",
-        "starring (\\w+(?:\\s+\\w+)?)",
-        "stars (\\w+(?:\\s+\\w+)?)",
-        "has (\\w+(?:\\s+\\w+)?) in it",
-        "(\\w+(?:\\s+\\w+)?) is in it",
-        "(\\w+(?:\\s+\\w+)?) plays",
-        "(\\w+(?:\\s+\\w+)?) was in"
+        "with (\\w+(?:\\s+\\w+){0,2})",  // Capture up to 3 words (e.g., "Oscar Isaac")
+        "starring (\\w+(?:\\s+\\w+){0,2})",
+        "stars (\\w+(?:\\s+\\w+){0,2})",
+        "has (\\w+(?:\\s+\\w+){0,2}) in it",
+        "(\\w+(?:\\s+\\w+){0,2}) is in it",
+        "(\\w+(?:\\s+\\w+){0,2}) plays",
+        "(\\w+(?:\\s+\\w+){0,2}) was in",
+        "actor (\\w+(?:\\s+\\w+){0,2})"  // Added pattern for "actor Oscar Isaac"
     ]
     
     // MARK: - Director Patterns
     
     /// Patterns that indicate a director mention
+    /// Updated to capture 3+ word names like "Guillermo del Toro"
     private static let directorPatterns: [String] = [
-        "directed by (\\w+(?:\\s+\\w+)?)",
-        "by director (\\w+(?:\\s+\\w+)?)",
-        "(\\w+(?:\\s+\\w+)?) directed",
-        "a (\\w+(?:\\s+\\w+)?) film",
-        "a (\\w+(?:\\s+\\w+)?) movie"
+        "directed by (\\w+(?:\\s+\\w+){0,3})",  // Capture up to 4 words (e.g., "Guillermo del Toro")
+        "by director (\\w+(?:\\s+\\w+){0,3})",
+        "(\\w+(?:\\s+\\w+){0,3}) directed",
+        "a (\\w+(?:\\s+\\w+){0,3}) film",
+        "a (\\w+(?:\\s+\\w+){0,3}) movie"
     ]
     
     // MARK: - Author Patterns
@@ -115,7 +118,8 @@ enum MovieHintExtractor {
         "nolan", "fincher", "coppola", "anderson", "coen", "coens",
         "villeneuve", "cameron", "scott", "ridley", "zemeckis",
         "lucas", "jackson", "bay", "snyder", "wan", "peele",
-        "gerwig", "coogler", "waititi", "gunn", "mangold"
+        "gerwig", "coogler", "waititi", "gunn", "mangold",
+        "guillermo", "toro", "del toro"  // Added for Guillermo del Toro
     ]
     
     // MARK: - Known Actors (for better matching)
@@ -128,7 +132,8 @@ enum MovieHintExtractor {
         "johansson", "scarlett", "roberts", "julia", "bullock", "sandra",
         "keanu", "reeves", "smith", "will", "johnson", "dwayne", "rock",
         "downey", "robert", "hemsworth", "chris", "pratt", "evans",
-        "driver", "adam", "chalamet", "timothee", "zendaya", "pugh", "florence"
+        "driver", "adam", "chalamet", "timothee", "zendaya", "pugh", "florence",
+        "isaac", "oscar", "oscar isaac"  // Added for Oscar Isaac
     ]
     
     // MARK: - Genre Keywords
@@ -237,7 +242,34 @@ enum MovieHintExtractor {
     private static func extractActors(from text: String) -> [String] {
         var actors: [String] = []
         
-        // Check for known actors
+        // First try pattern matching (more reliable for multi-word names)
+        for pattern in actorPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+                for match in matches {
+                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
+                        let name = String(text[range]).trimmingCharacters(in: .whitespaces)
+                        // Capitalize properly (e.g., "Oscar Isaac" not "Oscar Isaac")
+                        let capitalized = name.components(separatedBy: " ")
+                            .map { $0.capitalized }
+                            .joined(separator: " ")
+                        if !actors.contains(capitalized) && capitalized.count > 2 {
+                            actors.append(capitalized)
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check for known multi-word actors
+        let lowerText = text.lowercased()
+        if lowerText.contains("oscar isaac") {
+            if !actors.contains("Oscar Isaac") {
+                actors.append("Oscar Isaac")
+            }
+        }
+        
+        // Check for known actors (single-word matches)
         let words = text.components(separatedBy: .whitespacesAndNewlines)
             .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
         
@@ -261,43 +293,40 @@ enum MovieHintExtractor {
             }
         }
         
-        // Also try pattern matching for "with [Name]" etc.
-        for pattern in actorPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-                let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
-                for match in matches {
-                    if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
-                        let name = String(text[range]).trimmingCharacters(in: .whitespaces).capitalized
-                        if !actors.contains(name) && name.count > 2 {
-                            actors.append(name)
-                        }
-                    }
-                }
-            }
-        }
-        
         return actors
     }
     
     private static func extractDirector(from text: String) -> String? {
-        // Check for known directors
-        let words = text.components(separatedBy: .whitespacesAndNewlines)
-            .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
-        
-        for word in words {
-            if knownDirectors.contains(word) {
-                return word.capitalized
-            }
-        }
-        
-        // Try pattern matching
+        // First try pattern matching (more reliable for multi-word names)
         for pattern in directorPatterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 if let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
                     if match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) {
-                        return String(text[range]).trimmingCharacters(in: .whitespaces).capitalized
+                        let directorName = String(text[range]).trimmingCharacters(in: .whitespaces)
+                        // Capitalize properly (e.g., "Guillermo del Toro" not "Guillermo Del Toro")
+                        let capitalized = directorName.components(separatedBy: " ")
+                            .map { $0.capitalized }
+                            .joined(separator: " ")
+                        return capitalized
                     }
                 }
+            }
+        }
+        
+        // Check for known directors (for single-word matches)
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
+        
+        // Check for multi-word known directors first (e.g., "del toro")
+        let lowerText = text.lowercased()
+        if lowerText.contains("del toro") || lowerText.contains("guillermo del toro") {
+            return "Guillermo del Toro"
+        }
+        
+        // Then check single words
+        for word in words {
+            if knownDirectors.contains(word) {
+                return word.capitalized
             }
         }
         
