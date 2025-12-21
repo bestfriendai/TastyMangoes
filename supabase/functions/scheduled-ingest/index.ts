@@ -67,54 +67,74 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Step 1: Fetch TMDB lists based on source
+    // Calculate how many pages to fetch: each page has ~20 movies, fetch enough to get maxMovies unique
+    // For "all" sources, we fetch from 3 lists, so we need fewer pages per list
+    // For single source, we need more pages from that one list
+    const moviesPerPage = 20;
+    const sourcesToFetch = source === 'all' ? 3 : 1; // all = 3 lists, single = 1 list
+    const pagesPerSource = Math.ceil((maxMovies * 1.5) / (moviesPerPage * sourcesToFetch)); // 1.5x buffer for deduplication
+    const maxPagesPerSource = Math.min(pagesPerSource, 5); // Cap at 5 pages per source to avoid too many API calls
+    
+    console.log(`[SCHEDULED] Will fetch up to ${maxPagesPerSource} pages per source (target: ${maxMovies} movies)`);
+    
     const tmdbMovies: TMDBMovieResult[] = [];
     
-    if (source === 'all' || source === 'popular') {
-      console.log('[SCHEDULED] Fetching popular movies...');
-      await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
-      
-      const popularResponse = await fetch(
-        `${TMDB_BASE}/movie/popular?api_key=${TMDB_API_KEY}&page=1&language=en-US`
-      );
-      if (popularResponse.ok) {
-        const popularData: TMDBSearchResponse = await popularResponse.json();
-        tmdbMovies.push(...popularData.results);
-        console.log(`[SCHEDULED] Fetched ${popularData.results.length} popular movies`);
-      } else {
-        console.error(`[SCHEDULED] Failed to fetch popular: ${popularResponse.status}`);
+    // Helper function to fetch multiple pages from a TMDB endpoint
+    const fetchMultiplePages = async (endpoint: string, sourceName: string, maxPages: number) => {
+      const movies: TMDBMovieResult[] = [];
+      for (let page = 1; page <= maxPages; page++) {
+        await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
+        
+        const response = await fetch(`${endpoint}&page=${page}`);
+        if (response.ok) {
+          const data: TMDBSearchResponse = await response.json();
+          movies.push(...data.results);
+          console.log(`[SCHEDULED] Fetched page ${page}/${maxPages} of ${sourceName}: ${data.results.length} movies`);
+          
+          // Stop if we've reached the last page
+          if (page >= data.total_pages) {
+            console.log(`[SCHEDULED] Reached last page (${data.total_pages}) for ${sourceName}`);
+            break;
+          }
+        } else {
+          console.error(`[SCHEDULED] Failed to fetch ${sourceName} page ${page}: ${response.status}`);
+          break; // Stop on error
+        }
       }
+      return movies;
+    };
+    
+    if (source === 'all' || source === 'popular') {
+      console.log(`[SCHEDULED] Fetching popular movies (up to ${maxPagesPerSource} pages)...`);
+      const popularMovies = await fetchMultiplePages(
+        `${TMDB_BASE}/movie/popular?api_key=${TMDB_API_KEY}&language=en-US`,
+        'popular',
+        maxPagesPerSource
+      );
+      tmdbMovies.push(...popularMovies);
+      console.log(`[SCHEDULED] Total popular movies fetched: ${popularMovies.length}`);
     }
     
     if (source === 'all' || source === 'now_playing') {
-      console.log('[SCHEDULED] Fetching now playing movies...');
-      await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
-      
-      const nowPlayingResponse = await fetch(
-        `${TMDB_BASE}/movie/now_playing?api_key=${TMDB_API_KEY}&page=1&language=en-US`
+      console.log(`[SCHEDULED] Fetching now playing movies (up to ${maxPagesPerSource} pages)...`);
+      const nowPlayingMovies = await fetchMultiplePages(
+        `${TMDB_BASE}/movie/now_playing?api_key=${TMDB_API_KEY}&language=en-US`,
+        'now_playing',
+        maxPagesPerSource
       );
-      if (nowPlayingResponse.ok) {
-        const nowPlayingData: TMDBSearchResponse = await nowPlayingResponse.json();
-        tmdbMovies.push(...nowPlayingData.results);
-        console.log(`[SCHEDULED] Fetched ${nowPlayingData.results.length} now playing movies`);
-      } else {
-        console.error(`[SCHEDULED] Failed to fetch now_playing: ${nowPlayingResponse.status}`);
-      }
+      tmdbMovies.push(...nowPlayingMovies);
+      console.log(`[SCHEDULED] Total now playing movies fetched: ${nowPlayingMovies.length}`);
     }
     
     if (source === 'all' || source === 'trending') {
-      console.log('[SCHEDULED] Fetching trending movies...');
-      await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
-      
-      const trendingResponse = await fetch(
-        `${TMDB_BASE}/trending/movie/week?api_key=${TMDB_API_KEY}&page=1&language=en-US`
+      console.log(`[SCHEDULED] Fetching trending movies (up to ${maxPagesPerSource} pages)...`);
+      const trendingMovies = await fetchMultiplePages(
+        `${TMDB_BASE}/trending/movie/week?api_key=${TMDB_API_KEY}&language=en-US`,
+        'trending',
+        maxPagesPerSource
       );
-      if (trendingResponse.ok) {
-        const trendingData: TMDBSearchResponse = await trendingResponse.json();
-        tmdbMovies.push(...trendingData.results);
-        console.log(`[SCHEDULED] Fetched ${trendingData.results.length} trending movies`);
-      } else {
-        console.error(`[SCHEDULED] Failed to fetch trending: ${trendingResponse.status}`);
-      }
+      tmdbMovies.push(...trendingMovies);
+      console.log(`[SCHEDULED] Total trending movies fetched: ${trendingMovies.length}`);
     }
     
     // Step 2: Deduplicate by TMDB ID
