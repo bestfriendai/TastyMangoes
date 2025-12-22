@@ -9,6 +9,8 @@ import SwiftUI
 import UIKit
 import SafariServices
 import WebKit
+import Supabase
+import Auth
 
 // MARK: - Sections
 
@@ -417,8 +419,14 @@ struct MoviePageView: View {
                 }
             }
             .sheet(isPresented: $showGoogleWatchOn) {
-                if let url = googleWatchOnURL {
-                    GoogleWatchOnView(url: url)
+                if let url = googleWatchOnURL, let movie = viewModel.movie {
+                    GoogleWatchOnView(
+                        url: url,
+                        tmdbId: Int(movieId) ?? 0,
+                        movieTitle: movie.title,
+                        movieYear: Int(movie.releaseYear) ?? nil,
+                        workId: nil // Will be looked up by backend if needed
+                    )
                 }
             }
             .sheet(isPresented: $showJustWatch) {
@@ -884,7 +892,6 @@ struct MoviePageView: View {
         }()
         
         let hasProviders = !providers.isEmpty
-        let tmdbLink = movie.streaming?.us?.link
         
         return Button(action: {
             if hasProviders {
@@ -2349,12 +2356,22 @@ struct SafariView: UIViewControllerRepresentable {
     }
 }
 
-// Custom WebView that scrolls to "Where to watch" section on Google
+// Custom WebView that scrolls to "Where to watch" section on Google and captures streaming data
 struct GoogleWatchOnView: UIViewControllerRepresentable {
     let url: URL
+    let tmdbId: Int
+    let movieTitle: String
+    let movieYear: Int?
+    let workId: Int?
     
     func makeUIViewController(context: Context) -> GoogleWatchOnViewController {
-        return GoogleWatchOnViewController(url: url)
+        return GoogleWatchOnViewController(
+            url: url,
+            tmdbId: tmdbId,
+            movieTitle: movieTitle,
+            movieYear: movieYear,
+            workId: workId
+        )
     }
     
     func updateUIViewController(_ uiViewController: GoogleWatchOnViewController, context: Context) {
@@ -2364,10 +2381,18 @@ struct GoogleWatchOnView: UIViewControllerRepresentable {
 
 class GoogleWatchOnViewController: UIViewController {
     let url: URL
+    let tmdbId: Int
+    let movieTitle: String
+    let movieYear: Int?
+    let workId: Int?
     var webView: WKWebView?
     
-    init(url: URL) {
+    init(url: URL, tmdbId: Int, movieTitle: String, movieYear: Int?, workId: Int?) {
         self.url = url
+        self.tmdbId = tmdbId
+        self.movieTitle = movieTitle
+        self.movieYear = movieYear
+        self.workId = workId
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -2483,9 +2508,466 @@ class GoogleWatchOnViewController: UIViewController {
 
 extension GoogleWatchOnViewController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Wait a bit for the page to fully render, then scroll
+        // Wait a bit for the page to fully render, then scroll and capture
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             self.scrollToWhereToWatch()
+            // Capture streaming data in background (non-blocking)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                self.captureStreamingData()
+            }
+        }
+    }
+    
+    func captureStreamingData() {
+        // Simplified JavaScript - minimal version to test
+        let script = """
+        (function() {
+            try {
+            console.log('[GoogleCapture] Starting capture...');
+            var providers = [];
+            var seenProviders = {};
+            
+            // Find the "Available on" section
+            function findAvailableOnSection() {
+                // Look for heading "Available on" or "Where to watch"
+                var headings = document.querySelectorAll('h2, h3, div[role="heading"], span');
+                var section = null;
+                
+                for (var i = 0; i < headings.length; i++) {
+                    var heading = headings[i];
+                    var text = (heading.textContent || heading.innerText || '').trim();
+                    if (text === 'Available on' || text === 'Where to watch' || text.indexOf('Available on') === 0) {
+                        // Find the parent container that holds the list
+                        var parent = heading.parentElement;
+                        for (var j = 0; j < 8 && parent; j++) {
+                            // Look for list items or cards
+                            var hasListItems = parent.querySelectorAll('[role="listitem"], div[data-ved], a[href*="watch"], button').length > 0;
+                            if (hasListItems || parent.querySelectorAll('img').length > 3) {
+                                section = parent;
+                                break;
+                            }
+                            parent = parent.parentElement;
+                        }
+                        if (!section) section = heading.parentElement;
+                        break;
+                    }
+                }
+                
+                return section;
+            }
+            
+            // Extract provider from a container element
+            function extractProviderFromContainer(container) {
+                var fullText = (container.textContent || container.innerText || '').trim();
+                
+                // Skip if contains price indicators
+                if (fullText.indexOf('$') !== -1 || fullText.match(/From \\$\\d+/)) {
+                    return null;
+                }
+                
+                // Skip UI elements and buttons (Google's interface text)
+                // Only match exact phrases or whole words to avoid false positives
+                var uiTextPatterns = [
+                    /Added to your services/i,
+                    /Removed from your services/i,
+                    /Your change wasn't saved/i,
+                    /\\bUNDO\\b/i,  // Whole word only
+                    /TRY AGAIN/i,
+                    /EDIT SERVICES/i
+                ];
+                
+                for (var i = 0; i < uiTextPatterns.length; i++) {
+                    if (uiTextPatterns[i].test(fullText)) {
+                        console.log('[GoogleCapture] Skipping UI text: ' + fullText.substring(0, 50));
+                        return null;
+                    }
+                }
+                
+                // Check for single-word UI terms (exact matches only)
+                var uiWords = ['Added', 'Removed', 'Your', 'UNDO', 'EDIT', 'SERVICES', 'Watch', 'Available', 'on'];
+                var trimmedText = fullText.trim();
+                var isUIWord = false;
+                for (var j = 0; j < uiWords.length; j++) {
+                    if (uiWords[j] === trimmedText) {
+                        isUIWord = true;
+                        break;
+                    }
+                }
+                if (isUIWord || trimmedText === 'TRY AGAIN') {
+                    console.log('[GoogleCapture] Skipping UI word: ' + trimmedText);
+                    return null;
+                }
+                
+                // Find provider name - look for text that looks like a service name
+                // Common patterns: "Amazon Prime Video", "Netflix", "HBO MAX", etc.
+                var providerNamePatterns = [
+                    /(Amazon Prime Video|Prime Video)/i,
+                    /(Netflix)/i,
+                    /(HBO MAX|HBO|MAX)/i,
+                    /(Disney\\+?|Disney Plus)/i,
+                    /(Hulu)/i,
+                    /(Paramount\\+?|Paramount Plus)/i,
+                    /(Apple TV\\+?|Apple TV Plus)/i,
+                    /(Peacock)/i,
+                    /(Showtime)/i,
+                    /(Starz)/i,
+                    /(Xumo Play|Xumo)/i,
+                    /(Plex)/i,
+                    /(Sling TV|Sling)/i,
+                    /(YouTube TV|YouTube)/i,
+                    /(Pluto TV|Pluto)/i,
+                    /(Tubi)/i,
+                    /(Crackle)/i,
+                    /(Vudu)/i,
+                    /(Fubo TV|Fubo)/i,
+                    /(Philo)/i
+                ];
+                
+                var providerName = null;
+                for (var k = 0; k < providerNamePatterns.length; k++) {
+                    var match = fullText.match(providerNamePatterns[k]);
+                    if (match) {
+                        providerName = match[1] || match[0];
+                        console.log('[GoogleCapture] Found provider via pattern: ' + providerName + ' in: ' + fullText.substring(0, 60));
+                        break;
+                    }
+                }
+                
+                // If no pattern match, try to extract from structure
+                if (!providerName) {
+                    // Look for text that's likely a provider name (capitalized, 2-30 chars, not common words)
+                    var uiWordsList = ['Watch', 'Available', 'on', 'Free', 'Subscription', 'EDIT', 'SERVICES', 'Requires', 'add-on', 'Added', 'Removed', 'Your', 'UNDO', 'TRY', 'AGAIN', 'to', 'your', 'services', 'change', "wasn't", 'saved'];
+                    var words = [];
+                    var currentWord = '';
+                    for (var charIdx = 0; charIdx < fullText.length; charIdx++) {
+                        var char = fullText.charAt(charIdx);
+                        var charCode = char.charCodeAt(0);
+                        if (charCode === 32 || charCode === 9 || charCode === 10 || charCode === 13) {
+                            if (currentWord.length > 0) {
+                                words.push(currentWord);
+                                currentWord = '';
+                            }
+                        } else {
+                            currentWord += char;
+                        }
+                    }
+                    if (currentWord.length > 0) {
+                        words.push(currentWord);
+                    }
+                    for (var m = 0; m < words.length; m++) {
+                        var word = words[m].trim();
+                        var isUIWord2 = false;
+                        for (var n = 0; n < uiWordsList.length; n++) {
+                            if (uiWordsList[n] === word) {
+                                isUIWord2 = true;
+                                break;
+                            }
+                        }
+                        if (word.length >= 2 && word.length <= 30 && 
+                            /^[A-Z]/.test(word) && 
+                            !isUIWord2) {
+                            // Try to get multi-word provider names
+                            var name = word;
+                            if (m + 1 < words.length && words[m + 1].trim().length > 0) {
+                                var nextWord = words[m + 1].trim();
+                                var isBadWord = (nextWord === 'Free' || nextWord === 'Subscription' || nextWord === 'Watch');
+                                if (/^[A-Z]/.test(nextWord) && !isBadWord) {
+                                    name = word + ' ' + nextWord;
+                                    if (m + 2 < words.length && words[m + 2].trim() === 'Video' && word.indexOf('Prime') !== -1) {
+                                        name = word + ' ' + nextWord + ' ' + words[m + 2].trim();
+                                    }
+                                }
+                            }
+                            if (name.length >= 3 && name.length <= 30) {
+                                providerName = name;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (!providerName) return null;
+                
+                // Final validation: reject UI words that might have slipped through
+                var providerNameTrimmed = providerName.trim();
+                var uiWordsExact = ['Added', 'Removed', 'Your', 'UNDO', 'TRY', 'AGAIN', 'EDIT', 'SERVICES', 'Watch', 'Available', 'on'];
+                var isExactUIWord = false;
+                for (var p = 0; p < uiWordsExact.length; p++) {
+                    if (uiWordsExact[p] === providerNameTrimmed) {
+                        isExactUIWord = true;
+                        break;
+                    }
+                }
+                
+                // Only reject if it's an exact match or contains UI phrases
+                var lowerName = providerNameTrimmed.toLowerCase();
+                if (isExactUIWord || 
+                    lowerName === 'try again' ||
+                    lowerName.indexOf('wasn\'t saved') !== -1 ||
+                    lowerName === 'added to your services' ||
+                    lowerName === 'removed from your services') {
+                    console.log('[GoogleCapture] Rejected UI word in final validation: ' + providerNameTrimmed);
+                    return null;
+                }
+                
+                // Ensure provider name looks legitimate (contains letters, not just UI text)
+                if (!/[A-Za-z]{3,}/.test(providerNameTrimmed)) {
+                    console.log('[GoogleCapture] Rejected - too short or no letters: ' + providerNameTrimmed);
+                    return null;
+                }
+                
+                console.log('[GoogleCapture] Accepted provider: ' + providerNameTrimmed);
+                
+                // Find availability text - use simple string matching instead of regex
+                var availability = 'subscription'; // default
+                var lowerText = fullText.toLowerCase();
+                if (lowerText.indexOf('free') !== -1 && lowerText.indexOf('subscription') === -1) {
+                    availability = 'Free';
+                } else if (lowerText.indexOf('primetime subscription') !== -1) {
+                    availability = 'Primetime subscription';
+                } else if (lowerText.indexOf('subscription add-on') !== -1 || lowerText.indexOf('requires add-on') !== -1) {
+                    availability = 'Subscription add-on';
+                } else if (lowerText.indexOf('subscription') !== -1) {
+                    availability = 'Subscription';
+                }
+                
+                // Skip paid options
+                if (fullText.match(/\\$\\d+|From \\$\\d+/)) {
+                    return null;
+                }
+                
+                // Find logo
+                var logoUrl = null;
+                var img = container.querySelector('img');
+                if (img && img.src && img.src.indexOf('data:') === -1 && img.src.length > 10) {
+                    logoUrl = img.src;
+                }
+                
+                return {
+                    provider_name: providerName.trim(),
+                    availability_text: availability,
+                    provider_logo_url: logoUrl
+                };
+            }
+            
+            var section = findAvailableOnSection();
+            if (!section) {
+                console.log('[GoogleCapture] Could not find Available on section');
+                // Debug: try to find any mention of "Available on" in the page
+                var bodyText = document.body.innerText || '';
+                if (bodyText.indexOf('Available on') !== -1 || bodyText.indexOf('Where to watch') !== -1) {
+                    console.log('[GoogleCapture] Found "Available on" text in page but couldn't locate section');
+                }
+                return JSON.stringify([]);
+            }
+            
+            console.log('[GoogleCapture] Found section, searching for providers...');
+            console.log('[GoogleCapture] Section has ' + section.querySelectorAll('div, span, a').length + ' child elements');
+            
+            // Strategy 1: Look for list items or cards
+            var listItems = section.querySelectorAll('[role="listitem"], div[data-ved], a[href*="watch"], button[aria-label*="Watch"]');
+            for (var r = 0; r < listItems.length; r++) {
+                var item = listItems[r];
+                var provider = extractProviderFromContainer(item);
+                if (provider) {
+                    var lowerName2 = provider.provider_name.toLowerCase();
+                    if (!seenProviders[lowerName2]) {
+                        seenProviders[lowerName2] = true;
+                        providers.push({
+                            provider_name: provider.provider_name,
+                            availability_text: provider.availability_text,
+                            provider_logo_url: provider.provider_logo_url,
+                            raw_data: {
+                                full_text: (item.textContent || item.innerText || '').trim().substring(0, 200),
+                                element_tag: item.tagName
+                            }
+                        });
+                    }
+                }
+            }
+            
+            // Strategy 2: If no providers found, look for divs containing provider logos and text
+            if (providers.length === 0) {
+                var allDivs = section.querySelectorAll('div');
+                for (var s = 0; s < allDivs.length; s++) {
+                    var div = allDivs[s];
+                    // Check if this div contains an image (logo)
+                    if (div.querySelector('img')) {
+                        var provider2 = extractProviderFromContainer(div);
+                        if (provider2) {
+                            var lowerName3 = provider2.provider_name.toLowerCase();
+                            if (!seenProviders[lowerName3]) {
+                                seenProviders[lowerName3] = true;
+                                providers.push({
+                                    provider_name: provider2.provider_name,
+                                    availability_text: provider2.availability_text,
+                                    provider_logo_url: provider2.provider_logo_url,
+                                    raw_data: {
+                                        full_text: (div.textContent || div.innerText || '').trim().substring(0, 200),
+                                        element_tag: div.tagName
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Strategy 3: Fallback - search entire section text for provider names
+            if (providers.length === 0) {
+                var sectionText = (section.innerText || section.textContent || '').toLowerCase();
+                var providerList = ['amazon prime video', 'prime video', 'netflix', 'hbo max', 'hbo', 'disney plus', 'disney+', 'hulu', 'paramount plus', 'paramount+', 'apple tv plus', 'apple tv+', 'peacock', 'showtime', 'starz', 'xumo play', 'xumo', 'plex', 'sling tv', 'sling', 'youtube tv', 'youtube', 'pluto tv', 'pluto', 'tubi', 'crackle', 'vudu', 'fubo tv', 'fubo', 'philo'];
+                var providerDisplayNames = ['Amazon Prime Video', 'Prime Video', 'Netflix', 'HBO MAX', 'HBO', 'Disney Plus', 'Disney Plus', 'Hulu', 'Paramount Plus', 'Paramount Plus', 'Apple TV Plus', 'Apple TV Plus', 'Peacock', 'Showtime', 'Starz', 'Xumo Play', 'Xumo', 'Plex', 'Sling TV', 'Sling', 'YouTube TV', 'YouTube', 'Pluto TV', 'Pluto', 'Tubi', 'Crackle', 'Vudu', 'Fubo TV', 'Fubo', 'Philo'];
+                
+                for (var idx = 0; idx < providerList.length; idx++) {
+                    var searchName = providerList[idx];
+                    var displayName = providerDisplayNames[idx];
+                    if (sectionText.indexOf(searchName) !== -1) {
+                        var lowerDisplay = displayName.toLowerCase();
+                        if (!seenProviders[lowerDisplay]) {
+                            seenProviders[lowerDisplay] = true;
+                            var avail = 'subscription';
+                            if (sectionText.indexOf('free') !== -1 && sectionText.indexOf('subscription') === -1) {
+                                avail = 'Free';
+                            }
+                            providers.push({
+                                provider_name: displayName,
+                                availability_text: avail,
+                                provider_logo_url: null,
+                                raw_data: { full_text: 'Found in section text' }
+                            });
+                        }
+                    }
+                }
+            }
+            
+            var providerNames = [];
+            for (var v = 0; v < providers.length; v++) {
+                providerNames.push(providers[v].provider_name);
+            }
+            console.log('[GoogleCapture] Found ' + providers.length + ' providers: ' + providerNames.join(', '));
+            
+            if (providers.length === 0) {
+                var sectionText = (section.innerText || section.textContent || '').substring(0, 300);
+                console.log('[GoogleCapture] WARNING: No providers found. Section text sample: ' + sectionText);
+            }
+            
+            console.log('[GoogleCapture] Returning ' + providers.length + ' providers');
+            return JSON.stringify(providers);
+            } catch (error) {
+                var errorMsg = 'Unknown error';
+                try {
+                    errorMsg = error.message || String(error);
+                } catch (e) {
+                    errorMsg = 'Error getting error message: ' + String(e);
+                }
+                console.error('[GoogleCapture] JavaScript error: ' + errorMsg);
+                try {
+                    if (error.stack) {
+                        console.error('[GoogleCapture] Stack: ' + error.stack);
+                    }
+                } catch (e) {
+                    console.error('[GoogleCapture] Could not log stack');
+                }
+                return JSON.stringify([]);
+            }
+        })();
+        """
+        
+        webView?.evaluateJavaScript(script) { [weak self] result, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("⚠️ [GoogleWatchOn] Error capturing streaming data: \(error.localizedDescription)")
+                if let nsError = error as NSError? {
+                    print("⚠️ [GoogleWatchOn] Error domain: \(nsError.domain), code: \(nsError.code)")
+                    print("⚠️ [GoogleWatchOn] Error userInfo: \(nsError.userInfo)")
+                }
+                // Try to get more details from the web view's console
+                self.webView?.evaluateJavaScript("console.log('[GoogleCapture] Error occurred in capture script')") { _, _ in }
+                return
+            }
+            
+            guard let jsonString = result as? String else {
+                print("⚠️ [GoogleWatchOn] No result returned from JavaScript")
+                return
+            }
+            
+            print("🔍 [GoogleWatchOn] JavaScript returned: \(jsonString.prefix(500))")
+            
+            guard let jsonData = jsonString.data(using: .utf8),
+                  let providers = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]] else {
+                print("⚠️ [GoogleWatchOn] Failed to parse JSON: \(jsonString)")
+                return
+            }
+            
+            if providers.count == 0 {
+                print("⚠️ [GoogleWatchOn] No providers found in Google results")
+                return
+            }
+            
+            print("✅ [GoogleWatchOn] Captured \(providers.count) streaming providers: \(providers.map { $0["provider_name"] ?? "unknown" })")
+            
+            // Send to backend asynchronously (fire-and-forget)
+            self.sendToBackend(providers: providers)
+        }
+    }
+    
+    func sendToBackend(providers: [[String: Any]]) {
+        // Get Supabase URL and anon key from config
+        let supabaseUrl = SupabaseConfig.supabaseURL
+        let supabaseAnonKey = SupabaseConfig.supabaseAnonKey
+        
+        // Get current user ID if available (async)
+        Task {
+            var userId: String? = nil
+            do {
+                if let user = try await SupabaseService.shared.getCurrentUser() {
+                    // SupabaseUser has id as UUID
+                    userId = user.id.uuidString
+                }
+            } catch {
+                print("⚠️ [GoogleWatchOn] Could not get user: \(error.localizedDescription)")
+            }
+            
+            // Prepare request body
+            let requestBody: [String: Any] = [
+                "tmdb_id": self.tmdbId,
+                "movie_title": self.movieTitle,
+                "movie_year": self.movieYear as Any,
+                "work_id": self.workId as Any,
+                "providers": providers,
+                "user_id": userId as Any
+            ]
+            
+            guard let url = URL(string: "\(supabaseUrl)/functions/v1/capture-google-streaming"),
+                  let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
+                print("⚠️ [GoogleWatchOn] Failed to create request")
+                return
+            }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+            request.httpBody = jsonData
+            
+            // Send asynchronously (don't wait for response)
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    print("⚠️ [GoogleWatchOn] Error sending to backend: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let httpResponse = response as? HTTPURLResponse {
+                    if httpResponse.statusCode == 200 {
+                        print("✅ [GoogleWatchOn] Successfully sent \(providers.count) providers to backend")
+                    } else {
+                        print("⚠️ [GoogleWatchOn] Backend returned status \(httpResponse.statusCode)")
+                    }
+                }
+            }.resume()
         }
     }
 }

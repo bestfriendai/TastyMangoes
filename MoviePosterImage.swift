@@ -58,14 +58,8 @@ struct MoviePosterImage: View {
                             }
                             components?.queryItems?.append(URLQueryItem(name: "_retry", value: "\(retryCount)"))
                             let retryURL = components?.url ?? baseURL
-                            #if DEBUG
-                            print("🖼️ [MoviePosterImage] Retry URL: \(retryURL.absoluteString)")
-                            #endif
                             return retryURL
                         }
-                        #if DEBUG
-                        print("🖼️ [MoviePosterImage] Loading: \(baseURL.absoluteString)")
-                        #endif
                         return baseURL
                     }()
                     
@@ -89,12 +83,17 @@ struct MoviePosterImage: View {
                         }
                     }
                     .id(retryKey) // Force recreation on retry
-                    .onChange(of: posterPath) { newPath in
+                    .onChange(of: posterPath) { oldPath, newPath in
                         // Reset retry count when URL changes (handles race conditions)
                         if lastPosterURL != newPath {
                             lastPosterURL = newPath
                             retryCount = 0
                             retryKey = UUID()
+                            #if DEBUG
+                            if let url = baseImageURL {
+                                print("🖼️ [MoviePosterImage] Loading: \(url.absoluteString)")
+                            }
+                            #endif
                         }
                     }
                     .onAppear {
@@ -103,6 +102,11 @@ struct MoviePosterImage: View {
                             lastPosterURL = posterPath
                             retryCount = 0
                             retryKey = UUID()
+                            #if DEBUG
+                            if let url = baseImageURL {
+                                print("🖼️ [MoviePosterImage] Loading: \(url.absoluteString)")
+                            }
+                            #endif
                         }
                     }
                 } else {
@@ -137,7 +141,7 @@ struct MoviePosterImage: View {
                             retryCount += 1
                             retryKey = UUID() // Force view recreation with new URL
                             #if DEBUG
-                            print("🖼️ [MoviePosterImage] Retry \(retryCount)/\(maxRetries) for: \(baseURL.absoluteString)")
+                            print("🖼️ [MoviePosterImage] Retry \(retryCount)/\(maxRetries) for: \(baseURL.lastPathComponent)")
                             if let error = error {
                                 print("   Error: \(error.localizedDescription)")
                             }

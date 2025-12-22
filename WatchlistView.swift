@@ -28,6 +28,11 @@ struct IdentifiableMovieId: Identifiable {
     let id: Int
 }
 
+enum ListViewMode {
+    case boxView
+    case listNameView
+}
+
 struct WatchlistView: View {
     @State private var searchText: String = ""
     @State private var watchedFilter: String = "Any"
@@ -38,6 +43,8 @@ struct WatchlistView: View {
     @State private var showDeleteConfirmation = false
     @State private var movieToDelete: String? = nil
     @State private var otherListsContainingMovie: [String] = []
+    @State private var listViewMode: ListViewMode = .boxView
+    @State private var expandedListIds: Set<String> = []
     
     @EnvironmentObject private var watchlistManager: WatchlistManager
     
@@ -52,36 +59,89 @@ struct WatchlistView: View {
     /// Track if we've already synced to avoid redundant network calls
     @State private var hasSyncedThisSession: Bool = false
     
+    // Filtered movies based on search (only from Lists)
+    private var filteredMovies: [MasterlistMovie] {
+        guard !searchText.isEmpty else { return [] }
+        let searchLower = searchText.lowercased()
+        var allMovies: [MasterlistMovie] = []
+        
+        // Add movies from all lists
+        for list in yourLists {
+            let movieIds = watchlistManager.getMoviesInList(listId: list.id)
+            for movieId in movieIds {
+                if let card = MovieCardCache.shared.getCard(tmdbId: movieId) {
+                    let movie = card.toMasterlistMovie(
+                        isWatched: watchlistManager.isWatched(movieId: movieId),
+                        friendsCount: 0
+                    )
+                    if !allMovies.contains(where: { $0.id == movieId }) {
+                        allMovies.append(movie)
+                    }
+                }
+            }
+        }
+        
+        // Add watched movies
+        for movie in watchedMovies {
+            if !allMovies.contains(where: { $0.id == movie.id }) {
+                allMovies.append(movie)
+            }
+        }
+        
+        // Add masterlist movies
+        for movie in masterlistMovies {
+            if !allMovies.contains(where: { $0.id == movie.id }) {
+                allMovies.append(movie)
+            }
+        }
+        
+        // Filter by search text
+        return allMovies.filter { movie in
+            movie.title.lowercased().contains(searchLower) ||
+            movie.year.contains(searchLower) ||
+            movie.genres.joined(separator: " ").lowercased().contains(searchLower)
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
                 Color(hex: "#fdfdfd")
                     .ignoresSafeArea()
                 
-                ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Top Header Section
-                    topHeaderSection
-                        .padding(.horizontal, 16)
-                        .padding(.top, 24)
-                    
-                    // Your Lists Section
-                    yourListsSection
-                        .padding(.top, 24)
-                        .padding(.horizontal, 16)
-                    
-                    // Watched Section
-                    watchedSection
-                        .padding(.top, 24)
-                        .padding(.horizontal, 16)
-                    
-                    // Masterlist Section
-                    masterlistSection
-                        .padding(.top, 24)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 100) // Space for tab bar (will be adjusted by safeAreaInset)
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            // Search Bar (moved up)
+                            searchBarSection
+                                .padding(.horizontal, 16)
+                                .padding(.top, 24)
+                            
+                            // Search Results (if searching)
+                            if !searchText.isEmpty {
+                                searchResultsSection
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 16)
+                            }
+                            
+                            // Your Lists Section
+                            yourListsSection(proxy: proxy)
+                                .padding(.top, 24)
+                                .padding(.horizontal, 16)
+                            
+                            // Watched Section
+                            watchedSection
+                                .padding(.top, 24)
+                                .padding(.horizontal, 16)
+                            
+                            // Masterlist Section
+                            masterlistSection
+                                .padding(.top, 24)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 100) // Space for tab bar (will be adjusted by safeAreaInset)
+                        }
+                    }
                 }
-            }
         }
         .sheet(isPresented: $showFilterSheet) {
             WatchlistFiltersBottomSheet(isPresented: $showFilterSheet)
@@ -180,75 +240,89 @@ struct WatchlistView: View {
         }
     }
     
-    // MARK: - Top Header Section
+    // MARK: - Search Bar Section
     
-    private var topHeaderSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Title and Avatar
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("Discover Your Lists")
-                            .font(.custom("Nunito-Bold", size: 24))
-                            .foregroundColor(Color(hex: "#1a1a1a"))
-                        Text("👑")
-                            .font(.system(size: 24))
+    private var searchBarSection: some View {
+        HStack(spacing: 8) {
+            // Search Bar with custom placeholder
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16))
+                    .foregroundColor(Color(hex: "#666666"))
+                
+                ZStack(alignment: .leading) {
+                    if searchText.isEmpty {
+                        HStack(spacing: 0) {
+                            Text("Search ")
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#999999"))
+                            Text("Lists")
+                                .font(.custom("Inter-Bold", size: 14))
+                                .foregroundColor(Color(hex: "#999999"))
+                            Text(" by name")
+                                .font(.custom("Inter-Regular", size: 14))
+                                .foregroundColor(Color(hex: "#999999"))
+                        }
                     }
                     
-                    Text("Create and customize your watchlists for any needs.")
+                    TextField("", text: $searchText)
                         .font(.custom("Inter-Regular", size: 14))
                         .foregroundColor(Color(hex: "#666666"))
-                        .lineSpacing(4)
                 }
                 
-                Spacer()
-                
-                // Profile Avatar
-                Circle()
-                    .fill(Color(hex: "#f0f0f0"))
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color(hex: "#999999"))
-                    )
-            }
-            
-            // Search and Filter
-            HStack(spacing: 8) {
-                // Search Bar
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
+                Button(action: {
+                    // Voice search - TODO: implement voice search for lists
+                }) {
+                    Image(systemName: "mic.fill")
                         .font(.system(size: 16))
                         .foregroundColor(Color(hex: "#666666"))
-                    
-                    TextField("Searching film by name...", text: $searchText)
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
-                    
-                    Button(action: {
-                        // Voice search
-                    }) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color(hex: "#666666"))
-                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
-                .background(Color(hex: "#f3f3f3"))
-                .cornerRadius(8)
-                
-                // Filter Button
-                Button(action: {
-                    showFilterSheet = true
-                }) {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 20))
-                        .foregroundColor(Color(hex: "#666666"))
-                        .frame(width: 44, height: 44)
-                        .background(Color(hex: "#f3f3f3"))
-                        .cornerRadius(8)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(Color(hex: "#f3f3f3"))
+            .cornerRadius(8)
+            
+            // Filter Button
+            Button(action: {
+                showFilterSheet = true
+            }) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 20))
+                    .foregroundColor(Color(hex: "#666666"))
+                    .frame(width: 44, height: 44)
+                    .background(Color(hex: "#f3f3f3"))
+                    .cornerRadius(8)
+            }
+        }
+    }
+    
+    // MARK: - Search Results Section
+    
+    private var searchResultsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Search Results (\(filteredMovies.count))")
+                .font(.custom("Nunito-Bold", size: 18))
+                .foregroundColor(Color(hex: "#1a1a1a"))
+                .padding(.bottom, 8)
+            
+            if filteredMovies.isEmpty {
+                Text("No movies found in your lists")
+                    .font(.custom("Inter-Regular", size: 14))
+                    .foregroundColor(Color(hex: "#666666"))
+                    .padding(.vertical, 16)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(filteredMovies) { movie in
+                        MasterlistMovieCard(movie: movie)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                guard let movieId = Int(movie.id), movieId > 0 else {
+                                    return
+                                }
+                                selectedMovieId = IdentifiableMovieId(id: movieId)
+                            }
+                    }
                 }
             }
         }
@@ -256,15 +330,41 @@ struct WatchlistView: View {
     
     // MARK: - Your Lists Section
     
-    private var yourListsSection: some View {
+    private func yourListsSection(proxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Section Header
+            // Section Header with View Switcher and Create Button
             HStack {
                 Text("Your Lists (\(yourLists.count))")
                     .font(.custom("Nunito-Bold", size: 20))
                     .foregroundColor(Color(hex: "#1a1a1a"))
                 
                 Spacer()
+                
+                // View Mode Switcher (midway)
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        listViewMode = listViewMode == .boxView ? .listNameView : .boxView
+                    }
+                }) {
+                    Image(systemName: listViewMode == .boxView ? "square.grid.2x2" : "list.bullet")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(Color(hex: "#666666"))
+                        .frame(width: 32, height: 32)
+                }
+                .padding(.trailing, 12)
+                
+                // Create New Watchlist Button
+                Button(action: {
+                    showCreateWatchlistSheet = true
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                        .frame(width: 32, height: 32)
+                        .background(Color(hex: "#f3f3f3"))
+                        .cornerRadius(6)
+                }
+                .padding(.trailing, 12)
                 
                 NavigationLink(destination: YourListsView()) {
                     HStack(spacing: 4) {
@@ -279,39 +379,74 @@ struct WatchlistView: View {
                 }
             }
             
-            // Horizontal Scrollable Grid (3 rows x 2 columns = 6 cards per page)
-            GeometryReader { geometry in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        // Group lists into pages of 6 cards (3 rows x 2 columns)
-                        ForEach(0..<numberOfPages, id: \.self) { pageIndex in
-                            VStack(spacing: 4) {
-                                // Row 1 (2 cards)
-                                HStack(spacing: 4) {
-                                    cardForPosition(page: pageIndex, row: 0, column: 0)
-                                    cardForPosition(page: pageIndex, row: 0, column: 1)
+            // List Display based on view mode
+            if listViewMode == .boxView {
+                // Box View (original horizontal scrollable grid)
+                GeometryReader { geometry in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            // Group lists into pages of 6 cards (3 rows x 2 columns)
+                            ForEach(0..<numberOfPages, id: \.self) { pageIndex in
+                                VStack(spacing: 4) {
+                                    // Row 1 (2 cards)
+                                    HStack(spacing: 4) {
+                                        cardForPosition(page: pageIndex, row: 0, column: 0)
+                                        cardForPosition(page: pageIndex, row: 0, column: 1)
+                                    }
+                                    
+                                    // Row 2 (2 cards)
+                                    HStack(spacing: 4) {
+                                        cardForPosition(page: pageIndex, row: 1, column: 0)
+                                        cardForPosition(page: pageIndex, row: 1, column: 1)
+                                    }
+                                    
+                                    // Row 3 (2 cards)
+                                    HStack(spacing: 4) {
+                                        cardForPosition(page: pageIndex, row: 2, column: 0)
+                                        cardForPosition(page: pageIndex, row: 2, column: 1)
+                                    }
                                 }
-                                
-                                // Row 2 (2 cards)
-                                HStack(spacing: 4) {
-                                    cardForPosition(page: pageIndex, row: 1, column: 0)
-                                    cardForPosition(page: pageIndex, row: 1, column: 1)
-                                }
-                                
-                                // Row 3 (2 cards)
-                                HStack(spacing: 4) {
-                                    cardForPosition(page: pageIndex, row: 2, column: 0)
-                                    cardForPosition(page: pageIndex, row: 2, column: 1)
-                                }
+                                .frame(width: geometry.size.width - 32) // Full width minus padding
                             }
-                            .frame(width: geometry.size.width - 32) // Full width minus padding
                         }
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, -16)
                 }
-                .padding(.horizontal, -16)
+                .frame(height: 180) // Fixed height for the grid
+            } else {
+                // List Name View (vertical scrollable list with expandable rows)
+                VStack(spacing: 0) {
+                    ForEach(yourLists) { list in
+                        ListNameRow(
+                            list: list,
+                            isExpanded: expandedListIds.contains(list.id),
+                            onTap: {
+                                let wasExpanded = expandedListIds.contains(list.id)
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    if wasExpanded {
+                                        expandedListIds.remove(list.id)
+                                    } else {
+                                        expandedListIds.insert(list.id)
+                                    }
+                                }
+                                // Scroll to the list header when expanding (after animation starts)
+                                if !wasExpanded {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            proxy.scrollTo("list_\(list.id)", anchor: .top)
+                                        }
+                                    }
+                                }
+                            },
+                            onMovieTap: { movieId in
+                                selectedMovieId = IdentifiableMovieId(id: movieId)
+                            }
+                        )
+                        .id("list_\(list.id)")
+                    }
+                }
             }
-            .frame(height: 180) // Fixed height for the grid
         }
     }
     
@@ -357,7 +492,7 @@ struct WatchlistView: View {
     
     private var watchedSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Section Header with Chevron - same style as Masterlist
+            // Section Header with Chevron - lightly shaded background
             HStack {
                 HStack(spacing: 4) {
                     Circle()
@@ -383,6 +518,19 @@ struct WatchlistView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(Color(hex: "#666666"))
                         .frame(width: 28, height: 28)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(hex: "#fafafa"))
+            .cornerRadius(8)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    isWatchedSectionExpanded.toggle()
+                }
+                if isWatchedSectionExpanded && watchedMovies.isEmpty {
+                    loadWatchedMoviesSmartFetch()
                 }
             }
             
@@ -468,28 +616,7 @@ struct WatchlistView: View {
                 }
             }
             
-            // Filter Dropdown
-            Button(action: {
-                // Show filter options
-            }) {
-                HStack {
-                    Text("Watched: \(watchedFilter)")
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#333333"))
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "#666666"))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(hex: "#ffedcc"))
-                .cornerRadius(8)
-            }
-            
-            // Movie List with Swipe Actions
+            // Movie List with Swipe Actions (removed "Watched:Any" filter button)
             VStack(spacing: 0) {
                 ForEach(masterlistMovies) { movie in
                     SwipeableMasterlistMovieCard(
@@ -911,6 +1038,135 @@ struct SmallListCard: View {
         .background(Color.white)
         .cornerRadius(8)
         .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1)
+    }
+}
+
+// MARK: - List Name Row (for ListNameView)
+
+struct ListNameRow: View {
+    let list: WatchlistItem
+    let isExpanded: Bool
+    let onTap: () -> Void
+    let onMovieTap: (Int) -> Void
+    
+    @EnvironmentObject private var watchlistManager: WatchlistManager
+    @State private var listMovies: [MasterlistMovie] = []
+    @State private var isLoadingMovies: Bool = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Row Header (tappable anywhere)
+            HStack {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(hex: "#FEA500"))
+                        .frame(width: 6, height: 6)
+                    
+                    Text("\(list.name) (\(list.filmCount))")
+                        .font(.custom("Nunito-Bold", size: 20))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                }
+                
+                Spacer()
+                
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(hex: "#666666"))
+                    .frame(width: 28, height: 28)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onTap()
+            }
+            .onChange(of: isExpanded) { oldValue, newValue in
+                if newValue && listMovies.isEmpty {
+                    loadListMovies()
+                }
+            }
+            
+            // Expanded Content
+            if isExpanded {
+                if isLoadingMovies {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding()
+                        Spacer()
+                    }
+                } else if listMovies.isEmpty {
+                    Text("No movies in this list")
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#666666"))
+                        .padding(.vertical, 16)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(listMovies) { movie in
+                            MasterlistMovieCard(movie: movie)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    guard let movieId = Int(movie.id), movieId > 0 else {
+                                        return
+                                    }
+                                    onMovieTap(movieId)
+                                }
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+            }
+        }
+        .padding(.bottom, 8)
+    }
+    
+    private func loadListMovies() {
+        isLoadingMovies = true
+        let movieIds = watchlistManager.getMoviesInList(listId: list.id)
+        let cache = MovieCardCache.shared
+        
+        // First, load from cache (instant)
+        var cachedMovies: [MasterlistMovie] = []
+        for movieId in movieIds {
+            if let card = cache.getCard(tmdbId: movieId) {
+                let movie = card.toMasterlistMovie(
+                    isWatched: watchlistManager.isWatched(movieId: movieId),
+                    friendsCount: 0
+                )
+                cachedMovies.append(movie)
+            }
+        }
+        
+        listMovies = cachedMovies
+        isLoadingMovies = false
+        
+        // Then, fetch any missing movies
+        let missingIds = cache.getMissingIds(from: Array(movieIds))
+        if !missingIds.isEmpty {
+            Task {
+                do {
+                    let fetchedCards = try await SupabaseService.shared.fetchMovieCardsBatch(tmdbIds: missingIds)
+                    cache.setCards(Array(fetchedCards.values))
+                    
+                    await MainActor.run {
+                        // Reload from cache (now complete)
+                        var allMovies: [MasterlistMovie] = []
+                        for movieId in movieIds {
+                            if let card = cache.getCard(tmdbId: movieId) {
+                                let movie = card.toMasterlistMovie(
+                                    isWatched: watchlistManager.isWatched(movieId: movieId),
+                                    friendsCount: 0
+                                )
+                                allMovies.append(movie)
+                            }
+                        }
+                        listMovies = allMovies
+                    }
+                } catch {
+                    print("⚠️ [ListNameRow] Failed to fetch movies for list \(list.id): \(error)")
+                }
+            }
+        }
     }
 }
 
