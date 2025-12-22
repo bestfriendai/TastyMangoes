@@ -8,6 +8,7 @@
 import SwiftUI
 import UIKit
 import SafariServices
+import WebKit
 
 // MARK: - Sections
 
@@ -50,6 +51,8 @@ struct MoviePageView: View {
     @State private var showPosterCarousel = false
     @State private var selectedImageIndex = 0
     @State private var showGoogleSearch = false
+    @State private var showGoogleWatchOn = false
+    @State private var googleWatchOnURL: URL?
     @State private var showJustWatch = false
     
     // Computed property to determine if pinned tab bar should show
@@ -411,6 +414,11 @@ struct MoviePageView: View {
                     if let url = URL(string: "https://www.google.com/search?q=\(encodedQuery)") {
                         SafariView(url: url)
                     }
+                }
+            }
+            .sheet(isPresented: $showGoogleWatchOn) {
+                if let url = googleWatchOnURL {
+                    GoogleWatchOnView(url: url)
                 }
             }
             .sheet(isPresented: $showJustWatch) {
@@ -879,8 +887,18 @@ struct MoviePageView: View {
         let tmdbLink = movie.streaming?.us?.link
         
         return Button(action: {
-            // Always show the bottom sheet with all streaming platforms
-            showPlatformBottomSheet = true
+            if hasProviders {
+                // Show the bottom sheet with all streaming platforms
+                showPlatformBottomSheet = true
+            } else {
+                // No streaming data - open Google and scroll to "Where to watch" section
+                let searchQuery = "\(movie.title) \(movie.releaseYear) movie where to watch"
+                let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchQuery
+                if let url = URL(string: "https://www.google.com/search?q=\(encodedQuery)") {
+                    googleWatchOnURL = url
+                    showGoogleWatchOn = true
+                }
+            }
         }) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -925,7 +943,7 @@ struct MoviePageView: View {
                         }
                     }
                 } else {
-                    Text("Not streaming")
+                    Text("More info")
                         .font(.custom("Inter-Regular", size: 12))
                         .foregroundColor(Color(hex: "#999999"))
                 }
@@ -2328,6 +2346,147 @@ struct SafariView: UIViewControllerRepresentable {
     
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
         // No update needed
+    }
+}
+
+// Custom WebView that scrolls to "Where to watch" section on Google
+struct GoogleWatchOnView: UIViewControllerRepresentable {
+    let url: URL
+    
+    func makeUIViewController(context: Context) -> GoogleWatchOnViewController {
+        return GoogleWatchOnViewController(url: url)
+    }
+    
+    func updateUIViewController(_ uiViewController: GoogleWatchOnViewController, context: Context) {
+        // No update needed
+    }
+}
+
+class GoogleWatchOnViewController: UIViewController {
+    let url: URL
+    var webView: WKWebView?
+    
+    init(url: URL) {
+        self.url = url
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        // Create WKWebView configuration
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: view.bounds, configuration: config)
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        webView.navigationDelegate = self
+        self.webView = webView
+        
+        view.addSubview(webView)
+        
+        // Add close button
+        let closeButton = UIButton(type: .system)
+        closeButton.setTitle("Close", for: .normal)
+        closeButton.setTitleColor(.systemBlue, for: .normal)
+        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(closeButton)
+        
+        NSLayoutConstraint.activate([
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            closeButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+        ])
+        
+        // Load the URL
+        webView.load(URLRequest(url: url))
+    }
+    
+    @objc func closeTapped() {
+        dismiss(animated: true)
+    }
+    
+    func scrollToWhereToWatch() {
+        // JavaScript to find and scroll to "Where to watch" section on Google
+        // Google's movie search results have a "Where to watch" section that we need to scroll to
+        let script = """
+        (function() {
+            // Function to find element containing text
+            function findElementWithText(text, tagName) {
+                const elements = document.querySelectorAll(tagName || '*');
+                for (let el of elements) {
+                    const elText = (el.textContent || el.innerText || '').trim();
+                    if (elText === text || elText.startsWith(text)) {
+                        return el;
+                    }
+                }
+                return null;
+            }
+            
+            // Try to find "Where to watch" heading (usually an H2 or H3)
+            let targetElement = findElementWithText('Where to watch', 'h2') || 
+                               findElementWithText('Where to watch', 'h3') ||
+                               findElementWithText('Where to watch', 'div');
+            
+            // If not found, search all elements
+            if (!targetElement) {
+                const allElements = document.querySelectorAll('*');
+                for (let el of allElements) {
+                    const text = (el.textContent || el.innerText || '').trim();
+                    // Look for exact match or starts with "Where to watch"
+                    if ((text === 'Where to watch' || text.startsWith('Where to watch')) && 
+                        el.offsetHeight > 0 && 
+                        (el.tagName === 'H2' || el.tagName === 'H3' || el.tagName === 'DIV')) {
+                        targetElement = el;
+                        break;
+                    }
+                }
+            }
+            
+            if (targetElement) {
+                // Scroll the element into view
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                // Add a small offset to account for headers
+                setTimeout(() => {
+                    window.scrollBy({ top: -80, behavior: 'smooth' });
+                }, 500);
+                
+                return true;
+            }
+            
+            // Fallback: scroll down to approximate position where "Where to watch" usually appears
+            // On mobile Google, it's typically around 400-600px down
+            setTimeout(() => {
+                window.scrollTo({ top: 500, behavior: 'smooth' });
+            }, 1000);
+            
+            return false;
+        })();
+        """
+        
+        webView?.evaluateJavaScript(script) { result, error in
+            if let error = error {
+                print("⚠️ [GoogleWatchOn] Error scrolling: \(error.localizedDescription)")
+            } else {
+                if let success = result as? Bool, success {
+                    print("✅ [GoogleWatchOn] Successfully scrolled to 'Where to watch' section")
+                } else {
+                    print("⚠️ [GoogleWatchOn] Used fallback scroll position")
+                }
+            }
+        }
+    }
+}
+
+extension GoogleWatchOnViewController: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Wait a bit for the page to fully render, then scroll
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            self.scrollToWhereToWatch()
+        }
     }
 }
 
