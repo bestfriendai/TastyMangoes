@@ -95,6 +95,7 @@ class SpeechRecognizer: ObservableObject {
     private var isFirstResult: Bool = true // Track if this is the first recognition result
     private var hasReceivedAnyResult: Bool = false // Track if we've received any recognition result (for TalkToMango endpointing)
     private var lastSpeechTime: Date? // Track when last transcript update occurred (for post-speech timer)
+    private var shouldProcessTranscript: Bool = true // Set to false when user cancels (taps Stop) to prevent processing
     
     init() {
         checkAvailability()
@@ -135,6 +136,7 @@ class SpeechRecognizer: ObservableObject {
         sessionStartTime = Date()
         isFirstResult = true
         isReadyToListen = false
+        shouldProcessTranscript = true  // Reset flag for new session
         
         print("🎙 startListening() called (current state: \(state), mode: \(config.mode))")
         if let startTime = sessionStartTime {
@@ -380,10 +382,13 @@ class SpeechRecognizer: ObservableObject {
                     )
                     
                     // Handle TalkToMango transcript through VoiceIntentRouter
-                    if self.currentConfig.mode == .talkToMango {
+                    // Only process if user didn't cancel (tapped Stop)
+                    if self.currentConfig.mode == .talkToMango && self.shouldProcessTranscript {
                         Task {
                             await VoiceIntentRouter.handleTalkToMangoTranscript(self.transcript)
                         }
+                    } else if !self.shouldProcessTranscript {
+                        print("🎤 Skipping transcript processing - user cancelled (tapped Stop)")
                     }
                     
                     // Stop listening - Apple has determined the utterance is complete
@@ -603,13 +608,22 @@ class SpeechRecognizer: ObservableObject {
         
         print("🎤 Stopping... (current transcript: '\(transcript)', reason: \(reason))")
         
+        // If user tapped Stop, prevent any transcript processing
+        if reason == "userTappedStop" {
+            shouldProcessTranscript = false
+            print("🎤 User cancelled - setting shouldProcessTranscript = false")
+        }
+        
         // Handle TalkToMango transcript if we have one and haven't already handled it
         // (This covers the silence timeout case where isFinal might not have fired yet)
-        if currentConfig.mode == .talkToMango && !transcript.isEmpty && reason != "finalFromApple" {
+        // Skip if user cancelled (tapped Stop)
+        if currentConfig.mode == .talkToMango && !transcript.isEmpty && reason != "finalFromApple" && shouldProcessTranscript {
             // Only handle if we have a transcript and it wasn't already handled via isFinal
             Task {
                 await VoiceIntentRouter.handleTalkToMangoTranscript(transcript)
             }
+        } else if reason == "userTappedStop" {
+            print("🎤 Skipping transcript processing - user cancelled (tapped Stop)")
         }
         
         // IMMEDIATELY stop audio engine and remove tap

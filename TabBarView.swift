@@ -81,6 +81,11 @@ struct TabBarView: View {
             print("🍋 [TabBarView] Received mangoNavigateToSearch notification - switching to Search tab")
             selectedTab = 1
         }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToHome)) { _ in
+            print("🍋 [TabBarView] Received mangoNavigateToHome notification - switching to Home tab")
+            selectedTab = 0
+            showMangoListeningView = false  // Ensure listening view is dismissed
+        }
     }
 }
 

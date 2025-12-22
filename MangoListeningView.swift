@@ -19,6 +19,7 @@ struct MangoListeningView: View {
     @State private var hasReceivedFinalTranscript: Bool = false
     @State private var dismissTimer: Task<Void, Never>?
     @State private var uiState: ListeningUIState = .preparing
+    @State private var wasCancelled: Bool = false  // Track if user tapped Stop to prevent processing
     
     init(speechRecognizer: SpeechRecognizer, isPresented: Binding<Bool>) {
         self.speechRecognizer = speechRecognizer
@@ -101,12 +102,30 @@ struct MangoListeningView: View {
                     
                     // Show transcript if available
                     if !speechRecognizer.transcript.isEmpty {
-                        Text(speechRecognizer.transcript)
-                            .font(.custom("Inter-Regular", size: 18))
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
+                        VStack(spacing: 20) {
+                            Text(speechRecognizer.transcript)
+                                .font(.custom("Inter-Regular", size: 18))
+                                .foregroundColor(.white.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                                .transition(.opacity)
+                            
+                            // Finished button (only show when there's a transcript)
+                            Button(action: {
+                                finishListening()
+                            }) {
+                                Text("Finished")
+                                    .font(.custom("Inter-Bold", size: 18))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 40)
+                                    .padding(.vertical, 16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 30)
+                                            .fill(Color(hex: "#90EE90").opacity(0.9)) // Light green
+                                    )
+                            }
                             .transition(.opacity)
+                        }
                     } else {
                         // Show hint text only when listening (not while preparing)
                         if uiState == .listening {
@@ -122,7 +141,7 @@ struct MangoListeningView: View {
                 
                 Spacer()
                 
-                // Stop button
+                // Stop button (lowered)
                 Button(action: {
                     stopListening()
                 }) {
@@ -140,7 +159,7 @@ struct MangoListeningView: View {
                             .fill(Color.white.opacity(0.2))
                     )
                 }
-                .padding(.bottom, 60)
+                .padding(.bottom, 80) // Lowered from 60 to 80
             }
         }
         .onAppear {
@@ -204,6 +223,12 @@ struct MangoListeningView: View {
         .onChange(of: speechRecognizer.state) { oldState, newState in
             print("🎤 MangoListeningView: state changed from \(oldState) to \(newState), transcript: '\(speechRecognizer.transcript)'")
             
+            // Don't process transcript if user cancelled (tapped Stop) or view is dismissed
+            guard !wasCancelled && isPresented else {
+                print("🎤 Skipping transcript processing - wasCancelled: \(wasCancelled), isPresented: \(isPresented)")
+                return
+            }
+            
             // When recording finishes (processing), handle the transcript
             if case .processing = newState, case .listening = oldState {
                 print("🎤 Recording finished, handling final transcript")
@@ -224,7 +249,7 @@ struct MangoListeningView: View {
                     Task {
                         try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
                         await MainActor.run {
-                            if isPresented {
+                            if isPresented && !wasCancelled {
                                 print("🎤 Dismissing due to no transcript")
                                 dismissListeningView()
                             }
@@ -247,7 +272,7 @@ struct MangoListeningView: View {
                     Task {
                         try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s
                         await MainActor.run {
-                            if isPresented {
+                            if isPresented && !wasCancelled {
                                 if hasReceivedFinalTranscript {
                                     scheduleDismiss()
                                 } else {
@@ -264,7 +289,7 @@ struct MangoListeningView: View {
                     Task {
                         try? await Task.sleep(nanoseconds: 800_000_000) // 0.8s
                         await MainActor.run {
-                            if isPresented {
+                            if isPresented && !wasCancelled {
                                 dismissListeningView()
                             }
                         }
@@ -306,6 +331,12 @@ struct MangoListeningView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SpeechRecognizerFinalTranscript"))) { notification in
+            // Don't process if user cancelled (tapped Stop) or view is dismissed
+            guard !wasCancelled && isPresented else {
+                print("🎤 Skipping final transcript notification - wasCancelled: \(wasCancelled), isPresented: \(isPresented)")
+                return
+            }
+            
             // When final transcript is received, mark it so we can dismiss
             print("🎤 MangoListeningView: Received final transcript notification")
             hasReceivedFinalTranscript = true
@@ -333,6 +364,9 @@ struct MangoListeningView: View {
         print("🎤 Current transcript: '\(speechRecognizer.transcript)'")
         print("🎤 Current state: \(speechRecognizer.state)")
         
+        // Set cancellation flag to prevent any transcript processing
+        wasCancelled = true
+        
         // Cancel any pending dismiss timer
         dismissTimer?.cancel()
         dismissTimer = nil
@@ -352,9 +386,51 @@ struct MangoListeningView: View {
         }
         
         // ALWAYS dismiss when user taps Stop, regardless of transcript
-        // User explicitly wants to exit, so respect that
-        print("🎤 User tapped Stop - dismissing view immediately")
+        // User explicitly wants to exit and go back to previous screen
+        // Navigate to Home tab to avoid showing blank Talk to Mango screen
+        print("🎤 User tapped Stop - dismissing view immediately and navigating to Home (cancelled: true)")
+        NotificationCenter.default.post(
+            name: .mangoNavigateToHome,
+            object: nil
+        )
         isPresented = false
+    }
+    
+    private func finishListening() {
+        print("🎤 MangoListeningView.finishListening() called (user tapped Finished)")
+        print("🎤 Current transcript: '\(speechRecognizer.transcript)'")
+        
+        // Cancel any pending dismiss timer
+        dismissTimer?.cancel()
+        dismissTimer = nil
+        
+        // Stop the recognizer if it's still running
+        let shouldStop: Bool
+        switch speechRecognizer.state {
+        case .listening, .requesting:
+            shouldStop = true
+        default:
+            shouldStop = false
+        }
+        if shouldStop {
+            Task {
+                speechRecognizer.stopListening(reason: "userTappedFinished")
+            }
+        }
+        
+        // Process the transcript and dismiss
+        handleFinalTranscript()
+        print("🎤 User tapped Finished - processing transcript and dismissing")
+        
+        // Dismiss after a brief delay to allow transcript processing
+        Task {
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
+            await MainActor.run {
+                if isPresented {
+                    isPresented = false
+                }
+            }
+        }
     }
     
     private func dismissListeningView() {
@@ -367,6 +443,12 @@ struct MangoListeningView: View {
     }
     
     private func handleFinalTranscript() {
+        // Don't process if user cancelled (tapped Stop) or view is dismissed
+        guard !wasCancelled && isPresented else {
+            print("🎤 handleFinalTranscript() skipped - wasCancelled: \(wasCancelled), isPresented: \(isPresented)")
+            return
+        }
+        
         let transcript = speechRecognizer.transcript
         if !transcript.isEmpty {
             // Route to VoiceIntentRouter
