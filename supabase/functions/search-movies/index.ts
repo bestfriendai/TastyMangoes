@@ -110,7 +110,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
     
     let allResults: Array<{ id: number; title: string; release_date: string; poster_path: string; overview: string; vote_average: number; vote_count: number; genre_ids?: number[] }> = [];
-    let localResults: Array<{ tmdb_id: string; title: string; year: number | null; poster_url: string | null; overview_short: string | null; vote_average: number; vote_count: number }> = [];
+    let localResults: Array<{ tmdb_id: string; title: string; year: number | null; poster_url: string | null; overview_short: string | null; vote_average: number; vote_count: number; ai_score: number | null }> = [];
     let localTmdbIds = new Set<string>();
     let apiCallsMade = 0;
     
@@ -129,7 +129,9 @@ serve(async (req) => {
             year,
             release_date,
             works_meta(
+              poster_url_small,
               poster_url_medium,
+              poster_url_large,
               overview_short,
               genres
             ),
@@ -185,7 +187,8 @@ serve(async (req) => {
               }
               
               localTmdbIds.add(tmdbId);
-              const posterUrl = meta?.poster_url_medium || null;
+              // Try medium first, then large, then small as fallback
+              const posterUrl = meta?.poster_url_medium || meta?.poster_url_large || meta?.poster_url_small || null;
               
               // Get overview from works_meta
               const overviewShort = meta?.overview_short || null;
@@ -207,6 +210,7 @@ serve(async (req) => {
                 overview_short: overviewShort,
                 vote_average: voteAverage,
                 vote_count: voteCount,
+                ai_score: aiScore ?? null, // Include ai_score for database movies (0-100 scale), use nullish coalescing to preserve 0 values
               };
             })
             .filter((result: any) => result !== null); // Remove filtered out movies
@@ -418,6 +422,7 @@ serve(async (req) => {
         overview_short: overviewShort || null,
         vote_average: m.vote_average || 0,
         vote_count: m.vote_count || 0,
+        ai_score: null, // Explicitly set to null for TMDB movies (not in database)
       };
     });
     

@@ -310,7 +310,8 @@ struct CategoryResultsView: View {
                         trailerDuration: nil,
                         posterImageURL: result.posterUrl,
                         tastyScore: nil,
-                        aiScore: result.voteAverage,
+                        aiScore: nil, // Category results are from TMDB, not database
+                        voteAverage: result.voteAverage, // TMDB score (0-10 scale)
                         genres: [],
                         rating: nil,
                         director: nil,

@@ -105,6 +105,10 @@ enum MovieHintExtractor {
         "books? by (?:the )?(?:author )?(\\w+(?:\\s+\\w+)+)",
         // "based on books/book by [Name]"
         "based on (?:the )?(?:a )?books? by (?:the )?(?:author )?(\\w+(?:\\s+\\w+)+)",
+        // "movies based on by [Name]" - catches "Movies based on by Tom Clancy" (user implies books)
+        "movies? based on by (\\w+(?:\\s+\\w+)+)",
+        // "based on by [Name]" - catches "based on by Tom Clancy" (user implies books)
+        "based on by (\\w+(?:\\s+\\w+)+)",
         // "novels/novel by [Name]"
         "novels? by (?:the )?(?:author )?(\\w+(?:\\s+\\w+)+)",
         // "written by [Name]" in any context
@@ -179,14 +183,15 @@ enum MovieHintExtractor {
         // Extract decade
         hints.decade = extractDecade(from: lower)
         
-        // Extract actors
-        hints.actors = extractActors(from: lower)
+        // Extract author FIRST (before actors) to avoid matching author names as actors
+        // e.g., "Movies based on by Tom Clancy" should extract author="Tom Clancy", not actor="Tom"
+        hints.author = extractAuthor(from: lower)
+        
+        // Extract actors (but exclude any that are part of an author name)
+        hints.actors = extractActors(from: lower, excludingAuthor: hints.author)
         
         // Extract director
         hints.director = extractDirector(from: lower)
-        
-        // Extract author
-        hints.author = extractAuthor(from: lower)
         
         // Extract genre keywords
         hints.keywords = extractKeywords(from: lower)
@@ -239,7 +244,7 @@ enum MovieHintExtractor {
         return nil
     }
     
-    private static func extractActors(from text: String) -> [String] {
+    private static func extractActors(from text: String, excludingAuthor: String? = nil) -> [String] {
         var actors: [String] = []
         
         // First try pattern matching (more reliable for multi-word names)
@@ -253,6 +258,12 @@ enum MovieHintExtractor {
                         let capitalized = name.components(separatedBy: " ")
                             .map { $0.capitalized }
                             .joined(separator: " ")
+                        
+                        // Skip if this matches the author name (e.g., "Tom" shouldn't be extracted if author is "Tom Clancy")
+                        if let author = excludingAuthor?.lowercased(), author.contains(capitalized.lowercased()) {
+                            continue
+                        }
+                        
                         if !actors.contains(capitalized) && capitalized.count > 2 {
                             actors.append(capitalized)
                         }
@@ -285,6 +296,10 @@ enum MovieHintExtractor {
                     // Check previous word for first name
                     if index > 0 && knownActors.contains(words[index - 1]) {
                         fullName = words[index - 1].capitalized + " " + fullName
+                    }
+                    // Skip if this matches the author name (e.g., "Tom" shouldn't be extracted if author is "Tom Clancy")
+                    if let author = excludingAuthor?.lowercased(), author.contains(fullName.lowercased()) {
+                        continue
                     }
                     if !actors.contains(fullName) {
                         actors.append(fullName)

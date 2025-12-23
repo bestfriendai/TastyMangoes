@@ -1,6 +1,23 @@
 # How to Deploy Supabase Edge Functions
 
-## Method 1: Using Supabase CLI (Recommended)
+## Method 1: Using Deployment Script (Easiest)
+
+Use the automated deployment script:
+
+```bash
+cd /Users/timrobinson/Developer/TastyMangoes
+
+# Deploy a specific function
+./deploy-edge-functions.sh search-movies
+
+# Deploy all functions
+./deploy-edge-functions.sh all
+
+# Show available functions
+./deploy-edge-functions.sh
+```
+
+## Method 2: Using Supabase CLI (Manual)
 
 ### Prerequisites:
 1. Install Supabase CLI (if not already installed):
@@ -33,7 +50,7 @@ supabase functions deploy get-movie-card
 supabase functions deploy get-similar-movies
 ```
 
-## Method 2: Using Supabase Dashboard
+## Method 3: Using Supabase Dashboard
 
 1. Go to: https://app.supabase.com/project/zyywpjddzvkqvjosifiy
 2. Click **"Edge Functions"** in the left sidebar
@@ -41,7 +58,7 @@ supabase functions deploy get-similar-movies
 4. Click on it
 5. Click the **"Deploy"** button (or use the code editor to update and deploy)
 
-## Method 3: Using Supabase Dashboard Code Editor
+## Method 4: Using Supabase Dashboard Code Editor
 
 1. Go to: https://app.supabase.com/project/zyywpjddzvkqvjosifiy
 2. Click **"Edge Functions"** → **"scheduled-ingest"**

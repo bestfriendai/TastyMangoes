@@ -144,7 +144,15 @@ class SearchViewModel: ObservableObject {
             return
         }
         
-        // Show loading state - but keep previous results visible
+        // IMPORTANT: Clear previous results immediately when starting a new search
+        // This prevents old results from showing while new search is in progress
+        let currentQuery = searchQuery.trimmingCharacters(in: .whitespaces)
+        if currentQuery != lastSearchedQuery {
+            print("🔄 [SearchViewModel] Query changed from '\(lastSearchedQuery)' to '\(currentQuery)' - clearing previous results")
+            searchResults = []
+        }
+        
+        // Show loading state
         isSearching = true
         showSuggestions = false
         error = nil
@@ -195,13 +203,16 @@ class SearchViewModel: ObservableObject {
         isSearchInFlight = true
         defer { isSearchInFlight = false }
         
-        // Clear previous results immediately when starting new search
-        searchResults = []
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
+        
+        // Clear previous results if this is a different query than last search
+        if query != lastSearchedQuery {
+            print("🔄 [SearchViewModel] New query detected - clearing previous results")
+            searchResults = []
+        }
         
         error = nil
         showSuggestions = false
-        
-        let query = searchQuery.trimmingCharacters(in: .whitespaces)
         
         if query.isEmpty {
             searchResults = []
@@ -251,7 +262,21 @@ class SearchViewModel: ObservableObject {
             
             // Convert MovieSearchResult to Movie
             var convertedMovies = movieSearchResults.map { result in
-                Movie(
+                // For database movies: result.aiScore exists (0-100 scale) - use it directly
+                // For TMDB movies: result.aiScore is nil - we need voteAverage for display but keep aiScore as nil for detection
+                // Detection logic: if result.aiScore exists and > 10, it's a database movie
+                //                  if result.aiScore is nil, it's a TMDB movie (use voteAverage for display)
+                
+                #if DEBUG
+                print("🔍 [SearchViewModel] Movie: \(result.title) - aiScore: \(result.aiScore?.description ?? "nil"), voteAverage: \(result.voteAverage?.description ?? "nil")")
+                #endif
+                
+                // IMPORTANT: Only set aiScore if it exists (database movies)
+                // For TMDB movies, aiScore should remain nil so isInDatabase returns false
+                // We'll use voteAverage for display in SearchMovieCard when aiScore is nil
+                let finalAiScore: Double? = result.aiScore // Don't fallback to voteAverage here - keep nil for TMDB movies
+                
+                return Movie(
                     id: result.tmdbId,
                     title: result.title,
                     year: result.year ?? 0,
@@ -259,7 +284,8 @@ class SearchViewModel: ObservableObject {
                     trailerDuration: nil,
                     posterImageURL: result.posterUrl,
                     tastyScore: nil, // Will be calculated from aiScore in SearchMovieCard
-                    aiScore: result.aiScore ?? result.voteAverage, // Prefer aiScore, fallback to voteAverage
+                    aiScore: finalAiScore, // Database: 0-100 scale, TMDB: nil
+                    voteAverage: result.voteAverage, // TMDB score (0-10 scale) - used when aiScore is nil
                     genres: result.genres ?? [],
                     rating: nil,
                     director: nil,

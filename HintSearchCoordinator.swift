@@ -25,6 +25,7 @@ struct HintSearchResult: Identifiable {
     let genres: [String]?
     let runtimeDisplay: String?
     let aiScore: Double?
+    let voteAverage: Double? // TMDB score (0-10 scale) - used when aiScore is nil
     
     var id: Int { tmdbId }
     
@@ -73,6 +74,9 @@ class HintSearchCoordinator: ObservableObject {
     
     private let tmdbService = TMDBService.shared
     
+    // Track current search task to allow cancellation when new search starts
+    private var currentSearchTask: Task<HintSearchResponse, Error>?
+    
     private init() {}
     
     // MARK: - Main Search Method
@@ -91,15 +95,64 @@ class HintSearchCoordinator: ObservableObject {
         onProgress: (([HintSearchResult]) -> Void)? = nil
     ) async throws -> HintSearchResponse {
         
+        // CRITICAL: Cancel any ongoing search/ingestion before starting a new one
+        // This prevents old search results (e.g., "James Bond") from appearing in new searches (e.g., "Harry Potter")
+        currentSearchTask?.cancel()
+        
         // Clear previous results immediately when starting new search
         await MainActor.run {
             allResults = []
             localResults = []
-            // Clear results in SearchViewModel if we have access to it
+            // IMPORTANT: Clear results in SearchViewModel immediately to prevent old results from showing
+            // This fixes the issue where "James Bond" results show up when searching for "Harry Potter"
             onProgress?([])
+            
+            // Also clear SearchViewModel results directly if possible
+            // The onProgress callback should handle this, but we do it here as a safety measure
+            #if DEBUG
+            print("🔄 [HintSearchCoordinator] Starting new search for '\(query)' - cancelled previous search and cleared results")
+            #endif
         }
         
         isSearching = true
+        
+        // Wrap the entire search in a Task so we can track and cancel it
+        let searchTask = Task {
+            return try await performSearch(query: query, hints: hints, enableAI: enableAI, onProgress: onProgress)
+        }
+        
+        currentSearchTask = searchTask
+        
+        do {
+            return try await searchTask.value
+        } catch is CancellationError {
+            // Search was cancelled - return empty results
+            #if DEBUG
+            print("🔄 [HintSearchCoordinator] Search was cancelled")
+            #endif
+            await MainActor.run {
+                isSearching = false
+                progress = .idle
+            }
+            return HintSearchResponse(
+                query: query,
+                hints: hints,
+                localResults: [],
+                aiResults: [],
+                allResults: [],
+                newlyIngested: 0,
+                aiCostCents: nil
+            )
+        }
+    }
+    
+    /// Internal search implementation - wrapped by public search() method for cancellation support
+    private func performSearch(
+        query: String,
+        hints: ExtractedMovieHints? = nil,
+        enableAI: Bool = true,
+        onProgress: (([HintSearchResult]) -> Void)? = nil
+    ) async throws -> HintSearchResponse {
         progress = .searchingLocal
         verificationProgress = nil
         
@@ -239,6 +292,13 @@ class HintSearchCoordinator: ObservableObject {
                         newAIMovies,
                         onProgress: { [weak self] incrementalResults in
                             guard let self = self else { return }
+                            // Check for cancellation before updating progress
+                            guard !Task.isCancelled else {
+                                #if DEBUG
+                                print("🔄 [HintSearchCoordinator] Search cancelled - skipping progress update")
+                                #endif
+                                return
+                            }
                             // Merge local + incremental AI results and call callback
                             let merged = self.mergeResults(local: localMovies, ai: incrementalResults)
                             onProgress?(merged)
@@ -273,13 +333,28 @@ class HintSearchCoordinator: ObservableObject {
                             matchReason: suggestion.reason,
                             genres: nil,
                             runtimeDisplay: nil,
-                            aiScore: nil
+                            aiScore: nil,
+                            voteAverage: nil
                         )
                     }
                     progress = .aiComplete(count: aiMovies.count, newCount: 0)
                     verificationProgress = nil
                     
                     // Update results with AI-discovered movies (already in DB)
+                    guard !Task.isCancelled else {
+                        #if DEBUG
+                        print("🔄 [HintSearchCoordinator] Search cancelled - skipping AI results update")
+                        #endif
+                        return HintSearchResponse(
+                            query: query,
+                            hints: searchHints,
+                            localResults: localMovies,
+                            aiResults: [],
+                            allResults: localMovies,
+                            newlyIngested: 0,
+                            aiCostCents: nil
+                        )
+                    }
                     let merged = mergeResults(local: localMovies, ai: aiMovies)
                     onProgress?(merged)
                     
@@ -368,8 +443,9 @@ class HintSearchCoordinator: ObservableObject {
                                     matchReason: "TMDB fallback search",
                                     genres: card?.genres,
                                     runtimeDisplay: card?.runtimeDisplay,
-                                    aiScore: card?.aiScore
-                                )
+                        aiScore: card?.aiScore,
+                        voteAverage: card?.sourceScores?.tmdb?.score
+                    )
                                 tmdbIngested.append(result)
                                 newlyIngested += 1
                                 
@@ -483,8 +559,9 @@ class HintSearchCoordinator: ObservableObject {
                                                     matchReason: "TMDB actor fallback: \(actorName)",
                                                     genres: card?.genres,
                                                     runtimeDisplay: card?.runtimeDisplay,
-                                                    aiScore: card?.aiScore
-                                                )
+                        aiScore: card?.aiScore,
+                        voteAverage: card?.sourceScores?.tmdb?.score
+                    )
                                                 tmdbActorIngested.append(result)
                                                 newlyIngested += 1
                                                 
@@ -586,7 +663,8 @@ class HintSearchCoordinator: ObservableObject {
                         matchReason: matchReason,
                         genres: movie.genres,
                         runtimeDisplay: movie.runtimeDisplay,
-                        aiScore: movie.aiScore
+                        aiScore: movie.aiScore,
+                        voteAverage: movie.voteAverage
                     ))
                 }
                 
@@ -613,7 +691,8 @@ class HintSearchCoordinator: ObservableObject {
                             matchReason: "Text search fallback",
                             genres: movie.genres,
                             runtimeDisplay: movie.runtimeDisplay,
-                            aiScore: movie.aiScore
+                            aiScore: movie.aiScore,
+                            voteAverage: movie.voteAverage
                         ))
                     }
                     #if DEBUG
@@ -651,7 +730,8 @@ class HintSearchCoordinator: ObservableObject {
                         matchReason: matchReason,
                         genres: movie.genres,
                         runtimeDisplay: movie.runtimeDisplay,
-                        aiScore: movie.aiScore
+                        aiScore: movie.aiScore,
+                        voteAverage: movie.voteAverage
                     ))
                 }
                 
@@ -678,7 +758,8 @@ class HintSearchCoordinator: ObservableObject {
                             matchReason: "Text search fallback",
                             genres: movie.genres,
                             runtimeDisplay: movie.runtimeDisplay,
-                            aiScore: movie.aiScore
+                            aiScore: movie.aiScore,
+                            voteAverage: movie.voteAverage
                         ))
                     }
                     #if DEBUG
@@ -696,6 +777,13 @@ class HintSearchCoordinator: ObservableObject {
                 
                 let searchResults = try await SupabaseService.shared.searchMovies(query: searchQuery)
                 
+                #if DEBUG
+                print("🔍 [HintSearch] Received \(searchResults.count) results from searchMovies")
+                for (index, movie) in searchResults.prefix(5).enumerated() {
+                    print("   [\(index)] \(movie.title) - aiScore: \(movie.aiScore?.description ?? "nil"), voteAverage: \(movie.voteAverage?.description ?? "nil"), posterUrl: \(movie.posterUrl?.prefix(50) ?? "nil")")
+                }
+                #endif
+                
                 for movie in searchResults {
                     // Convert tmdbId from String to Int
                     guard let tmdbIdInt = Int(movie.tmdbId) else {
@@ -710,6 +798,11 @@ class HintSearchCoordinator: ObservableObject {
                         matchReason = "Year match"
                     }
                     
+                    #if DEBUG
+                    let isDbMovie = movie.aiScore != nil && movie.aiScore! > 10
+                    print("🔍 [HintSearch] Creating HintSearchResult for \(movie.title): aiScore=\(movie.aiScore?.description ?? "nil"), voteAverage=\(movie.voteAverage?.description ?? "nil"), isInDatabase=\(isDbMovie)")
+                    #endif
+                    
                     results.append(HintSearchResult(
                         tmdbId: tmdbIdInt,
                         title: movie.title,
@@ -719,7 +812,8 @@ class HintSearchCoordinator: ObservableObject {
                         matchReason: matchReason,
                         genres: movie.genres,
                         runtimeDisplay: movie.runtimeDisplay,
-                        aiScore: movie.aiScore
+                        aiScore: movie.aiScore,
+                        voteAverage: movie.voteAverage
                     ))
                 }
                 
@@ -830,6 +924,15 @@ class HintSearchCoordinator: ObservableObject {
         var successCount = 0
         
         for (index, suggestion) in suggestions.enumerated() {
+            // Check for cancellation before processing each movie
+            // This prevents old ingestion results from appearing in new searches
+            if Task.isCancelled {
+                #if DEBUG
+                print("🔄 [HintSearchCoordinator] Ingestion cancelled - stopping at \(index) of \(suggestions.count)")
+                #endif
+                break
+            }
+            
             progress = .ingesting(current: index + 1, total: suggestions.count)
             verificationProgress = (current: index + 1, total: suggestions.count)
             
@@ -854,11 +957,14 @@ class HintSearchCoordinator: ObservableObject {
                         matchReason: suggestion.reason,
                         genres: nil,
                         runtimeDisplay: nil,
-                        aiScore: nil
+                        aiScore: nil,
+                        voteAverage: nil
                     )
                     results.append(result)
-                    // Call progress callback with updated results
-                    onProgress?(results)
+                    // Call progress callback with updated results (only if not cancelled)
+                    if !Task.isCancelled {
+                        onProgress?(results)
+                    }
                 }
                 continue
             }
@@ -889,13 +995,16 @@ class HintSearchCoordinator: ObservableObject {
                     matchReason: suggestion.reason,
                     genres: card?.genres,
                     runtimeDisplay: card?.runtimeDisplay,
-                    aiScore: card?.aiScore
-                )
+                        aiScore: card?.aiScore,
+                        voteAverage: card?.sourceScores?.tmdb?.score
+                    )
                 results.append(result)
                 successCount += 1
                 
-                // Call progress callback with updated results after each successful ingestion
-                onProgress?(results)
+                // Call progress callback with updated results after each successful ingestion (only if not cancelled)
+                if !Task.isCancelled {
+                    onProgress?(results)
+                }
                 
                 #if DEBUG
                 print("✅ [HintSearch] Ingested: \(card?.title ?? suggestion.title) (\(card?.year ?? suggestion.year ?? 0)) [TMDB: \(verifiedTmdbId)]")
@@ -916,7 +1025,8 @@ class HintSearchCoordinator: ObservableObject {
                     matchReason: suggestion.reason,
                     genres: nil,
                     runtimeDisplay: nil,
-                    aiScore: nil
+                    aiScore: nil,
+                    voteAverage: nil
                 )
                 results.append(result)
                 // Call progress callback even for failed ingestion

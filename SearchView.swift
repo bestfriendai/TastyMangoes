@@ -818,6 +818,42 @@ struct SearchMovieCard: View {
         return nil
     }
     
+    // Check if movie is in our database
+    // Database movies have aiScore on 0-100 scale (from aggregates.ai_score field)
+    // TMDB movies have voteAverage on 0-10 scale (from TMDB API, stored as aiScore via fallback)
+    // Key: Database movies have aiScore from aggregates (0-100 scale, always > 10)
+    //      TMDB movies have aiScore from voteAverage fallback (0-10 scale, always <= 10)
+    // Solution: Check if aiScore > 10 - this distinguishes database (0-100) from TMDB (0-10) movies
+    private var isInDatabase: Bool {
+        guard let aiScore = movie.aiScore else {
+            #if DEBUG
+            print("🔍 [SearchMovieCard] \(movie.title): aiScore=nil, voteAverage=\(movie.voteAverage?.description ?? "nil") -> NOT in database")
+            #endif
+            return false // No score means not in database
+        }
+        // Database movies have aiScore on 0-100 scale (always > 10)
+        // TMDB movies have voteAverage on 0-10 scale (always <= 10) when used as fallback
+        let result = aiScore > 10
+        #if DEBUG
+        print("🔍 [SearchMovieCard] \(movie.title): aiScore=\(aiScore), voteAverage=\(movie.voteAverage?.description ?? "nil") -> isInDatabase=\(result)")
+        #endif
+        return result
+    }
+    
+    // Get TMDB score (0-10 scale)
+    // For database movies: aiScore is on 0-100 scale, so divide by 10
+    // For TMDB movies: use voteAverage directly (0-10 scale)
+    private var tmdbScore: Double? {
+        if isInDatabase {
+            // Database movie - convert aiScore from 0-100 to 0-10 scale
+            guard let aiScore = movie.aiScore else { return nil }
+            return aiScore / 10.0
+        } else {
+            // TMDB movie - use voteAverage directly (0-10 scale)
+            return movie.voteAverage
+        }
+    }
+    
     var body: some View {
         Button(action: {
             // Phase 2: Track movie selection if this was a voice search
@@ -859,58 +895,51 @@ struct SearchMovieCard: View {
                             .lineLimit(1)
                     }
                     
-                    // Scores and Friends
-                    HStack(spacing: 12) {
-                        // Tasty Score (use aiScore × 10 if available)
-                        if let tastyScorePercent = tastyScorePercentage {
+                    // Scores
+                    if isInDatabase {
+                        // Movie is in database - show Tasty Score and AI Score with star
+                        HStack(spacing: 12) {
+                            // Tasty Score (use aiScore × 10 if available)
+                            if let tastyScorePercent = tastyScorePercentage {
+                                HStack(spacing: 4) {
+                                    Image("TastyScoreIcon")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 14, height: 14)
+                                    Text("\(tastyScorePercent)%")
+                                        .font(.custom("Inter-SemiBold", size: 12))
+                                        .foregroundColor(Color(hex: "#1a1a1a"))
+                                }
+                            }
+                            
+                            // AI Score (database movies have aiScore on 0-100 scale)
+                            if let aiScore = movie.aiScore {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Color(hex: "#FEA500"))
+                                    Text(String(format: "%.1f", aiScore)) // Display as-is (0-100 scale)
+                                        .font(.custom("Inter-SemiBold", size: 12))
+                                        .foregroundColor(Color(hex: "#1a1a1a"))
+                                }
+                            }
+                        }
+                    } else {
+                        // Movie is NOT in database - show TMDB text and TMDB score (no star icon)
+                        if let tmdbScore = tmdbScore {
                             HStack(spacing: 4) {
-                                Image("TastyScoreIcon")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 14, height: 14)
-                                Text("\(tastyScorePercent)%")
+                                Text("TMDB")
+                                    .font(.custom("Inter-Regular", size: 12))
+                                    .foregroundColor(Color(hex: "#666666"))
+                                
+                                Text(String(format: "%.1f", tmdbScore))
                                     .font(.custom("Inter-SemiBold", size: 12))
                                     .foregroundColor(Color(hex: "#1a1a1a"))
                             }
-                        }
-                        
-                        // AI Score
-                        if let aiScore = movie.aiScore {
-                            HStack(spacing: 4) {
-                                Image(systemName: "star.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(Color(hex: "#FEA500"))
-                                Text(String(format: "%.1f", aiScore))
-                                    .font(.custom("Inter-SemiBold", size: 12))
-                                    .foregroundColor(Color(hex: "#1a1a1a"))
-                            }
-                        }
-                        
-                        // Friends (placeholder)
-                        HStack(spacing: 4) {
-                            Image(systemName: "hand.thumbsup.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(Color(hex: "#666666"))
-                            Text("0 friends")
-                                .font(.custom("Inter-Regular", size: 12))
-                                .foregroundColor(Color(hex: "#666666"))
                         }
                     }
                     
-                    // Recommendation Indicator (if available)
-                    if let recommendation = watchlistManager.getRecommendationData(movieId: movie.id),
-                       let recommender = recommendation.recommenderName {
-                        HStack(spacing: 4) {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(Color(hex: "#666666"))
-                            
-                            Text("Recommended by \(recommender)")
-                                .font(.custom("Inter-Regular", size: 12))
-                                .foregroundColor(Color(hex: "#666666"))
-                        }
-                        .padding(.top, 2)
-                    }
+                    // Recommendation Indicator removed from search results per user request
                 }
                 
                 Spacer()

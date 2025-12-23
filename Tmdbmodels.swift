@@ -277,7 +277,8 @@ extension TMDBMovie {
             trailerDuration: nil,
             posterImageURL: posterPath, // Pass path as-is, MoviePosterImage will build URL
             tastyScore: nil, // We'll calculate this later
-            aiScore: voteAverage,
+            aiScore: nil, // TMDB movies don't have aiScore (database movies only)
+            voteAverage: voteAverage, // TMDB score (0-10 scale)
             genres: [], // Genre names come from a separate API call
             rating: nil,
             director: nil,

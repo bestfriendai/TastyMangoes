@@ -455,6 +455,7 @@ enum VoiceIntentRouter {
                     posterImageURL: result.posterURL,
                     tastyScore: nil, // Will be calculated from aiScore in SearchMovieCard
                     aiScore: result.aiScore,
+                    voteAverage: result.voteAverage, // TMDB score (0-10 scale) - used when aiScore is nil
                     genres: result.genres ?? [],
                     rating: nil,
                     director: nil,
@@ -472,11 +473,17 @@ enum VoiceIntentRouter {
         // Initialize SearchViewModel state before search starts
         await MainActor.run {
             let viewModel = SearchViewModel.shared
+            
+            // IMPORTANT: Clear previous results IMMEDIATELY when starting a new search
+            // This prevents old results (e.g., "James Bond") from showing while new search (e.g., "Harry Potter") is in progress
+            if viewModel.searchQuery != moviePhrase {
+                print("🔄 [VoiceIntentRouter] Query changed from '\(viewModel.searchQuery)' to '\(moviePhrase)' - clearing previous results")
+                viewModel.searchResults = []
+            }
+            
             // Set flag to prevent debounced search from overwriting these results
             viewModel.skipNextSearch = true
             viewModel.searchQuery = moviePhrase
-            // Clear previous results immediately when starting new search
-            viewModel.searchResults = []
             viewModel.hasSearched = true
             viewModel.isSearching = true
             viewModel.isMangoInitiatedSearch = true
