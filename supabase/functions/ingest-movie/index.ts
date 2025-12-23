@@ -313,22 +313,30 @@ serve(async (req) => {
     
     console.log('[INGEST] Fetching fresh data from TMDB...');
     
+    // Context for logging TMDB API calls
+    const tmdbContext = {
+      edgeFunction: 'ingest-movie',
+      tmdbId: tmdb_id.toString(),
+      userQuery: user_query || null,
+      voiceEventId: voice_event_id || null,
+    };
+    
     // Fetch fresh data from TMDB with delays to respect rate limits
     // Add 250ms delay between calls
-    const details = await fetchMovieDetails(tmdb_id.toString());
+    const details = await fetchMovieDetails(tmdb_id.toString(), tmdbContext);
     await new Promise(resolve => setTimeout(resolve, 250));
     
-    const credits = await fetchMovieCredits(tmdb_id.toString());
+    const credits = await fetchMovieCredits(tmdb_id.toString(), tmdbContext);
     await new Promise(resolve => setTimeout(resolve, 250));
     
-    const videos = await fetchMovieVideos(tmdb_id.toString());
+    const videos = await fetchMovieVideos(tmdb_id.toString(), tmdbContext);
     await new Promise(resolve => setTimeout(resolve, 250));
     
     // Fetch similar movies (limit to first 10)
     let similarMovieData: Array<{ tmdb_id: number; title: string }> = [];
     try {
       await new Promise(resolve => setTimeout(resolve, 250));
-      const similarMovies = await fetchSimilarMovies(tmdb_id.toString());
+      const similarMovies = await fetchSimilarMovies(tmdb_id.toString(), tmdbContext);
       similarMovieData = similarMovies.results
         .slice(0, 10)
         .map(m => ({ tmdb_id: m.id, title: m.title }));
@@ -342,7 +350,7 @@ serve(async (req) => {
     let certification: string | null = null;
     try {
       await new Promise(resolve => setTimeout(resolve, 250));
-      const releaseDates = await fetchMovieReleaseDates(tmdb_id.toString());
+      const releaseDates = await fetchMovieReleaseDates(tmdb_id.toString(), tmdbContext);
       console.log(`[INGEST] Release dates response:`, JSON.stringify(releaseDates, null, 2));
       
       const usRelease = releaseDates.results.find(r => r.iso_3166_1 === 'US');
@@ -370,7 +378,7 @@ serve(async (req) => {
     let stillImagePaths: Array<{ file_path: string }> = [];
     try {
       await new Promise(resolve => setTimeout(resolve, 250));
-      const images = await fetchMovieImages(tmdb_id.toString());
+      const images = await fetchMovieImages(tmdb_id.toString(), tmdbContext);
       // Take top 5 backdrops
       stillImagePaths = images.backdrops.slice(0, 5);
       console.log(`[INGEST] Found ${stillImagePaths.length} backdrops to download as still images`);
@@ -383,7 +391,7 @@ serve(async (req) => {
     let keywordNames: string[] = [];
     try {
       await new Promise(resolve => setTimeout(resolve, 250));
-      const keywordsResponse = await fetchMovieKeywords(tmdb_id.toString());
+      const keywordsResponse = await fetchMovieKeywords(tmdb_id.toString(), tmdbContext);
       keywordNames = keywordsResponse.keywords.map(k => k.name);
       console.log(`[INGEST] Fetched ${keywordNames.length} keywords`);
     } catch (error) {
@@ -406,7 +414,7 @@ serve(async (req) => {
 
     try {
       await new Promise(resolve => setTimeout(resolve, 250));
-      const providersResponse = await fetchMovieWatchProviders(tmdb_id.toString());
+      const providersResponse = await fetchMovieWatchProviders(tmdb_id.toString(), tmdbContext);
       
       // Extract US providers (primary market) - can expand to other regions later
       const usProviders = providersResponse.results?.US;

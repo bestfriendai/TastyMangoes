@@ -249,7 +249,9 @@ serve(async (req) => {
           discoverParams.withGenres = genreIds;
         }
         
-        const discoverResponse = await discoverMovies(discoverParams);
+        const discoverResponse = await discoverMovies(discoverParams, {
+          edgeFunction: 'search-movies',
+        });
         allResults = discoverResponse?.results || [];
         apiCallsMade = 1;
         
@@ -272,7 +274,10 @@ serve(async (req) => {
         
         do {
           const singleYear = (yearFromInt && yearToInt && yearFromInt === yearToInt) ? yearFromInt : undefined;
-          const pageResults = await searchMovies(queryTrimmed, singleYear, currentPage);
+          const pageResults = await searchMovies(queryTrimmed, singleYear, currentPage, {
+            edgeFunction: 'search-movies',
+            userQuery: queryTrimmed,
+          });
           
           if (currentPage === 1) {
             totalPages = pageResults?.total_pages || 1;
@@ -369,7 +374,10 @@ serve(async (req) => {
       console.log(`[SEARCH] Using search endpoint (text-only, no filters)`);
       
       try {
-        const searchResponse = await searchMovies(queryTrimmed, undefined, 1);
+        const searchResponse = await searchMovies(queryTrimmed, undefined, 1, {
+          edgeFunction: 'search-movies',
+          userQuery: queryTrimmed,
+        });
         allResults = searchResponse?.results || [];
         apiCallsMade = 1;
         

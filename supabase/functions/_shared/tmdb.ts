@@ -1,11 +1,123 @@
 //  tmdb.ts
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 19:30 (America/Los_Angeles - Pacific Time)
-//  Notes: Shared TMDB API utilities for Edge Functions
+//  Last modified: 2025-12-22 at 12:58 (America/Los_Angeles - Pacific Time)
+//  Notes: Shared TMDB API utilities for Edge Functions with API call logging
 
 const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
+
+// Get Supabase client for logging (lazy initialization)
+let supabaseClient: any = null;
+async function getSupabaseClient() {
+  if (!supabaseClient) {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    // Try both possible env var names (Supabase uses SERVICE_ROLE_KEY)
+    const supabaseServiceKey = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[TMDB] Missing environment variables:', {
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!supabaseServiceKey,
+        envVars: Object.keys(Deno.env.toObject()).filter(k => k.includes('SERVICE') || k.includes('SUPABASE')),
+      });
+      throw new Error('Missing SUPABASE_URL or SERVICE_ROLE_KEY');
+    }
+    
+    supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+    console.log('[TMDB] Supabase client initialized for logging');
+  }
+  return supabaseClient;
+}
+
+// Log TMDB API call to database (async, fire-and-forget)
+export async function logTMDBCall(params: {
+  endpoint: string;
+  method: string;
+  httpStatus: number;
+  queryParams?: Record<string, any>;
+  requestBody?: any;
+  responseSizeBytes?: number;
+  responseTimeMs: number;
+  resultsCount?: number;
+  edgeFunction?: string;
+  userQuery?: string;
+  tmdbId?: string;
+  voiceEventId?: string;
+  errorMessage?: string;
+  retryCount?: number;
+  metadata?: Record<string, any>;
+}) {
+  try {
+    console.log('[TMDB] Attempting to log API call:', {
+      endpoint: params.endpoint,
+      edgeFunction: params.edgeFunction,
+      userQuery: params.userQuery,
+      tmdbId: params.tmdbId,
+    });
+    
+    const supabase = await getSupabaseClient();
+    
+    // Verify we have a valid client
+    if (!supabase) {
+      console.error('[TMDB] Supabase client is null, cannot log API call');
+      return;
+    }
+    
+    const insertData = {
+      endpoint: params.endpoint,
+      method: params.method,
+      http_status: params.httpStatus,
+      query_params: params.queryParams || null,
+      request_body: params.requestBody || null,
+      response_size_bytes: params.responseSizeBytes || null,
+      response_time_ms: params.responseTimeMs,
+      results_count: params.resultsCount || null,
+      edge_function: params.edgeFunction || null,
+      user_query: params.userQuery || null,
+      tmdb_id: params.tmdbId || null,
+      voice_event_id: params.voiceEventId || null,
+      error_message: params.errorMessage || null,
+      retry_count: params.retryCount || 0,
+      metadata: params.metadata || null,
+    };
+    
+    console.log('[TMDB] Inserting log data:', JSON.stringify(insertData, null, 2));
+    
+    const { data, error } = await supabase.from('tmdb_api_logs').insert(insertData).select();
+    
+    if (error) {
+      console.error('[TMDB] Failed to insert log:', error);
+      console.error('[TMDB] Error code:', error.code);
+      console.error('[TMDB] Error message:', error.message);
+      console.error('[TMDB] Error details:', JSON.stringify(error, null, 2));
+      console.error('[TMDB] Error hint:', error.hint);
+    } else {
+      console.log('[TMDB] Successfully logged API call. ID:', data?.[0]?.id);
+    }
+  } catch (error) {
+    // Don't fail the main request if logging fails
+    console.error('[TMDB] Exception while logging API call:', error);
+    console.error('[TMDB] Error type:', typeof error);
+    console.error('[TMDB] Error stack:', error instanceof Error ? error.stack : String(error));
+    if (error instanceof Error) {
+      console.error('[TMDB] Error name:', error.name);
+      console.error('[TMDB] Error message:', error.message);
+    }
+  }
+}
+
+// Helper to extract endpoint from full URL
+function extractEndpoint(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.pathname;
+  } catch {
+    return url;
+  }
+}
 
 export interface TMDBMovie {
   id: number;
@@ -96,68 +208,306 @@ export interface TMDBSearchResponse {
   total_results: number;
 }
 
-export async function fetchMovieDetails(tmdbId: string): Promise<TMDBMovie> {
+export async function fetchMovieDetails(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string }
+): Promise<TMDBMovie> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}?api_key=${TMDB_API_KEY}&language=en-US`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB error: ${response.status} ${response.statusText}`);
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}&language=en-US`;
+  
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        queryParams: { language: 'en-US' },
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    
+    // Log successful call
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      queryParams: { language: 'en-US' },
+      responseTimeMs,
+      responseSizeBytes,
+      edgeFunction: context?.edgeFunction,
+      tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        queryParams: { language: 'en-US' },
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
-export async function fetchMovieCredits(tmdbId: string): Promise<TMDBCredits> {
+export async function fetchMovieCredits(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string; tmdbId?: string }
+): Promise<TMDBCredits> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}/credits?api_key=${TMDB_API_KEY}`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}/credits`;
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB credits error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB credits error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = (data?.cast?.length || 0) + (data?.crew?.length || 0);
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      tmdbId: context?.tmdbId || tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB credits error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
-export async function fetchMovieVideos(tmdbId: string): Promise<TMDBVideos> {
+export async function fetchMovieVideos(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string; tmdbId?: string }
+): Promise<TMDBVideos> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}/videos?api_key=${TMDB_API_KEY}`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}/videos`;
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB videos error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB videos error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = data?.results?.length || 0;
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      tmdbId: context?.tmdbId || tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB videos error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
-export async function searchMovies(query: string, year?: number, page: number = 1): Promise<TMDBSearchResponse> {
+export async function searchMovies(
+  query: string, 
+  year?: number, 
+  page: number = 1,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string }
+): Promise<TMDBSearchResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  let url = `${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&page=${page}`;
+  const startTime = Date.now();
+  const endpoint = '/search/movie';
+  const queryParams: Record<string, any> = { query, page };
+  if (year) queryParams.year = year;
+  
+  let url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&page=${page}`;
   if (year) {
     url += `&year=${year}`;
   }
   
-  const response = await fetch(url);
-  
-  if (!response.ok) {
-    throw new Error(`TMDB search error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB search error: ${response.status} ${response.statusText}`;
+      // Log error
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        queryParams,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        userQuery: context?.userQuery || query,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = data?.results?.length || 0;
+    
+    // Log successful call (async, don't wait)
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      queryParams,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      userQuery: context?.userQuery || query,
+      voiceEventId: context?.voiceEventId,
+      metadata: {
+        total_pages: data?.total_pages,
+        total_results: data?.total_results,
+      },
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    // Log error if not already logged
+    if (!(error instanceof Error && error.message.includes('TMDB search error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        queryParams,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        userQuery: context?.userQuery || query,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 export interface TMDBDiscoverParams {
@@ -168,10 +518,16 @@ export interface TMDBDiscoverParams {
   page?: number;
 }
 
-export async function discoverMovies(params: TMDBDiscoverParams): Promise<TMDBSearchResponse> {
+export async function discoverMovies(
+  params: TMDBDiscoverParams,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string }
+): Promise<TMDBSearchResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
+  
+  const startTime = Date.now();
+  const endpoint = '/discover/movie';
   
   const urlParams = new URLSearchParams({
     api_key: TMDB_API_KEY,
@@ -191,14 +547,77 @@ export async function discoverMovies(params: TMDBDiscoverParams): Promise<TMDBSe
     urlParams.append('with_genres', params.withGenres.join(','));
   }
   
-  const url = `${TMDB_BASE}/discover/movie?${urlParams.toString()}`;
-  const response = await fetch(url);
+  const queryParams: Record<string, any> = {
+    page: params.page || 1,
+    sort_by: params.sortBy || 'popularity.desc',
+  };
+  if (params.primaryReleaseDateGte) queryParams.primary_release_date_gte = params.primaryReleaseDateGte;
+  if (params.primaryReleaseDateLte) queryParams.primary_release_date_lte = params.primaryReleaseDateLte;
+  if (params.withGenres && params.withGenres.length > 0) queryParams.with_genres = params.withGenres;
   
-  if (!response.ok) {
-    throw new Error(`TMDB discover error: ${response.status} ${response.statusText}`);
+  const url = `${TMDB_BASE}${endpoint}?${urlParams.toString()}`;
+  
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB discover error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        queryParams,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = data?.results?.length || 0;
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      queryParams,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+      metadata: {
+        total_pages: data?.total_pages,
+        total_results: data?.total_results,
+      },
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB discover error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        queryParams,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 export interface TMDBSimilarMoviesResponse {
@@ -214,19 +633,82 @@ export interface TMDBSimilarMoviesResponse {
   total_results: number;
 }
 
-export async function fetchSimilarMovies(tmdbId: string): Promise<TMDBSimilarMoviesResponse> {
+export async function fetchSimilarMovies(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string; tmdbId?: string }
+): Promise<TMDBSimilarMoviesResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}/similar?api_key=${TMDB_API_KEY}&language=en-US`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}/similar`;
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}&language=en-US`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB similar movies error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB similar movies error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        queryParams: { language: 'en-US' },
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = data?.results?.length || 0;
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      queryParams: { language: 'en-US' },
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      tmdbId: context?.tmdbId || tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+      metadata: {
+        total_pages: data?.total_pages,
+        total_results: data?.total_results,
+      },
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB similar movies error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        queryParams: { language: 'en-US' },
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 export interface TMDBReleaseDatesResponse {
@@ -241,19 +723,75 @@ export interface TMDBReleaseDatesResponse {
   }>;
 }
 
-export async function fetchMovieReleaseDates(tmdbId: string): Promise<TMDBReleaseDatesResponse> {
+export async function fetchMovieReleaseDates(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string; tmdbId?: string }
+): Promise<TMDBReleaseDatesResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}/release_dates?api_key=${TMDB_API_KEY}`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}/release_dates`;
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB release dates error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB release dates error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = data?.results?.length || 0;
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      tmdbId: context?.tmdbId || tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB release dates error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 export interface TMDBImage {
@@ -273,19 +811,75 @@ export interface TMDBImagesResponse {
   logos: TMDBImage[];
 }
 
-export async function fetchMovieImages(tmdbId: string): Promise<TMDBImagesResponse> {
+export async function fetchMovieImages(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string; tmdbId?: string }
+): Promise<TMDBImagesResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}/images?api_key=${TMDB_API_KEY}`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}/images`;
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB images error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB images error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = (data?.posters?.length || 0) + (data?.backdrops?.length || 0) + (data?.logos?.length || 0);
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      tmdbId: context?.tmdbId || tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB images error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 export interface TMDBKeywordsResponse {
@@ -293,19 +887,75 @@ export interface TMDBKeywordsResponse {
   keywords: Array<{ id: number; name: string }>;
 }
 
-export async function fetchMovieKeywords(tmdbId: string): Promise<TMDBKeywordsResponse> {
+export async function fetchMovieKeywords(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string; tmdbId?: string }
+): Promise<TMDBKeywordsResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}/keywords?api_key=${TMDB_API_KEY}`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}/keywords`;
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB keywords error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB keywords error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const resultsCount = data?.keywords?.length || 0;
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount,
+      edgeFunction: context?.edgeFunction,
+      tmdbId: context?.tmdbId || tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB keywords error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 export interface TMDBWatchProvider {
@@ -331,19 +981,82 @@ export interface TMDBWatchProvidersResponse {
   };
 }
 
-export async function fetchMovieWatchProviders(tmdbId: string): Promise<TMDBWatchProvidersResponse> {
+export async function fetchMovieWatchProviders(
+  tmdbId: string,
+  context?: { edgeFunction?: string; userQuery?: string; voiceEventId?: string; tmdbId?: string }
+): Promise<TMDBWatchProvidersResponse> {
   if (!TMDB_API_KEY) {
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const url = `${TMDB_BASE}/movie/${tmdbId}/watch/providers?api_key=${TMDB_API_KEY}`;
-  const response = await fetch(url);
+  const startTime = Date.now();
+  const endpoint = `/movie/${tmdbId}/watch/providers`;
+  const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}`;
   
-  if (!response.ok) {
-    throw new Error(`TMDB watch providers error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url);
+    const responseTimeMs = Date.now() - startTime;
+    const responseText = await response.text();
+    const responseSizeBytes = new TextEncoder().encode(responseText).length;
+    
+    if (!response.ok) {
+      const errorMsg = `TMDB watch providers error: ${response.status} ${response.statusText}`;
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: response.status,
+        responseTimeMs,
+        responseSizeBytes,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: errorMsg,
+      });
+      throw new Error(errorMsg);
+    }
+    
+    const data = JSON.parse(responseText);
+    const providerCount = Object.keys(data?.results || {}).reduce((sum, country) => {
+      const countryProviders = data.results[country];
+      return sum + (countryProviders?.flatrate?.length || 0) + 
+                    (countryProviders?.rent?.length || 0) + 
+                    (countryProviders?.buy?.length || 0) +
+                    (countryProviders?.ads?.length || 0) +
+                    (countryProviders?.free?.length || 0);
+    }, 0);
+    
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: response.status,
+      responseTimeMs,
+      responseSizeBytes,
+      resultsCount: providerCount,
+      edgeFunction: context?.edgeFunction,
+      tmdbId: context?.tmdbId || tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+    });
+    
+    return data;
+  } catch (error) {
+    const responseTimeMs = Date.now() - startTime;
+    if (!(error instanceof Error && error.message.includes('TMDB watch providers error'))) {
+      logTMDBCall({
+        endpoint,
+        method: 'GET',
+        httpStatus: 0,
+        responseTimeMs,
+        edgeFunction: context?.edgeFunction,
+        tmdbId: context?.tmdbId || tmdbId,
+        userQuery: context?.userQuery,
+        voiceEventId: context?.voiceEventId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 export function buildImageUrl(path: string | null, size: string = 'w500'): string {

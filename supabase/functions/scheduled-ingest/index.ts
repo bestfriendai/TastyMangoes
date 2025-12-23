@@ -5,6 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { logTMDBCall } from '../_shared/tmdb.ts';
 
 const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY');
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -79,15 +80,49 @@ serve(async (req) => {
     
     const tmdbMovies: TMDBMovieResult[] = [];
     
-    // Helper function to fetch multiple pages from a TMDB endpoint
+    // Helper function to fetch multiple pages from a TMDB endpoint with logging
     const fetchMultiplePages = async (endpoint: string, sourceName: string, maxPages: number) => {
       const movies: TMDBMovieResult[] = [];
       for (let page = 1; page <= maxPages; page++) {
         await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
         
-        const response = await fetch(`${endpoint}&page=${page}`);
+        const startTime = Date.now();
+        const url = `${endpoint}&page=${page}`;
+        const response = await fetch(url);
+        const responseTimeMs = Date.now() - startTime;
+        const responseText = await response.text();
+        const responseSizeBytes = new TextEncoder().encode(responseText).length;
+        
+        // Extract endpoint path for logging
+        const endpointPath = new URL(url).pathname;
+        const queryParams: Record<string, any> = { page };
+        const urlObj = new URL(url);
+        urlObj.searchParams.forEach((value, key) => {
+          if (key !== 'api_key') queryParams[key] = value;
+        });
+        
+        // Log the API call
         if (response.ok) {
-          const data: TMDBSearchResponse = await response.json();
+          const data: TMDBSearchResponse = JSON.parse(responseText);
+          const resultsCount = data?.results?.length || 0;
+          
+          logTMDBCall({
+            endpoint: endpointPath,
+            method: 'GET',
+            httpStatus: response.status,
+            queryParams,
+            responseTimeMs,
+            responseSizeBytes,
+            resultsCount,
+            edgeFunction: 'scheduled-ingest',
+            metadata: {
+              source: sourceName,
+              page,
+              total_pages: data?.total_pages,
+              total_results: data?.total_results,
+            },
+          });
+          
           movies.push(...data.results);
           console.log(`[SCHEDULED] Fetched page ${page}/${maxPages} of ${sourceName}: ${data.results.length} movies`);
           
@@ -97,6 +132,22 @@ serve(async (req) => {
             break;
           }
         } else {
+          // Log error
+          logTMDBCall({
+            endpoint: endpointPath,
+            method: 'GET',
+            httpStatus: response.status,
+            queryParams,
+            responseTimeMs,
+            responseSizeBytes,
+            edgeFunction: 'scheduled-ingest',
+            errorMessage: `Failed to fetch ${sourceName} page ${page}: ${response.status} ${response.statusText}`,
+            metadata: {
+              source: sourceName,
+              page,
+            },
+          });
+          
           console.error(`[SCHEDULED] Failed to fetch ${sourceName} page ${page}: ${response.status}`);
           break; // Stop on error
         }
