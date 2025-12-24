@@ -9,8 +9,9 @@ import EventDetail from '@/components/EventDetail'
 import PatternSuggestions from '@/components/PatternSuggestions'
 import TMDBAnalytics, { TMDBAnalyticsRef } from '@/components/TMDBAnalytics'
 import MoviesList, { MoviesListRef } from '@/components/MoviesList'
+import ScheduledIngestRuns, { ScheduledIngestRunsRef } from '@/components/ScheduledIngestRuns'
 
-type Tab = 'events' | 'patterns' | 'tmdb' | 'movies'
+type Tab = 'events' | 'patterns' | 'tmdb' | 'movies' | 'ingestion-runs'
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('events')
@@ -24,6 +25,7 @@ export default function Dashboard() {
   // Refs for child component refresh functions
   const tmdbAnalyticsRef = useRef<TMDBAnalyticsRef | null>(null)
   const moviesListRef = useRef<MoviesListRef | null>(null)
+  const scheduledIngestRunsRef = useRef<ScheduledIngestRunsRef | null>(null)
 
   // Fetch initial events
   const fetchEvents = useCallback(async () => {
@@ -145,6 +147,14 @@ export default function Dashboard() {
     } else {
       console.log('⚠️ Movies List ref not available')
     }
+    
+    // Refresh Scheduled Ingestion Runs tab (only if component is mounted)
+    if (scheduledIngestRunsRef.current) {
+      console.log('🔄 Refreshing Scheduled Ingestion Runs')
+      scheduledIngestRunsRef.current.refresh()
+    } else {
+      console.log('⚠️ Scheduled Ingestion Runs ref not available')
+    }
   }, [fetchEvents, fetchPendingCount])
 
   // Calculate stats
@@ -246,6 +256,16 @@ export default function Dashboard() {
           >
             Movies
           </button>
+          <button
+            onClick={() => setActiveTab('ingestion-runs')}
+            className={`px-4 py-2 rounded-t font-medium transition-colors ${
+              activeTab === 'ingestion-runs'
+                ? 'bg-slate-800 text-slate-100'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Ingestion Runs
+          </button>
         </div>
       </header>
 
@@ -314,6 +334,11 @@ export default function Dashboard() {
         {/* Movies Tab */}
         <div className={activeTab === 'movies' ? '' : 'hidden'}>
           <MoviesList ref={moviesListRef} />
+        </div>
+
+        {/* Scheduled Ingestion Runs Tab */}
+        <div className={activeTab === 'ingestion-runs' ? '' : 'hidden'}>
+          <ScheduledIngestRuns ref={scheduledIngestRunsRef} />
         </div>
       </main>
 

@@ -58,3 +58,17 @@ export interface Movie {
   updated_at: string
   last_refreshed_at: string | null
 }
+
+export interface ScheduledIngestRun {
+  id: number
+  source: string
+  movies_checked: number
+  movies_skipped: number
+  movies_ingested: number
+  movies_failed: number
+  ingested_titles: string[] | null
+  failed_titles: string[] | null
+  duration_ms: number
+  trigger_type: 'scheduled' | 'manual'
+  created_at: string
+}
