@@ -29,7 +29,7 @@ struct TalkToMangoConfig {
     
     nonisolated static let oneShot = TalkToMangoConfig(
         gracePeriod: 1.5,
-        silenceTimeoutAfterSpeech: 5.0,  // 5 seconds of silence after speech stops
+        silenceTimeoutAfterSpeech: 2.5,  // 2.5 seconds of silence after speech stops
         maxDuration: 60.0
     )
     
