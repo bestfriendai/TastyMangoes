@@ -150,7 +150,7 @@ async function upgradeSchemaIfNeeded(
 
 serve(async (req) => {
   try {
-    const { tmdb_id, force_refresh = false } = await req.json();
+    const { tmdb_id, force_refresh = false, user_query = null, voice_event_id = null } = await req.json();
     
     if (!tmdb_id) {
       return new Response(

@@ -1015,12 +1015,26 @@ class HintSearchCoordinator: ObservableObject {
                 print("⚠️ [HintSearch] Failed to ingest \(suggestion.title): \(error)")
                 #endif
                 
+                // Fallback: Try to get poster URL from TMDB API directly
+                var posterURL: String? = nil
+                do {
+                    let tmdbDetails = try await TMDBService.shared.getMovieDetails(movieId: verifiedTmdbId)
+                    if let posterPath = tmdbDetails.posterPath {
+                        // Build TMDB image URL (w342 = medium size)
+                        posterURL = "https://image.tmdb.org/t/p/w342\(posterPath)"
+                    }
+                } catch {
+                    #if DEBUG
+                    print("⚠️ [HintSearch] Failed to fetch TMDB poster for \(suggestion.title): \(error)")
+                    #endif
+                }
+                
                 // Still add to results as AI-discovered (will ingest when user views)
                 let result = HintSearchResult(
                     tmdbId: verifiedTmdbId,
                     title: suggestion.title,
                     year: suggestion.year,
-                    posterURL: nil,
+                    posterURL: posterURL,
                     source: .aiDiscovered,
                     matchReason: suggestion.reason,
                     genres: nil,
