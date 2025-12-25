@@ -185,13 +185,15 @@ serve(async (req) => {
                 localTmdbIds.add(work.tmdb_id);
                 
                 // Extract data from cached card payload
-                const posterUrl = card.poster_url_medium || card.poster_url_large || card.poster_url_small || null;
+                // Cached card has poster as object: { small, medium, large }
+                const posterUrl = card.poster?.medium || card.poster?.large || card.poster?.small || null;
                 const overviewShort = card.overview_short || null;
                 
                 // Get vote_average from card (ai_score or tmdb score)
+                // Cached card has source_scores.tmdb.score, not vote_average directly
                 const aiScore = card.ai_score;
-                const voteAverage = aiScore ? aiScore / 10 : (card.vote_average || 0); // Convert 0-100 to 0-10 scale
-                const voteCount = card.vote_count || 0;
+                const voteAverage = aiScore ? aiScore / 10 : (card.source_scores?.tmdb?.score || 0); // Convert 0-100 to 0-10 scale
+                const voteCount = card.source_scores?.tmdb?.votes || 0;
                 
                 return {
                   tmdb_id: work.tmdb_id,
