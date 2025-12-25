@@ -1,6 +1,14 @@
+
 -- Migration: Add google_streaming_captures table
 -- Created on: 2025-12-21 (America/Los_Angeles - Pacific Time)
 -- Notes: Table to store streaming availability data captured from Google search results
+
+DO $$
+BEGIN
+  -- Only run if legacy table public.works exists
+  IF to_regclass('public.works') IS NULL THEN
+    RETURN;
+  END IF;
 
 CREATE TABLE IF NOT EXISTS google_streaming_captures (
   id BIGSERIAL PRIMARY KEY,
@@ -48,3 +56,4 @@ COMMENT ON COLUMN google_streaming_captures.availability_type IS 'Type of availa
 COMMENT ON COLUMN google_streaming_captures.is_stale IS 'Flag indicating if this data is potentially outdated (based on last_verified_at)';
 COMMENT ON COLUMN google_streaming_captures.raw_data IS 'Full JSON data from Google for debugging and future processing';
 
+END $$;

@@ -1,31 +1,30 @@
 -- 002_add_ingestion_status.sql
--- Created automatically by Cursor Assistant
--- Created on: 2025-01-15 at 22:00 (America/Los_Angeles - Pacific Time)
--- Notes: Add ingestion_status column to works table and similar_movie_ids to works_meta
+-- Safe-guarded: only applies if legacy tables exist.
+-- Reason: current schema may not include public.works / public.works_meta,
+-- but migration history still references this file.
 
--- Add ingestion_status column to works table
-ALTER TABLE works 
-ADD COLUMN IF NOT EXISTS ingestion_status TEXT DEFAULT 'pending' 
-CHECK (ingestion_status IN ('pending', 'ingesting', 'complete', 'failed'));
+DO $$
+BEGIN
+  -- Legacy table: public.works
+  IF to_regclass('public.works') IS NOT NULL THEN
+    ALTER TABLE public.works
+      ADD COLUMN IF NOT EXISTS ingestion_status TEXT DEFAULT 'pending';
 
--- Add index for faster lookups
-CREATE INDEX IF NOT EXISTS idx_works_ingestion_status ON works(ingestion_status);
+    -- Add/replace constraint safely
+    BEGIN
+      ALTER TABLE public.works
+        ADD CONSTRAINT works_ingestion_status_check
+        CHECK (ingestion_status IN ('pending', 'ingesting', 'complete', 'failed'));
+    EXCEPTION WHEN duplicate_object THEN
+      -- already exists, ignore
+      NULL;
+    END;
+  END IF;
 
--- Add similar_movie_ids column to works_meta (array of TMDB IDs as integers)
-ALTER TABLE works_meta 
-ADD COLUMN IF NOT EXISTS similar_movie_ids INTEGER[];
-
--- Add index for similar movies lookups
-CREATE INDEX IF NOT EXISTS idx_works_meta_similar_movie_ids ON works_meta USING GIN(similar_movie_ids);
-
--- Update existing works to have 'complete' status if they have metadata
-UPDATE works 
-SET ingestion_status = 'complete' 
-WHERE work_id IN (SELECT work_id FROM works_meta);
-
--- Set 'pending' for works without metadata
-UPDATE works 
-SET ingestion_status = 'pending' 
-WHERE ingestion_status IS NULL;
-
+  -- Legacy table: public.works_meta (only if you had it)
+  IF to_regclass('public.works_meta') IS NOT NULL THEN
+    ALTER TABLE public.works_meta
+      ADD COLUMN IF NOT EXISTS similar_movie_ids TEXT[];
+  END IF;
+END $$;
 

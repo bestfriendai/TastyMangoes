@@ -30,7 +30,7 @@ interface TMDBSearchResponse {
 }
 
 interface RequestBody {
-  source?: 'popular' | 'now_playing' | 'trending' | 'all';
+  source?: 'popular' | 'now_playing' | 'trending' | 'all' | 'mixed_daily' | 'mixed_weekly';
   max_movies?: number;
   trigger_type?: 'scheduled' | 'manual';
 }
@@ -297,7 +297,7 @@ serve(async (req) => {
     // Step 5: Log to scheduled_ingestion_log table
     try {
       const logData = {
-        source: source === 'all' ? 'mixed' : source,
+        source: source === 'all' ? 'mixed' : (source === 'mixed_daily' || source === 'mixed_weekly' ? source : source),
         movies_checked: uniqueMovies.length,
         movies_skipped: existingIds.size,
         movies_ingested: successCount,
