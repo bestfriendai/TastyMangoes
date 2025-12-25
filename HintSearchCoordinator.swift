@@ -976,65 +976,81 @@ class HintSearchCoordinator: ObservableObject {
             }
             #endif
             
+            // STEP 1: Show quick results immediately with TMDB data (fast)
+            var quickResult: HintSearchResult
             do {
-                // Call ingestMovie with the VERIFIED TMDB ID
-                let _ = try await SupabaseService.shared.ingestMovie(tmdbId: String(verifiedTmdbId))
+                // Fetch basic TMDB details (fast - just one API call)
+                let tmdbDetails = try await TMDBService.shared.getMovieDetails(movieId: verifiedTmdbId)
                 
-                // Fetch the card to get poster URL
-                let card = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(verifiedTmdbId))
+                // Build poster URL from TMDB
+                let posterURL: String?
+                if let posterPath = tmdbDetails.posterPath {
+                    posterURL = "https://image.tmdb.org/t/p/w342\(posterPath)"
+                } else {
+                    posterURL = nil
+                }
                 
-                // Extract poster URL from PosterUrls struct (use medium size)
-                let posterURLString = card?.poster?.medium ?? card?.poster?.small ?? card?.poster?.large
+                // Extract year from release date
+                let year: Int?
+                if let releaseDate = tmdbDetails.releaseDate, let yearInt = Int(releaseDate.prefix(4)) {
+                    year = yearInt
+                } else {
+                    year = suggestion.year
+                }
                 
-                let result = HintSearchResult(
+                // Extract genres from TMDB
+                let genres: [String]? = tmdbDetails.genres?.map { $0.name }
+                
+                // Extract runtime
+                let runtimeDisplay: String?
+                if let runtime = tmdbDetails.runtime, runtime > 0 {
+                    let hours = runtime / 60
+                    let minutes = runtime % 60
+                    if hours > 0 {
+                        runtimeDisplay = "\(hours)h \(minutes)m"
+                    } else {
+                        runtimeDisplay = "\(minutes)m"
+                    }
+                } else {
+                    runtimeDisplay = nil
+                }
+                
+                // Create quick result with TMDB data only (no AI scores, no tasty scores)
+                quickResult = HintSearchResult(
                     tmdbId: verifiedTmdbId,
-                    title: card?.title ?? suggestion.title,  // Use title from TMDB if available
-                    year: card?.year ?? suggestion.year,
-                    posterURL: posterURLString,
-                    source: .aiIngested,
+                    title: tmdbDetails.title ?? suggestion.title,
+                    year: year,
+                    posterURL: posterURL,
+                    source: .aiDiscovered, // Will be updated to .aiIngested when full ingestion completes
                     matchReason: suggestion.reason,
-                    genres: card?.genres,
-                    runtimeDisplay: card?.runtimeDisplay,
-                        aiScore: card?.aiScore,
-                        voteAverage: card?.sourceScores?.tmdb?.score
-                    )
-                results.append(result)
-                successCount += 1
+                    genres: genres,
+                    runtimeDisplay: runtimeDisplay,
+                    aiScore: nil, // Will be populated when full ingestion completes
+                    voteAverage: tmdbDetails.voteAverage // TMDB score available immediately
+                )
                 
-                // Call progress callback with updated results after each successful ingestion (only if not cancelled)
+                results.append(quickResult)
+                
+                // Show results immediately (fast!)
                 if !Task.isCancelled {
                     onProgress?(results)
                 }
                 
                 #if DEBUG
-                print("✅ [HintSearch] Ingested: \(card?.title ?? suggestion.title) (\(card?.year ?? suggestion.year ?? 0)) [TMDB: \(verifiedTmdbId)]")
+                print("⚡ [HintSearch] Quick result shown: \(tmdbDetails.title ?? suggestion.title) [TMDB: \(verifiedTmdbId)]")
                 #endif
                 
             } catch {
                 #if DEBUG
-                print("⚠️ [HintSearch] Failed to ingest \(suggestion.title): \(error)")
+                print("⚠️ [HintSearch] Failed to fetch TMDB details for \(suggestion.title): \(error)")
                 #endif
                 
-                // Fallback: Try to get poster URL from TMDB API directly
-                var posterURL: String? = nil
-                do {
-                    let tmdbDetails = try await TMDBService.shared.getMovieDetails(movieId: verifiedTmdbId)
-                    if let posterPath = tmdbDetails.posterPath {
-                        // Build TMDB image URL (w342 = medium size)
-                        posterURL = "https://image.tmdb.org/t/p/w342\(posterPath)"
-                    }
-                } catch {
-                    #if DEBUG
-                    print("⚠️ [HintSearch] Failed to fetch TMDB poster for \(suggestion.title): \(error)")
-                    #endif
-                }
-                
-                // Still add to results as AI-discovered (will ingest when user views)
-                let result = HintSearchResult(
+                // Fallback: Show result without poster if TMDB fetch fails
+                quickResult = HintSearchResult(
                     tmdbId: verifiedTmdbId,
                     title: suggestion.title,
                     year: suggestion.year,
-                    posterURL: posterURL,
+                    posterURL: nil,
                     source: .aiDiscovered,
                     matchReason: suggestion.reason,
                     genres: nil,
@@ -1042,9 +1058,58 @@ class HintSearchCoordinator: ObservableObject {
                     aiScore: nil,
                     voteAverage: nil
                 )
-                results.append(result)
-                // Call progress callback even for failed ingestion
-                onProgress?(results)
+                results.append(quickResult)
+                if !Task.isCancelled {
+                    onProgress?(results)
+                }
+            }
+            
+            // STEP 2: Trigger background ingestion (slow - includes AI scores, tasty scores, etc.)
+            // Don't wait for this - it happens in the background
+            Task {
+                do {
+                    // Call ingestMovie with the VERIFIED TMDB ID (this is slow)
+                    let _ = try await SupabaseService.shared.ingestMovie(tmdbId: String(verifiedTmdbId))
+                    
+                    // Fetch the full card with AI scores and tasty scores
+                    let card = try await SupabaseService.shared.fetchMovieCardFromCache(tmdbId: String(verifiedTmdbId))
+                    
+                    // Update the result with full data
+                    if let cardIndex = results.firstIndex(where: { $0.tmdbId == verifiedTmdbId }) {
+                        // Extract poster URL from cached card (may be different from TMDB URL)
+                        let posterURLString = card?.poster?.medium ?? card?.poster?.small ?? card?.poster?.large ?? quickResult.posterURL
+                        
+                        // Update result with full data
+                        results[cardIndex] = HintSearchResult(
+                            tmdbId: verifiedTmdbId,
+                            title: card?.title ?? quickResult.title,
+                            year: card?.year ?? quickResult.year,
+                            posterURL: posterURLString,
+                            source: .aiIngested, // Now fully ingested
+                            matchReason: quickResult.matchReason,
+                            genres: card?.genres ?? quickResult.genres,
+                            runtimeDisplay: card?.runtimeDisplay ?? quickResult.runtimeDisplay,
+                            aiScore: card?.aiScore, // Now includes AI score!
+                            voteAverage: card?.sourceScores?.tmdb?.score ?? quickResult.voteAverage
+                        )
+                        
+                        successCount += 1
+                        
+                        // Update UI with full data (only if not cancelled)
+                        if !Task.isCancelled {
+                            onProgress?(results)
+                        }
+                        
+                        #if DEBUG
+                        print("✅ [HintSearch] Background ingestion complete: \(card?.title ?? suggestion.title) [TMDB: \(verifiedTmdbId)]")
+                        #endif
+                    }
+                } catch {
+                    #if DEBUG
+                    print("⚠️ [HintSearch] Background ingestion failed for \(suggestion.title): \(error)")
+                    #endif
+                    // Result already shown with TMDB data, so user still sees something
+                }
             }
         }
         
