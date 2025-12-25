@@ -390,7 +390,46 @@ serve(async (req) => {
       }
     }
     
-    // Step 2: Filter out TMDB results that are already in local database (deduplication)
+    // Step 2: For TMDB results, check if they exist in cache and use cached poster if available
+    // This ensures movies in cache show posters even if TMDB search doesn't return poster_path
+    let cachedPosterMap = new Map<string, string>();
+    if (allResults.length > 0 && localTmdbIds.size > 0) {
+      // Fetch cached cards for TMDB results that might be in cache
+      const tmdbIdsToCheck = Array.from(allResults.map(m => m.id?.toString()).filter(Boolean));
+      const tmdbIdsInCache = tmdbIdsToCheck.filter(id => localTmdbIds.has(id));
+      
+      if (tmdbIdsInCache.length > 0) {
+        // Get work_ids for these tmdb_ids
+        const { data: worksForTmdbIds } = await supabase
+          .from('works')
+          .select('work_id, tmdb_id')
+          .in('tmdb_id', tmdbIdsInCache);
+        
+        if (worksForTmdbIds && worksForTmdbIds.length > 0) {
+          const workIds = worksForTmdbIds.map(w => w.work_id);
+          const { data: cachedCards } = await supabase
+            .from('work_cards_cache')
+            .select('work_id, payload')
+            .in('work_id', workIds);
+          
+          if (cachedCards) {
+            // Create map: tmdb_id -> poster_url
+            for (const card of cachedCards) {
+              const work = worksForTmdbIds.find(w => w.work_id === card.work_id);
+              if (work && card.payload.poster) {
+                const posterUrl = card.payload.poster.medium || card.payload.poster.large || card.payload.poster.small;
+                if (posterUrl) {
+                  cachedPosterMap.set(work.tmdb_id, posterUrl);
+                }
+              }
+            }
+            console.log(`[SEARCH] Found ${cachedPosterMap.size} cached posters for TMDB results`);
+          }
+        }
+      }
+    }
+    
+    // Step 3: Filter out TMDB results that are already in local database (deduplication)
     if (localTmdbIds.size > 0) {
       const beforeCount = allResults.length;
       allResults = allResults.filter((movie) => {
@@ -410,12 +449,16 @@ serve(async (req) => {
       const year = m.release_date ? parseInt(m.release_date.substring(0, 4)) : null;
       const overview = m.overview || '';
       const overviewShort = overview.length > 100 ? overview.substring(0, 100) + '...' : overview;
+      const tmdbId = m.id?.toString() || '';
+      
+      // Use cached poster if available, otherwise use TMDB poster_path
+      const posterUrl = cachedPosterMap.get(tmdbId) || (m.poster_path ? buildImageUrl(m.poster_path, 'w154') : null);
       
       return {
-        tmdb_id: m.id?.toString() || '',
+        tmdb_id: tmdbId,
         title: m.title || 'Unknown',
         year: (year && !isNaN(year)) ? year : null,
-        poster_url: m.poster_path ? buildImageUrl(m.poster_path, 'w154') : null,
+        poster_url: posterUrl,
         overview_short: overviewShort || null,
         vote_average: m.vote_average || 0,
         vote_count: m.vote_count || 0,
