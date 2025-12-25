@@ -575,6 +575,11 @@ export async function searchMovies(
     const data = JSON.parse(responseText);
     const resultsCount = data?.results?.length || 0;
     
+    // Cache the response (1 hour TTL for search results)
+    setTMDBCache(cacheKey, endpoint, data, 1).catch(err => {
+      console.warn(`[TMDB-CACHE] Failed to cache ${cacheKey}:`, err);
+    });
+    
     // Log successful call (async, don't wait)
     logTMDBCall({
       endpoint,
