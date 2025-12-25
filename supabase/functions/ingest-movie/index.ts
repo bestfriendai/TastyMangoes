@@ -474,9 +474,6 @@ serve(async (req) => {
       } else {
         console.log(`[INGEST] No US watch providers found`);
       }
-    } catch (error) {
-      console.warn(`[INGEST] Failed to fetch watch providers:`, error);
-      // Continue without watch providers
     }
     
     console.log(`[INGEST] Fetched TMDB data for: ${details.title}`);
