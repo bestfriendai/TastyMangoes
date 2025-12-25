@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- Add trigram index on works.title for fast ILIKE queries
 -- This makes queries like "WHERE title ILIKE '%query%'" use index instead of sequential scan
 CREATE INDEX IF NOT EXISTS idx_works_title_trgm 
-  ON works USING gin(title gin_trgm_ops);
+  ON public.works USING gin(title gin_trgm_ops);
 
 COMMENT ON INDEX idx_works_title_trgm IS 
 'Trigram index for efficient ILIKE title searches. Enables fast partial text matching for movie search.';

@@ -33,12 +33,9 @@ CREATE POLICY "Service role can manage tmdb_cache"
     USING (true)
     WITH CHECK (true);
 
--- Policy: Users can read cache (for debugging/monitoring)
-CREATE POLICY "Users can read tmdb_cache"
-    ON public.tmdb_cache
-    FOR SELECT
-    TO authenticated, anon
-    USING (true);
+-- No user-facing RLS policy - cache is only accessible via service_role
+-- Dashboard monitoring should query via Edge Function with service_role key
+-- This prevents unnecessary surface area and potential scraping/performance issues
 
 -- Function to clean up expired cache entries (can be called periodically)
 CREATE OR REPLACE FUNCTION cleanup_expired_tmdb_cache()
