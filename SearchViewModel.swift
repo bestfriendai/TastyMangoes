@@ -159,9 +159,9 @@ class SearchViewModel: ObservableObject {
         
         print("⏳ Starting debounced search for '\(searchQuery)'")
         
-        // Debounce - wait 0.4 seconds before searching (slightly longer for smoother UX)
+        // Debounce - wait 0.3 seconds before searching (optimized for faster response)
         searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
             
             guard !Task.isCancelled else {
                 print("❌ Search task cancelled")

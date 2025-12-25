@@ -321,39 +321,69 @@ serve(async (req) => {
       voiceEventId: voice_event_id || null,
     };
     
-    // Fetch fresh data from TMDB with delays to respect rate limits
-    // Add 250ms delay between calls
+    // Fetch fresh data from TMDB - parallelize independent calls for speed
+    // Start with details (most important), then parallelize the rest
+    console.log(`[INGEST] Fetching TMDB data in parallel for ${tmdb_id}...`);
     const details = await fetchMovieDetails(tmdb_id.toString(), tmdbContext);
-    await new Promise(resolve => setTimeout(resolve, 250));
     
-    const credits = await fetchMovieCredits(tmdb_id.toString(), tmdbContext);
-    await new Promise(resolve => setTimeout(resolve, 250));
+    // Parallelize all remaining independent TMDB calls (saves ~1.75s vs sequential)
+    const [
+      creditsResult,
+      videosResult,
+      similarMoviesResult,
+      releaseDatesResult,
+      imagesResult,
+      keywordsResult,
+      providersResult
+    ] = await Promise.all([
+      fetchMovieCredits(tmdb_id.toString(), tmdbContext).catch(err => {
+        console.warn(`[INGEST] Failed to fetch credits:`, err);
+        return null;
+      }),
+      fetchMovieVideos(tmdb_id.toString(), tmdbContext).catch(err => {
+        console.warn(`[INGEST] Failed to fetch videos:`, err);
+        return null;
+      }),
+      fetchSimilarMovies(tmdb_id.toString(), tmdbContext).catch(err => {
+        console.warn(`[INGEST] Failed to fetch similar movies:`, err);
+        return null;
+      }),
+      fetchMovieReleaseDates(tmdb_id.toString(), tmdbContext).catch(err => {
+        console.warn(`[INGEST] Failed to fetch release dates:`, err);
+        return null;
+      }),
+      fetchMovieImages(tmdb_id.toString(), tmdbContext).catch(err => {
+        console.warn(`[INGEST] Failed to fetch images:`, err);
+        return null;
+      }),
+      fetchMovieKeywords(tmdb_id.toString(), tmdbContext).catch(err => {
+        console.warn(`[INGEST] Failed to fetch keywords:`, err);
+        return null;
+      }),
+      fetchMovieWatchProviders(tmdb_id.toString(), tmdbContext).catch(err => {
+        console.warn(`[INGEST] Failed to fetch watch providers:`, err);
+        return null;
+      }),
+    ]);
     
-    const videos = await fetchMovieVideos(tmdb_id.toString(), tmdbContext);
-    await new Promise(resolve => setTimeout(resolve, 250));
+    const credits = creditsResult;
+    const videos = videosResult;
     
     // Fetch similar movies (limit to first 10)
     let similarMovieData: Array<{ tmdb_id: number; title: string }> = [];
-    try {
-      await new Promise(resolve => setTimeout(resolve, 250));
-      const similarMovies = await fetchSimilarMovies(tmdb_id.toString(), tmdbContext);
-      similarMovieData = similarMovies.results
+    if (similarMoviesResult) {
+      similarMovieData = similarMoviesResult.results
         .slice(0, 10)
         .map(m => ({ tmdb_id: m.id, title: m.title }));
       console.log(`[INGEST] Fetched ${similarMovieData.length} similar movies from TMDB`);
-    } catch (error) {
-      console.warn(`[INGEST] Failed to fetch similar movies:`, error);
-      // Continue without similar movies
     }
     
     // Fetch release dates to get US certification
     let certification: string | null = null;
-    try {
-      await new Promise(resolve => setTimeout(resolve, 250));
-      const releaseDates = await fetchMovieReleaseDates(tmdb_id.toString(), tmdbContext);
-      console.log(`[INGEST] Release dates response:`, JSON.stringify(releaseDates, null, 2));
+    if (releaseDatesResult) {
+      console.log(`[INGEST] Release dates response:`, JSON.stringify(releaseDatesResult, null, 2));
       
-      const usRelease = releaseDates.results.find(r => r.iso_3166_1 === 'US');
+      const usRelease = releaseDatesResult.results.find(r => r.iso_3166_1 === 'US');
       if (usRelease) {
         console.log(`[INGEST] Found US release, release_dates count: ${usRelease.release_dates?.length || 0}`);
         // Try to find certification - check all release dates, prefer theatrical release
@@ -369,34 +399,21 @@ serve(async (req) => {
       } else {
         console.log(`[INGEST] No US release found in release dates`);
       }
-    } catch (error) {
-      console.error(`[INGEST] Failed to fetch release dates:`, error);
-      // Continue without certification
     }
     
     // Fetch images to get still images (backdrops)
     let stillImagePaths: Array<{ file_path: string }> = [];
-    try {
-      await new Promise(resolve => setTimeout(resolve, 250));
-      const images = await fetchMovieImages(tmdb_id.toString(), tmdbContext);
+    if (imagesResult) {
       // Take top 5 backdrops
-      stillImagePaths = images.backdrops.slice(0, 5);
+      stillImagePaths = imagesResult.backdrops.slice(0, 5);
       console.log(`[INGEST] Found ${stillImagePaths.length} backdrops to download as still images`);
-    } catch (error) {
-      console.warn(`[INGEST] Failed to fetch images:`, error);
-      // Continue without still images
     }
     
     // Fetch keywords
     let keywordNames: string[] = [];
-    try {
-      await new Promise(resolve => setTimeout(resolve, 250));
-      const keywordsResponse = await fetchMovieKeywords(tmdb_id.toString(), tmdbContext);
-      keywordNames = keywordsResponse.keywords.map(k => k.name);
+    if (keywordsResult) {
+      keywordNames = keywordsResult.keywords.map(k => k.name);
       console.log(`[INGEST] Fetched ${keywordNames.length} keywords`);
-    } catch (error) {
-      console.warn(`[INGEST] Failed to fetch keywords:`, error);
-      // Continue without keywords
     }
     
     // Fetch watch providers (streaming availability)
@@ -412,9 +429,8 @@ serve(async (req) => {
       updated_at?: string;
     } = {};
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 250));
-      const providersResponse = await fetchMovieWatchProviders(tmdb_id.toString(), tmdbContext);
+    if (providersResult) {
+      const providersResponse = providersResult;
       
       // Extract US providers (primary market) - can expand to other regions later
       const usProviders = providersResponse.results?.US;

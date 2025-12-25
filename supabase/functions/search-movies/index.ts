@@ -442,6 +442,7 @@ serve(async (req) => {
         status: 200,
         headers: { 
           'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=60, s-maxage=60', // Cache for 60 seconds (browser + CDN)
           'Access-Control-Allow-Origin': '*'
         } 
       }
