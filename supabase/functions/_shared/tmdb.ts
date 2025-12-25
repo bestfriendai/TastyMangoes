@@ -32,6 +32,56 @@ async function getSupabaseClient() {
   return supabaseClient;
 }
 
+// TMDB Cache helpers
+async function getTMDBCache(cacheKey: string): Promise<any | null> {
+  try {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('tmdb_cache')
+      .select('response_data')
+      .eq('cache_key', cacheKey)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+    
+    if (error || !data) {
+      return null;
+    }
+    
+    return data.response_data;
+  } catch (err) {
+    console.warn(`[TMDB-CACHE] Error reading cache for ${cacheKey}:`, err);
+    return null;
+  }
+}
+
+async function setTMDBCache(
+  cacheKey: string,
+  endpoint: string,
+  responseData: any,
+  ttlHours: number
+): Promise<void> {
+  try {
+    const supabase = await getSupabaseClient();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + ttlHours);
+    
+    await supabase
+      .from('tmdb_cache')
+      .upsert({
+        cache_key: cacheKey,
+        endpoint: endpoint,
+        response_data: responseData,
+        expires_at: expiresAt.toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'cache_key'
+      });
+  } catch (err) {
+    console.warn(`[TMDB-CACHE] Error writing cache for ${cacheKey}:`, err);
+    // Don't fail the request if caching fails
+  }
+}
+
 // Log TMDB API call to database (async, fire-and-forget)
 export async function logTMDBCall(params: {
   endpoint: string;
@@ -216,8 +266,33 @@ export async function fetchMovieDetails(
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const startTime = Date.now();
   const endpoint = `/movie/${tmdbId}`;
+  const cacheKey = `movie_details_${tmdbId}`;
+  
+  // Check cache first (24 hour TTL for movie details)
+  const cached = await getTMDBCache(cacheKey);
+  if (cached) {
+    console.log(`[TMDB-CACHE] Cache HIT for ${cacheKey}`);
+    // Log cache hit (with 0ms response time)
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: 200,
+      queryParams: { language: 'en-US' },
+      responseTimeMs: 0,
+      responseSizeBytes: JSON.stringify(cached).length,
+      resultsCount: 1,
+      edgeFunction: context?.edgeFunction,
+      tmdbId,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+      metadata: { cached: true },
+    });
+    return cached;
+  }
+  
+  console.log(`[TMDB-CACHE] Cache MISS for ${cacheKey}, fetching from TMDB`);
+  const startTime = Date.now();
   
   const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_API_KEY}&language=en-US`;
   
@@ -246,6 +321,11 @@ export async function fetchMovieDetails(
     }
     
     const data = JSON.parse(responseText);
+    
+    // Cache the response (24 hour TTL for movie details)
+    setTMDBCache(cacheKey, endpoint, data, 24).catch(err => {
+      console.warn(`[TMDB-CACHE] Failed to cache ${cacheKey}:`, err);
+    });
     
     // Log successful call
     logTMDBCall({
@@ -434,8 +514,32 @@ export async function searchMovies(
     throw new Error('TMDB_API_KEY environment variable not set');
   }
   
-  const startTime = Date.now();
   const endpoint = '/search/movie';
+  const cacheKey = `search_movies_${encodeURIComponent(query)}_${year || 'all'}_page${page}`;
+  
+  // Check cache first (1 hour TTL for search results)
+  const cached = await getTMDBCache(cacheKey);
+  if (cached) {
+    console.log(`[TMDB-CACHE] Cache HIT for ${cacheKey}`);
+    // Log cache hit
+    logTMDBCall({
+      endpoint,
+      method: 'GET',
+      httpStatus: 200,
+      queryParams: { query, page, year },
+      responseTimeMs: 0,
+      responseSizeBytes: JSON.stringify(cached).length,
+      resultsCount: cached?.results?.length || 0,
+      edgeFunction: context?.edgeFunction,
+      userQuery: context?.userQuery,
+      voiceEventId: context?.voiceEventId,
+      metadata: { cached: true },
+    });
+    return cached;
+  }
+  
+  console.log(`[TMDB-CACHE] Cache MISS for ${cacheKey}, fetching from TMDB`);
+  const startTime = Date.now();
   const queryParams: Record<string, any> = { query, page };
   if (year) queryParams.year = year;
   

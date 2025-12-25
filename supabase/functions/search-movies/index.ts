@@ -115,107 +115,102 @@ serve(async (req) => {
     let apiCallsMade = 0;
     
     // Step 1: Query local database first (only if we have a text query)
+    // Optimized: Query works for title matching, then fetch work_cards_cache (eliminates joins)
     if (hasQuery) {
       try {
         console.log(`[SEARCH] Querying local database for: "${queryTrimmed}"`);
         
-        // Build query with ILIKE title matching
-        // Use left joins to works_meta and aggregates (optional)
-        let localQuery = supabase
+        // Step 1a: Query works table for matching titles (uses trigram index if available)
+        let worksQuery = supabase
           .from('works')
-          .select(`
-            tmdb_id,
-            title,
-            year,
-            release_date,
-            works_meta(
-              poster_url_small,
-              poster_url_medium,
-              poster_url_large,
-              overview_short,
-              genres
-            ),
-            aggregates(
-              ai_score,
-              source_scores
-            )
-          `)
+          .select('work_id, tmdb_id, title, year')
           .ilike('title', `%${queryTrimmed}%`)
-          .limit(20);
+          .limit(50); // Get more than needed for filtering
         
         // Apply year filter if provided
         if (yearFromInt) {
-          localQuery = localQuery.gte('year', yearFromInt);
+          worksQuery = worksQuery.gte('year', yearFromInt);
         }
         if (yearToInt) {
-          localQuery = localQuery.lte('year', yearToInt);
+          worksQuery = worksQuery.lte('year', yearToInt);
         }
         
-        const { data: localMovies, error: localError } = await localQuery;
+        const { data: matchingWorks, error: worksError } = await worksQuery;
         
-        if (localError) {
-          console.warn(`[SEARCH] Local database query error:`, localError);
-        } else if (localMovies && localMovies.length > 0) {
-          console.log(`[SEARCH] Found ${localMovies.length} movies in local database`);
+        if (worksError) {
+          console.warn(`[SEARCH] Works query error:`, worksError);
+        } else if (matchingWorks && matchingWorks.length > 0) {
+          console.log(`[SEARCH] Found ${matchingWorks.length} matching works`);
           
-          // Get genre names from genre IDs for filtering
-          const genreNames: string[] = [];
-          if (genreIds.length > 0 && genresParam) {
-            // Use the original genre names from the request
-            genreNames.push(...genresParam.split(',').map(g => g.trim()));
-          }
+          // Step 1b: Fetch work_cards_cache for matching work_ids (fast indexed lookup)
+          const workIds = matchingWorks.map(w => w.work_id);
+          const { data: cachedCards, error: cacheError } = await supabase
+            .from('work_cards_cache')
+            .select('work_id, payload')
+            .in('work_id', workIds);
           
-          // Transform local results to match expected format
-          localResults = localMovies
-            .map((movie: any) => {
-              const tmdbId = movie.tmdb_id;
-              
-              // Get poster URL from works_meta (it's an array from the join, take first if exists)
-              const meta = Array.isArray(movie.works_meta) && movie.works_meta.length > 0 
-                ? movie.works_meta[0] 
-                : null;
-              
-              // Filter by genres if provided
-              if (genreNames.length > 0 && meta?.genres) {
-                const movieGenres = Array.isArray(meta.genres) ? meta.genres : [];
-                const hasMatchingGenre = genreNames.some(genreName => 
-                  movieGenres.some((g: string) => g.toLowerCase() === genreName.toLowerCase())
-                );
-                if (!hasMatchingGenre) {
-                  return null; // Filter out this movie
+          if (cacheError) {
+            console.warn(`[SEARCH] Cache query error:`, cacheError);
+          } else if (cachedCards && cachedCards.length > 0) {
+            console.log(`[SEARCH] Found ${cachedCards.length} cached cards`);
+            
+            // Create a map of work_id -> cached card for fast lookup
+            const cardMap = new Map(cachedCards.map(c => [c.work_id, c.payload]));
+            
+            // Get genre names from genre IDs for filtering
+            const genreNames: string[] = [];
+            if (genreIds.length > 0 && genresParam) {
+              genreNames.push(...genresParam.split(',').map(g => g.trim()));
+            }
+            
+            // Transform to expected format using cached card data
+            localResults = matchingWorks
+              .map((work: any) => {
+                const card = cardMap.get(work.work_id);
+                if (!card) {
+                  return null; // Skip if no cached card
                 }
-              }
-              
-              localTmdbIds.add(tmdbId);
-              // Try medium first, then large, then small as fallback
-              const posterUrl = meta?.poster_url_medium || meta?.poster_url_large || meta?.poster_url_small || null;
-              
-              // Get overview from works_meta
-              const overviewShort = meta?.overview_short || null;
-              
-              // Get vote_average from aggregates (ai_score) or source_scores
-              const agg = Array.isArray(movie.aggregates) && movie.aggregates.length > 0
-                ? movie.aggregates[0]
-                : null;
-              const aiScore = agg?.ai_score;
-              const sourceScores = agg?.source_scores;
-              const voteAverage = aiScore ? aiScore / 10 : (sourceScores?.tmdb?.score || 0); // Convert 0-100 to 0-10 scale
-              const voteCount = sourceScores?.tmdb?.votes || 0;
-              
-              return {
-                tmdb_id: tmdbId,
-                title: movie.title,
-                year: movie.year,
-                poster_url: posterUrl,
-                overview_short: overviewShort,
-                vote_average: voteAverage,
-                vote_count: voteCount,
-                ai_score: aiScore ?? null, // Include ai_score for database movies (0-100 scale), use nullish coalescing to preserve 0 values
-              };
-            })
-            .filter((result: any) => result !== null); // Remove filtered out movies
+                
+                // Filter by genres if provided
+                if (genreNames.length > 0 && card.genres) {
+                  const movieGenres = Array.isArray(card.genres) ? card.genres : [];
+                  const hasMatchingGenre = genreNames.some(genreName => 
+                    movieGenres.some((g: string) => g.toLowerCase() === genreName.toLowerCase())
+                  );
+                  if (!hasMatchingGenre) {
+                    return null; // Filter out this movie
+                  }
+                }
+                
+                localTmdbIds.add(work.tmdb_id);
+                
+                // Extract data from cached card payload
+                const posterUrl = card.poster_url_medium || card.poster_url_large || card.poster_url_small || null;
+                const overviewShort = card.overview_short || null;
+                
+                // Get vote_average from card (ai_score or tmdb score)
+                const aiScore = card.ai_score;
+                const voteAverage = aiScore ? aiScore / 10 : (card.vote_average || 0); // Convert 0-100 to 0-10 scale
+                const voteCount = card.vote_count || 0;
+                
+                return {
+                  tmdb_id: work.tmdb_id,
+                  title: work.title || card.title,
+                  year: work.year || card.year,
+                  poster_url: posterUrl,
+                  overview_short: overviewShort,
+                  vote_average: voteAverage,
+                  vote_count: voteCount,
+                  ai_score: aiScore ?? null,
+                };
+              })
+              .filter((result: any) => result !== null)
+              .slice(0, 20); // Limit to 20 results
           
-          console.log(`[SEARCH] Local results: ${localResults.length} movies (tmdb_ids: ${Array.from(localTmdbIds).slice(0, 5).join(', ')}${localTmdbIds.size > 5 ? '...' : ''})`);
+            console.log(`[SEARCH] Local results: ${localResults.length} movies (tmdb_ids: ${Array.from(localTmdbIds).slice(0, 5).join(', ')}${localTmdbIds.size > 5 ? '...' : ''})`);
+          } else {
+            console.log(`[SEARCH] No cached cards found for matching works`);
+          }
         } else {
           console.log(`[SEARCH] No local movies found for: "${queryTrimmed}"`);
         }
@@ -298,8 +293,8 @@ serve(async (req) => {
             break;
           }
           
-          // Small delay to respect rate limits
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Small delay to respect rate limits (reduced from 100ms - will add retry logic if 429s occur)
+          await new Promise(resolve => setTimeout(resolve, 50));
         } while (currentPage <= maxPages && currentPage <= totalPages);
       } catch (searchError) {
         console.error(`[SEARCH] Search endpoint error:`, searchError);

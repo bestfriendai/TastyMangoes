@@ -84,7 +84,7 @@ serve(async (req) => {
     const fetchMultiplePages = async (endpoint: string, sourceName: string, maxPages: number) => {
       const movies: TMDBMovieResult[] = [];
       for (let page = 1; page <= maxPages; page++) {
-        await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
+        await new Promise(resolve => setTimeout(resolve, 250)); // Rate limit delay (reduced - will add retry logic if needed)
         
         const startTime = Date.now();
         const url = `${endpoint}&page=${page}`;
