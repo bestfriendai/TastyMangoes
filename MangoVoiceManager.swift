@@ -4,6 +4,7 @@
 //  Notes: Text-to-speech manager for Mango's voice responses
 
 import AVFoundation
+import Combine
 
 @MainActor
 class MangoVoiceManager: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {

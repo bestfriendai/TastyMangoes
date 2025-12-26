@@ -53,6 +53,13 @@
 		C57267652EF10B7F005C191B /* AIDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57267642EF10B7F005C191B /* AIDiscoveryService.swift */; };
 		C57267672EF10BAD005C191B /* HintSearchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57267662EF10BAD005C191B /* HintSearchCoordinator.swift */; };
 		C572676A2EF1177C005C191B /* SupabaseService+AIBudget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57267692EF1177C005C191B /* SupabaseService+AIBudget.swift */; };
+		C58974B52EFE2A4200BA7659 /* SemanticSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B42EFE2A4200BA7659 /* SemanticSearchView.swift */; };
+		C58974BB2EFE2B6100BA7659 /* SemanticSearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974BA2EFE2B6100BA7659 /* SemanticSearchViewModel.swift */; };
+		C58974BC2EFE2B6100BA7659 /* MangoVoiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B62EFE2B6100BA7659 /* MangoVoiceManager.swift */; };
+		C58974BD2EFE2B6100BA7659 /* SemanticMovieCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */; };
+		C58974BE2EFE2B6100BA7659 /* SemanticSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */; };
+		C58974BF2EFE2B6100BA7659 /* RefinementChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */; };
+		C58974C12EFE2B6100BA7659 /* SemanticSearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */; };
 		C59E8B822EE696D000F15ED6 /* SelfHealingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */; };
 		C59E8B842EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */; };
 		C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */; };
@@ -169,6 +176,13 @@
 		C57267642EF10B7F005C191B /* AIDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIDiscoveryService.swift; sourceTree = "<group>"; };
 		C57267662EF10BAD005C191B /* HintSearchCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HintSearchCoordinator.swift; sourceTree = "<group>"; };
 		C57267692EF1177C005C191B /* SupabaseService+AIBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SupabaseService+AIBudget.swift"; sourceTree = "<group>"; };
+		C58974B42EFE2A4200BA7659 /* SemanticSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchView.swift; sourceTree = "<group>"; };
+		C58974B62EFE2B6100BA7659 /* MangoVoiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MangoVoiceManager.swift; sourceTree = "<group>"; };
+		C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefinementChipsView.swift; sourceTree = "<group>"; };
+		C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticMovieCard.swift; sourceTree = "<group>"; };
+		C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchService.swift; sourceTree = "<group>"; };
+		C58974BA2EFE2B6100BA7659 /* SemanticSearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchViewModel.swift; sourceTree = "<group>"; };
+		C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchModels.swift; sourceTree = "<group>"; };
 		C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfHealingVoiceService.swift; sourceTree = "<group>"; };
 		C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VoiceIntentRouter+SelfHealing.swift"; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
@@ -264,6 +278,13 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C58974B62EFE2B6100BA7659 /* MangoVoiceManager.swift */,
+				C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */,
+				C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */,
+				C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */,
+				C58974BA2EFE2B6100BA7659 /* SemanticSearchViewModel.swift */,
+				C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */,
+				C58974B42EFE2A4200BA7659 /* SemanticSearchView.swift */,
 				C57267642EF10B7F005C191B /* AIDiscoveryService.swift */,
 				C517CD042EC9806C00EAE1FE /* Assets.xcassets */,
 				C5B95D442ECB3D9100B47098 /* AddMoviesToListView.swift */,
@@ -527,11 +548,18 @@
 				C517CD222EC9806C00EAE1FE /* CategoryItem.swift in Sources */,
 				C517CD232EC9806C00EAE1FE /* Color+Hex.swift in Sources */,
 				C572676A2EF1177C005C191B /* SupabaseService+AIBudget.swift in Sources */,
+				C58974BB2EFE2B6100BA7659 /* SemanticSearchViewModel.swift in Sources */,
+				C58974BC2EFE2B6100BA7659 /* MangoVoiceManager.swift in Sources */,
+				C58974BD2EFE2B6100BA7659 /* SemanticMovieCard.swift in Sources */,
+				C58974BE2EFE2B6100BA7659 /* SemanticSearchService.swift in Sources */,
+				C58974BF2EFE2B6100BA7659 /* RefinementChipsView.swift in Sources */,
+				C58974C12EFE2B6100BA7659 /* SemanticSearchModels.swift in Sources */,
 				C5B95D352ECB32E200B47098 /* SortByBottomSheet.swift in Sources */,
 				C5B95D392ECB330000B47098 /* DeleteListBottomSheet.swift in Sources */,
 				C561D02E2EDFCF01007FDD69 /* YouTubePlayerView.swift in Sources */,
 				C55D3BD82EE73C7E003BE6F4 /* PosterCarouselView.swift in Sources */,
 				C517CD242EC9806C00EAE1FE /* Movie.swift in Sources */,
+				C58974B52EFE2A4200BA7659 /* SemanticSearchView.swift in Sources */,
 				C517CD252EC9806C00EAE1FE /* Tmdbconfig.swift in Sources */,
 				C5B95D2D2ECB272B00B47098 /* SearchPlatformsBottomSheet.swift in Sources */,
 				C517CD262EC9806C00EAE1FE /* Tmdbmodels.swift in Sources */,
