@@ -4,6 +4,7 @@
 //  Notes: API client for semantic search Edge Function
 
 import Foundation
+import Combine
 
 @MainActor
 class SemanticSearchService: ObservableObject {

@@ -4,6 +4,7 @@
 //  Notes: View model for semantic search feature
 
 import SwiftUI
+import Combine
 
 @MainActor
 class SemanticSearchViewModel: ObservableObject {
