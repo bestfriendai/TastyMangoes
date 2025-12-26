@@ -20,10 +20,14 @@ struct MangoListeningView: View {
     @State private var dismissTimer: Task<Void, Never>?
     @State private var uiState: ListeningUIState = .preparing
     @State private var wasCancelled: Bool = false  // Track if user tapped Stop to prevent processing
+    var onTranscriptReceived: ((String) -> Void)?  // Optional callback for semantic search
+    var skipAutoProcessing: Bool = false  // Skip automatic VoiceIntentRouter processing
     
-    init(speechRecognizer: SpeechRecognizer, isPresented: Binding<Bool>) {
+    init(speechRecognizer: SpeechRecognizer, isPresented: Binding<Bool>, onTranscriptReceived: ((String) -> Void)? = nil, skipAutoProcessing: Bool = false) {
         self.speechRecognizer = speechRecognizer
         self._isPresented = isPresented
+        self.onTranscriptReceived = onTranscriptReceived
+        self.skipAutoProcessing = skipAutoProcessing
     }
     
     var body: some View {
@@ -355,7 +359,7 @@ struct MangoListeningView: View {
     private func startListening() {
         Task {
             // Use TalkToMango config for conversational, longer pauses
-            await speechRecognizer.startListening(config: .talkToMango)
+            await speechRecognizer.startListening(config: .talkToMango, talkToMangoMode: .oneShot, skipAutoProcessing: skipAutoProcessing)
         }
     }
     
@@ -451,8 +455,14 @@ struct MangoListeningView: View {
         
         let transcript = speechRecognizer.transcript
         if !transcript.isEmpty {
-            // Route to VoiceIntentRouter
-            VoiceIntentRouter.handle(utterance: transcript, source: .talkToMango)
+            // If callback provided, route to semantic search (new flow)
+            if let callback = onTranscriptReceived {
+                print("🎤 Routing transcript to semantic search: '\(transcript)'")
+                callback(transcript)
+            } else {
+                // Fallback to original VoiceIntentRouter flow
+                VoiceIntentRouter.handle(utterance: transcript, source: .talkToMango)
+            }
         }
     }
     

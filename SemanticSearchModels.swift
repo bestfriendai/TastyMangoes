@@ -113,10 +113,14 @@ struct MoviePreview: Codable {
     let title: String
     let year: Int?
     let tmdbId: Int?
+    let posterPath: String?
+    let voteAverage: Double?
     
     enum CodingKeys: String, CodingKey {
         case title, year
         case tmdbId = "tmdb_id"
+        case posterPath = "poster_path"
+        case voteAverage = "vote_average"
     }
 }
 

@@ -16,6 +16,8 @@ struct TabBarView: View {
     @ObservedObject private var filterState = SearchFilterState.shared
     @StateObject private var mangoSpeechRecognizer = SpeechRecognizer()
     @State private var showMangoListeningView = false
+    @State private var showSemanticSearch = false
+    @State private var semanticSearchQuery: String = ""
     
     // Computed property for selection count
     private var totalSelections: Int {
@@ -74,8 +76,27 @@ struct TabBarView: View {
         .fullScreenCover(isPresented: $showMangoListeningView) {
             MangoListeningView(
                 speechRecognizer: mangoSpeechRecognizer,
-                isPresented: $showMangoListeningView
+                isPresented: $showMangoListeningView,
+                onTranscriptReceived: { transcript in
+                    // Route voice transcript to semantic search
+                    semanticSearchQuery = transcript
+                    showMangoListeningView = false
+                    showSemanticSearch = true
+                },
+                skipAutoProcessing: true  // Skip VoiceIntentRouter, use callback instead
             )
+        }
+        .fullScreenCover(isPresented: $showSemanticSearch) {
+            NavigationStack {
+                SemanticSearchView(initialQuery: semanticSearchQuery)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showSemanticSearch = false
+                            }
+                        }
+                    }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToSearch)) { _ in
             print("🍋 [TabBarView] Received mangoNavigateToSearch notification - switching to Search tab")

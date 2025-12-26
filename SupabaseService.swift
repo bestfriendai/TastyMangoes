@@ -757,6 +757,31 @@ class SupabaseService: ObservableObject {
     }
     
     /// Fetches a movie card directly from work_cards_cache table (no edge function call)
+    /// Fetch user-specific movie reason from semantic search
+    func fetchUserMovieReason(tmdbId: String) async throws -> String? {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        struct UserMovieReason: Codable {
+            let reason: String
+            let query: String
+            let created_at: String
+        }
+        
+        // Fetch most recent reason for this movie
+        let reasons: [UserMovieReason] = try await client
+            .from("user_movie_reasons")
+            .select("reason, query, created_at")
+            .eq("tmdb_id", value: tmdbId)
+            .order("created_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value
+        
+        return reasons.first?.reason
+    }
+    
     /// Returns nil if the movie is not in the cache
     func fetchMovieCardFromCache(tmdbId: String) async throws -> MovieCard? {
         guard let client = client else {

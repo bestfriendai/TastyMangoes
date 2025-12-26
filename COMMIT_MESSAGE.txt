@@ -1,0 +1,74 @@
+feat: Implement AI-powered semantic search with Mango's personality
+
+Adds complete semantic search feature that enables natural language movie discovery with personalized AI recommendations, voice interaction, and user-specific movie reasons.
+
+## Core Features
+
+### Semantic Search Integration
+- Created semantic-search Edge Function using OpenAI GPT-4o-mini for intelligent movie recommendations
+- Generates personalized mangoReason for each movie explaining why it matches the query
+- Returns refinement chips for follow-up searches
+- Supports session context and user preferences
+
+### Voice Integration
+- Routes voice queries from "Talk to Mango" to semantic search (replaces old hint-based search)
+- Prevents duplicate processing by skipping VoiceIntentRouter when semantic search callback is provided
+- Integrated MangoVoiceManager for Text-to-Speech with Irish accent
+- Voice responses speak Mango's recommendations naturally
+
+### User-Specific Movie Reasons
+- Created user_movie_reasons table to store personalized recommendations per user
+- Reasons are saved when user searches and displayed on movie detail pages
+- Each user sees only their own reasons (RLS policies)
+- Reasons appear in "MANGO'S TIPS" section on MoviePageView
+
+### UI Components
+- SemanticSearchView: Main search interface with search bar, results, and refinement chips
+- SemanticMovieCard: Displays movie results with mangoReason, match strength badges, and scores
+- RefinementChipsView: Horizontal scrollable chips for refining searches
+- Back button: Navigate back through search history (up to 5 previous searches)
+
+## Fixes & Improvements
+
+### Search Refinement
+- Smart query combining: refinement chips properly combine with original query
+- Maintains original intent when refining (e.g., "war movies" + "based on true stories")
+- Enhanced Edge Function prompt to better handle refinement queries
+
+### Display Fixes
+- Rating format: Shows "7.1" instead of "7" (changed from %.0f to %.1f)
+- Poster display: Loading movies now show TMDB posters instead of infinite shimmer
+- Score display: Shows TMDB scores for loading movies, AI scores for ready movies
+- Error handling: Better error messages and UI states
+
+### Performance & UX
+- Prevents duplicate searches and overlapping TTS
+- Search history for back navigation
+- Loading indicators and shimmer effects
+- Empty states with helpful suggestions
+
+## Technical Changes
+
+### Backend
+- New Edge Function: supabase/functions/semantic-search/index.ts
+- New migration: 024_create_user_movie_reasons_table.sql
+- Fetches TMDB posters and scores in parallel for movies not in database
+- Saves user-specific reasons to database with session tracking
+
+### Frontend
+- Modified TabBarView to show SemanticSearchView after voice input
+- Updated MangoListeningView to support semantic search callback
+- Added skipAutoProcessing flag to SpeechRecognizer to prevent duplicate processing
+- Enhanced SemanticSearchViewModel with search history and refinement logic
+- Updated MovieDetailViewModel to fetch and display user-specific mangoReason
+
+### Models
+- Added MoviePreview with posterPath and voteAverage
+- Enhanced SemanticMovie with proper status handling
+- Session context tracking for better recommendations
+
+## Files Changed
+- Modified: 10 Swift files, 1 Edge Function, 1 migration
+- New: semantic-search Edge Function, user_movie_reasons migration
+- Total: ~459 insertions, ~103 deletions
+

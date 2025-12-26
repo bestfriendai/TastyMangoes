@@ -812,9 +812,16 @@ struct MoviePageView: View {
                 )
                 .cornerRadius(9999)
                 
-                Text("Coming soon")
-                    .font(.custom("Inter-Regular", size: 14))
-                    .foregroundColor(Color(hex: "#333333"))
+                if let mangoReason = viewModel.mangoReason, !mangoReason.isEmpty {
+                    Text(mangoReason)
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#333333"))
+                        .lineSpacing(4)
+                } else {
+                    Text("Coming soon")
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#333333"))
+                }
             }
             
             // Watch On / Liked By cards (wired from Figma: CHANGE_TO → Expanded states)

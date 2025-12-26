@@ -91,6 +91,7 @@ class SpeechRecognizer: ObservableObject {
     private var silenceTimer: Task<Void, Never>? // Pre-speech timer: detects "no speech at all"
     private var postSpeechSilenceTimer: Task<Void, Never>? // Post-speech timer: detects silence after user stops talking
     private var maxDurationTimer: Task<Void, Never>?
+    private var skipAutoProcessing: Bool = false // Skip automatic VoiceIntentRouter processing (for semantic search)
     private var hasReceivedTranscript: Bool = false // Track if we've gotten any transcript yet
     private var isFirstResult: Bool = true // Track if this is the first recognition result
     private var hasReceivedAnyResult: Bool = false // Track if we've received any recognition result (for TalkToMango endpointing)
@@ -132,11 +133,12 @@ class SpeechRecognizer: ObservableObject {
         return true
     }
     
-    func startListening(config: SpeechConfig = SpeechConfig.quickSearch, talkToMangoMode: TalkToMangoMode = .oneShot) async {
+    func startListening(config: SpeechConfig = SpeechConfig.quickSearch, talkToMangoMode: TalkToMangoMode = .oneShot, skipAutoProcessing: Bool = false) async {
         sessionStartTime = Date()
         isFirstResult = true
         isReadyToListen = false
         shouldProcessTranscript = true  // Reset flag for new session
+        self.skipAutoProcessing = skipAutoProcessing  // Set flag to skip automatic VoiceIntentRouter
         
         print("🎙 startListening() called (current state: \(state), mode: \(config.mode))")
         if let startTime = sessionStartTime {
@@ -382,13 +384,15 @@ class SpeechRecognizer: ObservableObject {
                     )
                     
                     // Handle TalkToMango transcript through VoiceIntentRouter
-                    // Only process if user didn't cancel (tapped Stop)
-                    if self.currentConfig.mode == .talkToMango && self.shouldProcessTranscript {
+                    // Only process if user didn't cancel (tapped Stop) and auto-processing is enabled
+                    if self.currentConfig.mode == .talkToMango && self.shouldProcessTranscript && !self.skipAutoProcessing {
                         Task {
                             await VoiceIntentRouter.handleTalkToMangoTranscript(self.transcript)
                         }
                     } else if !self.shouldProcessTranscript {
                         print("🎤 Skipping transcript processing - user cancelled (tapped Stop)")
+                    } else if self.skipAutoProcessing {
+                        print("🎤 Skipping automatic VoiceIntentRouter - using callback instead")
                     }
                     
                     // Stop listening - Apple has determined the utterance is complete
@@ -617,12 +621,13 @@ class SpeechRecognizer: ObservableObject {
         // Handle TalkToMango transcript if we have one and haven't already handled it
         // (This covers the silence timeout case where isFinal might not have fired yet)
         // Skip if user cancelled (tapped Stop)
-        if currentConfig.mode == .talkToMango && !transcript.isEmpty && reason != "finalFromApple" && shouldProcessTranscript {
-            // Only handle if we have a transcript and it wasn't already handled via isFinal
-            Task {
-                await VoiceIntentRouter.handleTalkToMangoTranscript(transcript)
-            }
-        } else if reason == "userTappedStop" {
+            if currentConfig.mode == .talkToMango && !transcript.isEmpty && reason != "finalFromApple" && shouldProcessTranscript && !skipAutoProcessing {
+                // Only handle if we have a transcript and it wasn't already handled via isFinal
+                // Skip if auto-processing is disabled (for semantic search callback)
+                Task {
+                    await VoiceIntentRouter.handleTalkToMangoTranscript(transcript)
+                }
+            } else if reason == "userTappedStop" {
             print("🎤 Skipping transcript processing - user cancelled (tapped Stop)")
         }
         
