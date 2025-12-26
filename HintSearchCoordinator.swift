@@ -1018,7 +1018,7 @@ class HintSearchCoordinator: ObservableObject {
                 // Create quick result with TMDB data only (no AI scores, no tasty scores)
                 quickResult = HintSearchResult(
                     tmdbId: verifiedTmdbId,
-                    title: tmdbDetails.title ?? suggestion.title,
+                    title: tmdbDetails.title.isEmpty ? suggestion.title : tmdbDetails.title,
                     year: year,
                     posterURL: posterURL,
                     source: .aiDiscovered, // Will be updated to .aiIngested when full ingestion completes
@@ -1037,7 +1037,8 @@ class HintSearchCoordinator: ObservableObject {
                 }
                 
                 #if DEBUG
-                print("⚡ [HintSearch] Quick result shown: \(tmdbDetails.title ?? suggestion.title) [TMDB: \(verifiedTmdbId)]")
+                let displayTitle = tmdbDetails.title.isEmpty ? suggestion.title : tmdbDetails.title
+                print("⚡ [HintSearch] Quick result shown: \(displayTitle) [TMDB: \(verifiedTmdbId)]")
                 #endif
                 
             } catch {
