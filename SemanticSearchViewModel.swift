@@ -17,6 +17,7 @@ class SemanticSearchViewModel: ObservableObject {
     @Published var selectedChip: String? // Track active chip for loading feedback
     
     private let searchService = SemanticSearchService.shared
+    private let supabaseService = SupabaseService.shared
     private let voiceManager = MangoVoiceManager.shared
     private var currentSearchTask: Task<Void, Never>?  // Track current search to prevent duplicates
     private var originalQuery: String = ""  // Track original query for refinement context
@@ -55,25 +56,75 @@ class SemanticSearchViewModel: ObservableObject {
         isLoading = true
         error = nil
         
+        // Route query to determine search type
+        let searchType = SearchRouter.route(query)
+        print("🔍 [SemanticSearchViewModel] Performing \(searchType == .direct ? "DIRECT" : "SEMANTIC") search for: '\(query)'")
+        
         // Create new search task
         let searchTask = Task {
             do {
-                print("🔍 [SemanticSearchViewModel] Calling searchService.newSearch...")
-                let response = try await searchService.newSearch(query: query)
-                
-                print("✅ [SemanticSearchViewModel] Received response: \(response.movies.count) movies, \(response.refinementChips.count) chips")
-                
-                // Check if task was cancelled
-                guard !Task.isCancelled else { return }
-                
-                movies = response.movies
-                refinementChips = response.refinementChips
-                mangoText = response.mangoVoice.text
-                interpretation = response.meta.interpretation
-                
-                // Speak Mango's response (only if not cancelled)
-                if !Task.isCancelled {
-                    voiceManager.speak(response.mangoVoice.text)
+                if searchType == .direct {
+                    // Direct search: use search-movies endpoint
+                    // Extract movie title after 'the movie' indicator if present
+                    var searchQuery = query
+                    if let range = searchQuery.lowercased().range(of: "the movie ") {
+                        // Extract everything AFTER 'the movie '
+                        let titleStart = searchQuery.index(range.upperBound, offsetBy: 0)
+                        searchQuery = String(searchQuery[titleStart...])
+                        print("🔍 [SemanticSearchViewModel] Extracted title after 'the movie': '\(searchQuery)'")
+                    }
+                    print("🔍 [SemanticSearchViewModel] Calling SupabaseService.searchMovies...")
+                    let searchResults = try await supabaseService.searchMovies(query: searchQuery)
+                    
+                    print("✅ [SemanticSearchViewModel] Received \(searchResults.count) direct search results")
+                    
+                    // Check if task was cancelled
+                    guard !Task.isCancelled else { return }
+                    
+                    // Convert MovieSearchResult to SemanticMovie
+                    movies = searchResults.map { result in
+                        SemanticMovie(
+                            status: .ready,
+                            card: nil,
+                            preview: MoviePreview(
+                                title: result.title,
+                                year: result.year,
+                                tmdbId: Int(result.tmdbId),
+                                posterPath: result.posterUrl,
+                                voteAverage: result.voteAverage
+                            ),
+                            mangoReason: "",
+                            matchStrength: .strong,
+                            tags: []
+                        )
+                    }
+                    refinementChips = [] // No refinement chips for direct search
+                    mangoText = "Found \(searchResults.count) movie\(searchResults.count == 1 ? "" : "s") matching '\(query)'"
+                    interpretation = "Direct title search for '\(query)'"
+                    
+                    // Speak Mango's response (only if not cancelled)
+                    if !Task.isCancelled {
+                        voiceManager.speak(mangoText)
+                    }
+                } else {
+                    // Semantic search: use semantic-search endpoint
+                    print("🔍 [SemanticSearchViewModel] Calling searchService.newSearch...")
+                    let response = try await searchService.newSearch(query: query)
+                    
+                    print("✅ [SemanticSearchViewModel] Received response: \(response.movies.count) movies, \(response.refinementChips.count) chips")
+                    
+                    // Check if task was cancelled
+                    guard !Task.isCancelled else { return }
+                    
+                    movies = response.movies
+                    refinementChips = response.refinementChips
+                    mangoText = response.mangoVoice.text
+                    interpretation = response.meta.interpretation
+                    
+                    // Speak Mango's response (only if not cancelled)
+                    if !Task.isCancelled {
+                        voiceManager.speak(response.mangoVoice.text)
+                    }
                 }
                 
             } catch {
