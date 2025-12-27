@@ -109,6 +109,9 @@ struct SemanticMovieCard: View {
                     
                     // Match strength badge
                     matchStrengthBadge
+                    
+                    // Watchlist/Watched/Recommender status
+                    watchlistStatusRow
                 }
                 
                 Spacer()
@@ -164,6 +167,64 @@ struct SemanticMovieCard: View {
             return ("Good fit", .blue)
         case .worthConsidering:
             return ("Worth considering", .orange)
+        }
+    }
+    
+    // Get tmdbId as String for WatchlistManager lookups
+    private var tmdbIdString: String? {
+        if let card = movie.card {
+            return card.tmdbId // Already a String
+        } else if let preview = movie.preview, let tmdbId = preview.tmdbId {
+            return String(tmdbId) // Convert Int to String
+        }
+        return nil
+    }
+    
+    @ViewBuilder
+    private var watchlistStatusRow: some View {
+        if let movieId = tmdbIdString {
+            let isOnWatchlist = !WatchlistManager.shared.getListsForMovie(movieId: movieId).isEmpty
+            let isWatched = WatchlistManager.shared.isWatched(movieId: movieId)
+            let recommenderName = WatchlistManager.shared.getRecommendationData(movieId: movieId)?.recommenderName
+            
+            // Only show if there's something to show
+            if isWatched || isOnWatchlist || recommenderName != nil {
+                HStack(spacing: 8) {
+                    if isWatched {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundColor(Color(hex: "#648d00"))
+                            Text("Watched")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if isOnWatchlist && !isWatched {
+                        HStack(spacing: 4) {
+                            Image(systemName: "list.bullet")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text("On Watchlist")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if let recommender = recommenderName {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.fill")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text("Recommended by \(recommender)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
         }
     }
 }
