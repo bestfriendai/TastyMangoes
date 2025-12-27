@@ -17,7 +17,16 @@ struct SearchRouter {
         print("🔍 [SearchRouter] Routing query: '\(query)' (wordCount: \(wordCount))")
         
         // 1. Semantic indicators
-        let semanticIndicators = ["movies like", "films like", "similar to", "movies about", "films about"]
+        let semanticIndicators = [
+            "movies like", "films like", "similar to",
+            "movies about", "films about",
+            "movies for", "films for",      // "movies for kids", "films for family"
+            "for kids", "for family",       // audience indicators
+            "for children", "for date",     // more audience
+            "best movies", "top movies",    // superlatives
+            "good movies", "great movies",  // quality indicators
+            "funny movies", "scary movies"  // mood indicators
+        ]
         for indicator in semanticIndicators {
             if lowercased.contains(indicator) {
                 print("🔍 [SearchRouter] Matched semantic indicator: '\(indicator)' → semantic")

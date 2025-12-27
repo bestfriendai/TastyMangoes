@@ -5,6 +5,7 @@
 
 import Foundation
 import Combine
+import Auth
 
 @MainActor
 class SemanticSearchService: ObservableObject {
@@ -50,11 +51,20 @@ class SemanticSearchService: ObservableObject {
         
         defer { isLoading = false }
         
+        // Get current user ID
+        let userId: String?
+        if let user = try? await SupabaseService.shared.getCurrentUser() {
+            userId = user.id.uuidString
+        } else {
+            userId = nil
+        }
+        
         let request = SemanticSearchRequest(
             query: query,
             sessionId: sessionId,
             sessionContext: isRefinement ? sessionContext : nil, // Only send context for refinements
-            limit: limit
+            limit: limit,
+            userId: userId
         )
         
         guard let url = URL(string: "\(baseURL)/semantic-search") else {

@@ -12,12 +12,14 @@ struct SemanticSearchRequest: Codable {
     let sessionId: String?
     let sessionContext: SessionContext?
     let limit: Int?
+    let userId: String?
     
     enum CodingKeys: String, CodingKey {
         case query
         case sessionId = "session_id"
         case sessionContext = "session_context"
         case limit
+        case userId = "user_id"
     }
 }
 
