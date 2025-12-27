@@ -59,8 +59,8 @@
 		C58974BD2EFE2B6100BA7659 /* SemanticMovieCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */; };
 		C58974BE2EFE2B6100BA7659 /* SemanticSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */; };
 		C58974BF2EFE2B6100BA7659 /* RefinementChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */; };
-		C58974C22EFE2B6100BA7659 /* SearchRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C32EFE2B6100BA7659 /* SearchRouter.swift */; };
 		C58974C12EFE2B6100BA7659 /* SemanticSearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */; };
+		C58974C22EFE2B6100BA7659 /* SearchRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C32EFE2B6100BA7659 /* SearchRouter.swift */; };
 		C59E8B822EE696D000F15ED6 /* SelfHealingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */; };
 		C59E8B842EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */; };
 		C5A665512EC9C36A001433DC /* MoviePageScrollDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */; };
@@ -69,6 +69,7 @@
 		C5ADA35C2ED5578700440F8D /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA35B2ED5578700440F8D /* Realtime */; };
 		C5ADA35E2ED5578700440F8D /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA35D2ED5578700440F8D /* Storage */; };
 		C5ADA3662ED5601500440F8D /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = C5ADA3652ED5601500440F8D /* Supabase */; };
+		C5B3AFDB2F007A52006F337A /* StreamingProviderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B3AFDA2F007A52006F337A /* StreamingProviderService.swift */; };
 		C5B95D1D2ECB0B0800B47098 /* WatchlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D1C2ECB0B0800B47098 /* WatchlistView.swift */; };
 		C5B95D232ECB15DE00B47098 /* WatchlistManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D222ECB15DE00B47098 /* WatchlistManager.swift */; };
 		C5B95D252ECB1D2800B47098 /* SearchFiltersBottomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B95D242ECB1D2800B47098 /* SearchFiltersBottomSheet.swift */; };
@@ -188,6 +189,7 @@
 		C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfHealingVoiceService.swift; sourceTree = "<group>"; };
 		C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VoiceIntentRouter+SelfHealing.swift"; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
+		C5B3AFDA2F007A52006F337A /* StreamingProviderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingProviderService.swift; sourceTree = "<group>"; };
 		C5B95D1C2ECB0B0800B47098 /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
 		C5B95D222ECB15DE00B47098 /* WatchlistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistManager.swift; sourceTree = "<group>"; };
 		C5B95D242ECB1D2800B47098 /* SearchFiltersBottomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersBottomSheet.swift; sourceTree = "<group>"; };
@@ -280,6 +282,7 @@
 		C5D0172A2E989F7800164472 = {
 			isa = PBXGroup;
 			children = (
+				C5B3AFDA2F007A52006F337A /* StreamingProviderService.swift */,
 				C58974B62EFE2B6100BA7659 /* MangoVoiceManager.swift */,
 				C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */,
 				C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */,
@@ -611,6 +614,7 @@
 				C5176F552EF07FF0009F8F0C /* SearchIntentClassifier.swift in Sources */,
 				C517CD342EC9806C00EAE1FE /* CrewTabView.swift in Sources */,
 				C517CD352EC9806C00EAE1FE /* SearchFiltersView.swift in Sources */,
+				C5B3AFDB2F007A52006F337A /* StreamingProviderService.swift in Sources */,
 				C5E27A3B2EC9979400065347 /* MoviePageHeader.swift in Sources */,
 				C5B95D412ECB383300B47098 /* WatchlistFilterState.swift in Sources */,
 				C5B95D3D2ECB334600B47098 /* YourListsView.swift in Sources */,

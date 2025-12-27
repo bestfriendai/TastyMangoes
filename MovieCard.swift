@@ -157,6 +157,7 @@ struct MovieSearchResult: Codable, Identifiable {
     let genres: [String]?
     let runtimeDisplay: String?
     let aiScore: Double?
+    let streaming: StreamingInfo? // Streaming data for v1Prime feature
     
     var id: String { tmdbId }
     
@@ -171,6 +172,7 @@ struct MovieSearchResult: Codable, Identifiable {
         case genres
         case runtimeDisplay = "runtime_display"
         case aiScore = "ai_score"
+        case streaming
     }
 }
 

@@ -37,6 +37,10 @@ struct TastyMangoesApp: App {
                 if authManager.isAuthenticated {
                     print("📋 [Watchlist] App launch - user authenticated, syncing watchlists from Supabase...")
                     await WatchlistManager.shared.syncFromSupabase()
+                    
+                    // Load user's streaming subscriptions
+                    print("🎬 [StreamingProvider] Starting subscription load...")
+                    await StreamingProviderService.shared.loadUserSubscriptions()
                 } else {
                     print("📋 [Watchlist] App launch - user not authenticated, skipping watchlist sync")
                 }

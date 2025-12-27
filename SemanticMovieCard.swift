@@ -143,7 +143,20 @@ struct SemanticMovieCard: View {
         .padding()
         .background(Color(.systemBackground))
         .cornerRadius(12)
+        .overlay(
+            // Green border when movie is on user's streaming service
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isOnUserService ? Color.green : Color.clear, lineWidth: 3)
+        )
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+    }
+    
+    // Check if movie is available on user's streaming services
+    private var isOnUserService: Bool {
+        guard let flatrateProviders = movie.card?.streaming?.us?.flatrate else {
+            return false
+        }
+        return StreamingProviderService.shared.isMovieOnUserService(providers: flatrateProviders)
     }
     
     @ViewBuilder

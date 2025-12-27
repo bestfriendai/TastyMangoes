@@ -83,9 +83,52 @@ class SemanticSearchViewModel: ObservableObject {
                     
                     // Convert MovieSearchResult to SemanticMovie
                     movies = searchResults.map { result in
-                        SemanticMovie(
+                        // Create a minimal MovieCard if streaming data is available (for v1Prime feature)
+                        let card: MovieCard? = result.streaming != nil ? MovieCard(
+                            workId: 0, // Dummy workId - not used for display
+                            tmdbId: result.tmdbId,
+                            imdbId: nil,
+                            title: result.title,
+                            originalTitle: nil,
+                            year: result.year,
+                            releaseDate: nil,
+                            runtimeMinutes: nil,
+                            runtimeDisplay: result.runtimeDisplay,
+                            tagline: nil,
+                            overview: nil,
+                            overviewShort: result.overviewShort,
+                            genres: result.genres,
+                            poster: result.posterUrl != nil ? PosterUrls(
+                                small: result.posterUrl,
+                                medium: result.posterUrl,
+                                large: result.posterUrl
+                            ) : nil,
+                            backdrop: nil,
+                            trailerYoutubeId: nil,
+                            trailerThumbnail: nil,
+                            certification: nil,
+                            cast: nil,
+                            director: nil,
+                            writer: nil,
+                            screenplay: nil,
+                            composer: nil,
+                            aiScore: result.aiScore,
+                            aiScoreRange: nil,
+                            sourceScores: result.voteAverage != nil ? SourceScores(
+                                tmdb: ScoreDetail(score: result.voteAverage!, votes: result.voteCount)
+                            ) : nil,
+                            similarMovieIds: nil,
+                            stillImages: nil,
+                            trailers: nil,
+                            streaming: result.streaming, // Include streaming data for v1Prime
+                            budget: nil,
+                            revenue: nil,
+                            lastUpdated: nil
+                        ) : nil
+                        
+                        return SemanticMovie(
                             status: .ready,
-                            card: nil,
+                            card: card,
                             preview: MoviePreview(
                                 title: result.title,
                                 year: result.year,

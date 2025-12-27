@@ -233,6 +233,22 @@ class SupabaseService: ObservableObject {
         return response.map { $0.platform }
     }
     
+    /// Get user subscriptions as full UserSubscription objects
+    func getUserSubscriptionObjects(userId: UUID) async throws -> [UserSubscription] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        let response: [UserSubscription] = try await client
+            .from("user_subscriptions")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+        
+        return response
+    }
+    
     func setUserSubscriptions(userId: UUID, platforms: [String]) async throws {
         guard let client = client else {
             throw SupabaseError.notConfigured
@@ -1227,7 +1243,8 @@ class SupabaseService: ObservableObject {
                 voteCount: card.sourceScores?.tmdb?.votes,
                 genres: card.genres,
                 runtimeDisplay: card.runtimeDisplay,
-                aiScore: card.aiScore
+                aiScore: card.aiScore,
+                streaming: card.streaming
             )
         }
         
@@ -1292,7 +1309,8 @@ class SupabaseService: ObservableObject {
                 voteCount: card.sourceScores?.tmdb?.votes,
                 genres: card.genres,
                 runtimeDisplay: card.runtimeDisplay,
-                aiScore: card.aiScore
+                aiScore: card.aiScore,
+                streaming: card.streaming
             )
         }
         

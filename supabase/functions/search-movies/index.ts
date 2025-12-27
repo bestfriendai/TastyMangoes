@@ -195,6 +195,10 @@ serve(async (req) => {
                 const voteAverage = aiScore ? aiScore / 10 : (card.source_scores?.tmdb?.score || 0); // Convert 0-100 to 0-10 scale
                 const voteCount = card.source_scores?.tmdb?.votes || 0;
                 
+                // Extract streaming data from cached card payload
+                // This is needed for v1Prime feature (green border on cards)
+                const streaming = card.streaming || null;
+                
                 return {
                   tmdb_id: work.tmdb_id,
                   title: work.title || card.title,
@@ -204,6 +208,7 @@ serve(async (req) => {
                   vote_average: voteAverage,
                   vote_count: voteCount,
                   ai_score: aiScore ?? null,
+                  streaming: streaming, // Include streaming data for v1Prime feature
                 };
               })
               .filter((result: any) => result !== null)
