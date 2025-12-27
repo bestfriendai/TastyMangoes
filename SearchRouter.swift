@@ -1,13 +1,11 @@
-//  SearchRouter.swift
-//  Created automatically by Cursor Assistant
-//  Created on: 2025-01-15 at 23:45 (America/Los_Angeles - Pacific Time)
-//  Notes: Routes queries to direct search (search-movies) or semantic search (semantic-search) based on query analysis
+// SearchRouter.swift
+// TastyMangoes
 
 import Foundation
 
 enum SearchType {
-    case direct      // Title lookup - use search-movies
-    case semantic    // Natural language - use semantic-search
+    case direct
+    case semantic
 }
 
 struct SearchRouter {
@@ -18,8 +16,8 @@ struct SearchRouter {
         
         print("🔍 [SearchRouter] Routing query: '\(query)' (wordCount: \(wordCount))")
         
-        // 1. Check for clear semantic indicators
-        let semanticIndicators = ["movies like", "films like", "similar to", "movies about", "films about", "movies with", "films with"]
+        // 1. Semantic indicators
+        let semanticIndicators = ["movies like", "films like", "similar to", "movies about", "films about"]
         for indicator in semanticIndicators {
             if lowercased.contains(indicator) {
                 print("🔍 [SearchRouter] Matched semantic indicator: '\(indicator)' → semantic")
@@ -27,8 +25,8 @@ struct SearchRouter {
             }
         }
         
-        // 2. Check for direct indicators
-        let directIndicators = ["the movie", "called"]
+        // 2. Direct indicators
+        let directIndicators = ["the movie", "the film", "called"]
         for indicator in directIndicators {
             if lowercased.contains(indicator) {
                 print("🔍 [SearchRouter] Matched direct indicator: '\(indicator)' → direct")
@@ -36,7 +34,7 @@ struct SearchRouter {
             }
         }
         
-        // 3. Word count: 1-4 words → direct, 5+ → semantic
+        // 3. Word count fallback
         if wordCount <= 4 {
             print("🔍 [SearchRouter] \(wordCount) words (≤4) → direct")
             return .direct
@@ -46,4 +44,3 @@ struct SearchRouter {
         }
     }
 }
-
