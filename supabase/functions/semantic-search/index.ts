@@ -30,6 +30,8 @@ interface SemanticMovie {
     title: string;
     year?: number;
     tmdb_id?: number;
+    poster_path?: string;
+    vote_average?: number;
   };
   mango_reason: string;
   match_strength: 'strong' | 'good' | 'worth_considering';
@@ -246,25 +248,30 @@ serve(async (req) => {
           tags: movie.tags || [],
         });
         
-        // Save user-specific reason if user is authenticated
-        if (userId && workId) {
+        // Save user-specific AI recommendation if user is authenticated
+        if (userId) {
+          const recommendation = {
+            user_id: userId,
+            tmdb_id: tmdbIdStr,
+            work_id: workId || null,
+            mango_reason: movie.reason || `This movie matches your search for "${query}"`,
+            query_context: query,
+            match_strength: movie.match_strength || 'good',
+            tags: movie.tags || [],
+            session_id: body.session_id || null,
+          };
+          
           await supabaseAdmin
-            .from('user_movie_reasons')
-            .upsert({
-              user_id: userId,
-              tmdb_id: tmdbIdStr,
-              work_id: workId,
-              reason: movie.reason || `This movie matches your search for "${query}"`,
-              query: query,
-              session_id: body.session_id,
-            }, {
-              onConflict: 'user_id,tmdb_id,query',
+            .from('user_ai_recommendations')
+            .upsert(recommendation, {
+              onConflict: 'user_id,tmdb_id,query_context',
+              ignoreDuplicates: false
             })
             .then(() => {
-              console.log(`[SEMANTIC-SEARCH] Saved reason for user ${userId}, movie ${tmdbIdStr}`);
+              console.log(`[SEMANTIC-SEARCH] Saved AI recommendation for user ${userId}, movie ${tmdbIdStr}`);
             })
             .catch(err => {
-              console.error(`[SEMANTIC-SEARCH] Failed to save reason:`, err);
+              console.error(`[SEMANTIC-SEARCH] Failed to save AI recommendation:`, err);
             });
         }
       } else {
@@ -286,6 +293,33 @@ serve(async (req) => {
           match_strength: movie.match_strength || 'good',
           tags: movie.tags || [],
         });
+        
+        // Save AI recommendation for loading movies too (without work_id)
+        if (userId) {
+          const recommendation = {
+            user_id: userId,
+            tmdb_id: tmdbIdStr,
+            work_id: null, // Not in database yet
+            mango_reason: movie.reason || `This movie matches your search for "${query}"`,
+            query_context: query,
+            match_strength: movie.match_strength || 'good',
+            tags: movie.tags || [],
+            session_id: body.session_id || null,
+          };
+          
+          await supabaseAdmin
+            .from('user_ai_recommendations')
+            .upsert(recommendation, {
+              onConflict: 'user_id,tmdb_id,query_context',
+              ignoreDuplicates: false
+            })
+            .then(() => {
+              console.log(`[SEMANTIC-SEARCH] Saved AI recommendation (loading) for user ${userId}, movie ${tmdbIdStr}`);
+            })
+            .catch(err => {
+              console.error(`[SEMANTIC-SEARCH] Failed to save AI recommendation (loading):`, err);
+            });
+        }
       }
     }
     

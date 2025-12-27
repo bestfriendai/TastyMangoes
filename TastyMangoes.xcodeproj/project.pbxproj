@@ -59,6 +59,7 @@
 		C58974BD2EFE2B6100BA7659 /* SemanticMovieCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */; };
 		C58974BE2EFE2B6100BA7659 /* SemanticSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */; };
 		C58974BF2EFE2B6100BA7659 /* RefinementChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */; };
+		C58974C22EFE2B6100BA7659 /* SearchRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C32EFE2B6100BA7659 /* SearchRouter.swift */; };
 		C58974C12EFE2B6100BA7659 /* SemanticSearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */; };
 		C59E8B822EE696D000F15ED6 /* SelfHealingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */; };
 		C59E8B842EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */; };
@@ -183,6 +184,7 @@
 		C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchService.swift; sourceTree = "<group>"; };
 		C58974BA2EFE2B6100BA7659 /* SemanticSearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchViewModel.swift; sourceTree = "<group>"; };
 		C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchModels.swift; sourceTree = "<group>"; };
+		C58974C32EFE2B6100BA7659 /* SearchRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchRouter.swift; sourceTree = "<group>"; };
 		C59E8B812EE696D000F15ED6 /* SelfHealingVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfHealingVoiceService.swift; sourceTree = "<group>"; };
 		C59E8B832EE6AB5D00F15ED6 /* VoiceIntentRouter+SelfHealing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VoiceIntentRouter+SelfHealing.swift"; sourceTree = "<group>"; };
 		C5A665502EC9C36A001433DC /* MoviePageScrollDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviePageScrollDebugView.swift; sourceTree = "<group>"; };
@@ -284,6 +286,7 @@
 				C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */,
 				C58974BA2EFE2B6100BA7659 /* SemanticSearchViewModel.swift */,
 				C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */,
+				C58974C32EFE2B6100BA7659 /* SearchRouter.swift */,
 				C58974B42EFE2A4200BA7659 /* SemanticSearchView.swift */,
 				C57267642EF10B7F005C191B /* AIDiscoveryService.swift */,
 				C517CD042EC9806C00EAE1FE /* Assets.xcassets */,
@@ -553,6 +556,7 @@
 				C58974BD2EFE2B6100BA7659 /* SemanticMovieCard.swift in Sources */,
 				C58974BE2EFE2B6100BA7659 /* SemanticSearchService.swift in Sources */,
 				C58974BF2EFE2B6100BA7659 /* RefinementChipsView.swift in Sources */,
+				C58974C22EFE2B6100BA7659 /* SearchRouter.swift in Sources */,
 				C58974C12EFE2B6100BA7659 /* SemanticSearchModels.swift in Sources */,
 				C5B95D352ECB32E200B47098 /* SortByBottomSheet.swift in Sources */,
 				C5B95D392ECB330000B47098 /* DeleteListBottomSheet.swift in Sources */,

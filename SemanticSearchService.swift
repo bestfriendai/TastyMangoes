@@ -23,9 +23,28 @@ class SemanticSearchService: ObservableObject {
     @Published var lastResponse: SemanticSearchResponse?
     @Published var error: String?
     
-    private let sessionId = UUID().uuidString
+    private var sessionId = UUID().uuidString
+    private var isRefinement = false
     
-    func search(query: String, limit: Int = 8) async throws -> SemanticSearchResponse {
+    /// Call this for NEW searches (typed or spoken)
+    func newSearch(query: String, limit: Int = 8) async throws -> SemanticSearchResponse {
+        // Clear session for new searches
+        sessionContext = SessionContext()
+        isRefinement = false
+        sessionId = UUID().uuidString // New session ID
+        
+        return try await search(query: query, limit: limit)
+    }
+    
+    /// Call this for REFINEMENT searches (tapping chips)
+    func refineSearch(query: String, limit: Int = 8) async throws -> SemanticSearchResponse {
+        // Keep session context for refinements
+        isRefinement = true
+        
+        return try await search(query: query, limit: limit)
+    }
+    
+    private func search(query: String, limit: Int = 8) async throws -> SemanticSearchResponse {
         isLoading = true
         error = nil
         
@@ -34,7 +53,7 @@ class SemanticSearchService: ObservableObject {
         let request = SemanticSearchRequest(
             query: query,
             sessionId: sessionId,
-            sessionContext: sessionContext,
+            sessionContext: isRefinement ? sessionContext : nil, // Only send context for refinements
             limit: limit
         )
         
@@ -94,6 +113,8 @@ class SemanticSearchService: ObservableObject {
     
     func clearSession() {
         sessionContext = SessionContext()
+        isRefinement = false
+        sessionId = UUID().uuidString
         lastResponse = nil
     }
 }

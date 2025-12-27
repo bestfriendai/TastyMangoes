@@ -14,6 +14,7 @@ class SemanticSearchViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var interpretation: String = ""
+    @Published var selectedChip: String? // Track active chip for loading feedback
     
     private let searchService = SemanticSearchService.shared
     private let voiceManager = MangoVoiceManager.shared
@@ -57,8 +58,8 @@ class SemanticSearchViewModel: ObservableObject {
         // Create new search task
         let searchTask = Task {
             do {
-                print("🔍 [SemanticSearchViewModel] Calling searchService.search...")
-                let response = try await searchService.search(query: query)
+                print("🔍 [SemanticSearchViewModel] Calling searchService.newSearch...")
+                let response = try await searchService.newSearch(query: query)
                 
                 print("✅ [SemanticSearchViewModel] Received response: \(response.movies.count) movies, \(response.refinementChips.count) chips")
                 
@@ -90,6 +91,7 @@ class SemanticSearchViewModel: ObservableObject {
             }
             
             isLoading = false
+            selectedChip = nil // Clear selected chip when done
             currentSearchTask = nil
         }
         
@@ -98,6 +100,8 @@ class SemanticSearchViewModel: ObservableObject {
     }
     
     func refine(with chip: String) async {
+        // Set selected chip immediately for visual feedback
+        selectedChip = chip
         // Combine original query with refinement chip
         // If chip is a complete phrase, use it; otherwise combine with original
         let refinedQuery: String
@@ -110,11 +114,29 @@ class SemanticSearchViewModel: ObservableObject {
         }
         
         print("🔍 [SemanticSearch] Refining: '\(originalQuery)' + '\(chip)' → '\(refinedQuery)'")
+        
+        // Save current state to history before refining
+        if !movies.isEmpty {
+            searchHistory.append((
+                query: originalQuery.isEmpty ? refinedQuery : originalQuery,
+                movies: movies,
+                chips: refinementChips,
+                mangoText: mangoText
+            ))
+            // Keep history manageable (last 5 searches)
+            if searchHistory.count > 5 {
+                searchHistory.removeFirst()
+            }
+        }
+        
         await search(query: refinedQuery)
     }
     
     func goBack() {
         guard let previous = searchHistory.popLast() else { return }
+        
+        // Cancel any ongoing search
+        currentSearchTask?.cancel()
         
         // Stop any current speech
         voiceManager.stop()
@@ -124,8 +146,10 @@ class SemanticSearchViewModel: ObservableObject {
         refinementChips = previous.chips
         mangoText = previous.mangoText
         originalQuery = previous.query
+        selectedChip = nil // Clear selected chip on back navigation
+        error = nil // Clear any error on back navigation
         
-        print("🔙 [SemanticSearch] Went back to: '\(previous.query)'")
+        print("🔙 [SemanticSearch] Went back to: '\(previous.query)' (history remaining: \(searchHistory.count))")
     }
     
     var canGoBack: Bool {

@@ -27,8 +27,9 @@ struct SemanticSearchView: View {
                 
                 // Content
                 if viewModel.isLoading && viewModel.movies.isEmpty && viewModel.refinementChips.isEmpty {
-                    // Show loading only if we have no results and no chips yet
+                    // Show loading - Mango animation
                     loadingView
+                        .background(Color(.systemBackground))
                 } else if let error = viewModel.error {
                     // Show error state
                     VStack(spacing: 16) {
@@ -47,11 +48,17 @@ struct SemanticSearchView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.systemBackground))
                 } else {
                     // Show results (chips + movies) or empty state
                     resultsView
+                        .background(
+                            // Faint orange background for semantic search results
+                            Color.orange.opacity(0.08)
+                        )
                 }
             }
+            .background(Color(.systemBackground))  // Ensure NavigationStack has proper background
             .navigationTitle("Ask Mango")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -66,6 +73,11 @@ struct SemanticSearchView: View {
                             }
                             .font(.body)
                         }
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
                     }
                 }
             }
@@ -164,7 +176,11 @@ struct SemanticSearchView: View {
                 
                 // Refinement chips - show if available (even when loading or no movies)
                 if !viewModel.refinementChips.isEmpty {
-                    RefinementChipsView(chips: viewModel.refinementChips) { chip in
+                    RefinementChipsView(
+                        chips: viewModel.refinementChips,
+                        selectedChip: viewModel.selectedChip,
+                        isLoading: viewModel.isLoading
+                    ) { chip in
                         Task {
                             await viewModel.refine(with: chip)
                         }
@@ -172,12 +188,12 @@ struct SemanticSearchView: View {
                     .padding(.top, viewModel.mangoText.isEmpty ? 8 : 0)
                 }
                 
-                // Loading indicator (if loading and we have chips but no movies yet)
-                if viewModel.isLoading && viewModel.movies.isEmpty && !viewModel.refinementChips.isEmpty {
+                // Loading indicator (if loading and we have chips but no movies yet, OR if chip is tapped)
+                if viewModel.isLoading && ((viewModel.movies.isEmpty && !viewModel.refinementChips.isEmpty) || viewModel.selectedChip != nil) {
                     HStack {
                         ProgressView()
                             .scaleEffect(0.8)
-                        Text("Finding movies...")
+                        Text(viewModel.selectedChip != nil ? "Refining search..." : "Finding movies...")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -222,6 +238,7 @@ struct SemanticSearchView: View {
             }
             .padding(.bottom, 20)
         }
+        .scrollContentBackground(.hidden)  // Hide default scroll background to use our custom background
     }
     
     
@@ -254,67 +271,22 @@ struct SemanticSearchView: View {
     
     private func startVoiceInput() {
         Task {
-            do {
-                // Skip auto-processing since we handle it via callback
-                try await speechRecognizer.startListening(config: .talkToMango, talkToMangoMode: .oneShot, skipAutoProcessing: true)
-                showListeningView = true
-            } catch {
-                print("⚠️ Failed to start voice input: \(error)")
-            }
+            // Skip auto-processing since we handle it via callback
+            await speechRecognizer.startListening(config: .talkToMango, talkToMangoMode: .oneShot, skipAutoProcessing: true)
+            showListeningView = true
         }
     }
     
     @ViewBuilder
     private func movieDetailView(for semanticMovie: SemanticMovie) -> some View {
-        // Convert SemanticMovie to Movie for navigation
+        // Navigate to MoviePageView using movie ID (same as other views like watchlist and direct search)
+        // MoviePageView will fetch full details using the ID
         if let card = semanticMovie.card {
-            // Create Movie from MovieCard
-            let movie = Movie(
-                id: card.tmdbId,
-                title: card.title,
-                year: card.year ?? 0,
-                trailerURL: card.trailerYoutubeId.map { "https://www.youtube.com/watch?v=\($0)" },
-                trailerDuration: nil,
-                posterImageURL: card.poster?.medium ?? card.poster?.large ?? card.poster?.small,
-                tastyScore: card.aiScore,
-                aiScore: card.aiScore,
-                voteAverage: card.sourceScores?.tmdb?.score,
-                genres: card.genres ?? [],
-                rating: card.certification,
-                director: card.director,
-                writer: card.writer,
-                screenplay: card.screenplay,
-                composer: card.composer,
-                runtime: card.runtimeDisplay,
-                releaseDate: card.releaseDate,
-                language: nil,
-                overview: card.overview ?? card.overviewShort
-            )
-            MovieDetailView(movie: movie)
+            // Use TMDB ID from card (same pattern as SearchView and WatchlistView)
+            MoviePageView(movieId: card.tmdbId)
         } else if let preview = semanticMovie.preview, let tmdbId = preview.tmdbId {
-            // Create minimal Movie from preview (will fetch full details)
-            let movie = Movie(
-                id: String(tmdbId),
-                title: preview.title,
-                year: preview.year ?? 0,
-                trailerURL: nil,
-                trailerDuration: nil,
-                posterImageURL: nil,
-                tastyScore: nil,
-                aiScore: nil,
-                voteAverage: nil,
-                genres: [],
-                rating: nil,
-                director: nil,
-                writer: nil,
-                screenplay: nil,
-                composer: nil,
-                runtime: nil,
-                releaseDate: nil,
-                language: nil,
-                overview: nil
-            )
-            MovieDetailView(movie: movie)
+            // Use TMDB ID from preview
+            MoviePageView(movieId: String(tmdbId))
         } else {
             // Fallback - shouldn't happen
             Text("Movie details unavailable")

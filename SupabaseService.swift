@@ -763,23 +763,23 @@ class SupabaseService: ObservableObject {
             throw SupabaseError.notConfigured
         }
         
-        struct UserMovieReason: Codable {
-            let reason: String
-            let query: String
+        struct UserAIRecommendation: Codable {
+            let mango_reason: String
+            let query_context: String
             let created_at: String
         }
         
-        // Fetch most recent reason for this movie
-        let reasons: [UserMovieReason] = try await client
-            .from("user_movie_reasons")
-            .select("reason, query, created_at")
+        // Fetch most recent AI recommendation for this movie
+        let recommendations: [UserAIRecommendation] = try await client
+            .from("user_ai_recommendations")
+            .select("mango_reason, query_context, created_at")
             .eq("tmdb_id", value: tmdbId)
             .order("created_at", ascending: false)
             .limit(1)
             .execute()
             .value
         
-        return reasons.first?.reason
+        return recommendations.first?.mango_reason
     }
     
     /// Returns nil if the movie is not in the cache
