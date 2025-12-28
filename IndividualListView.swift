@@ -78,7 +78,7 @@ struct IndividualListView: View {
                         
                         // Movie Cards with Swipe Actions
                         ForEach(movies) { movie in
-                            SwipeableMovieCard(
+                            SwipeableMasterlistMovieCardForList(
                                 movie: movie,
                                 onTap: {
                                     // Safely convert movie ID
@@ -445,7 +445,7 @@ struct IndividualListView: View {
 
 // MARK: - Swipeable Movie Card
 
-struct SwipeableMovieCard: View {
+struct SwipeableMasterlistMovieCardForList: View {
     let movie: MasterlistMovie
     let onTap: () -> Void
     let onDelete: () -> Void

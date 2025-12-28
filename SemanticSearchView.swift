@@ -10,8 +10,13 @@ struct SemanticSearchView: View {
     @StateObject private var speechRecognizer = SpeechRecognizer()
     @State private var searchText = ""
     @State private var showListeningView = false
+    @State private var showAddToList = false
+    @State private var selectedMovieForList: SemanticMovie?
+    @State private var navigationPath = NavigationPath()
+    @State private var refreshTrigger = UUID()
     @FocusState private var isSearchFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var watchlistManager = WatchlistManager.shared
     
     let initialQuery: String?
     
@@ -20,7 +25,7 @@ struct SemanticSearchView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             VStack(spacing: 0) {
                 // Search bar
                 searchBar
@@ -81,6 +86,9 @@ struct SemanticSearchView: View {
                     }
                 }
             }
+            .navigationDestination(for: String.self) { movieId in
+                MoviePageView(movieId: movieId)
+            }
         }
         .task {
             // If initial query provided (from voice), perform search automatically
@@ -101,6 +109,24 @@ struct SemanticSearchView: View {
                     performSearch()
                 }
             )
+        }
+        .sheet(isPresented: $showAddToList) {
+            if let movie = selectedMovieForList {
+                let movieId = movie.card?.tmdbId ?? (movie.preview?.tmdbId.map { String($0) } ?? "")
+                AddToListView(
+                    movieId: movieId,
+                    movieTitle: movie.displayTitle,
+                    prefilledRecommender: SearchFilterState.shared.detectedRecommender
+                )
+                .onDisappear {
+                    // Refresh watchlist data when sheet closes (user may have added to lists)
+                    Task {
+                        await WatchlistManager.shared.syncFromSupabase()
+                        // Force view refresh
+                        refreshTrigger = UUID()
+                    }
+                }
+            }
         }
     }
     
@@ -203,11 +229,24 @@ struct SemanticSearchView: View {
                 // Movie cards
                 if !viewModel.movies.isEmpty {
                     ForEach(viewModel.movies) { movie in
-                        NavigationLink(destination: movieDetailView(for: movie)) {
-                            SemanticMovieCard(movie: movie)
-                                .padding(.horizontal)
-                        }
-                        .buttonStyle(.plain)
+                        SwipeableMovieCard(
+                            movie: movie,
+                            onQuickAdd: {
+                                quickAddToMasterlist(movie: movie)
+                            },
+                            onAddToList: {
+                                selectedMovieForList = movie
+                                showAddToList = true
+                            },
+                            onMarkWatched: {
+                                markAsWatched(movie: movie)
+                            },
+                            onTap: {
+                                navigateToMovie(movie: movie)
+                            }
+                        )
+                        .padding(.horizontal, 16)
+                        .id("\(movie.id)-\(refreshTrigger)")
                     }
                 } else if !viewModel.isLoading && viewModel.refinementChips.isEmpty && viewModel.mangoText.isEmpty {
                     // Empty state - only show if not loading, no chips, and no mango text
@@ -277,19 +316,66 @@ struct SemanticSearchView: View {
         }
     }
     
-    @ViewBuilder
-    private func movieDetailView(for semanticMovie: SemanticMovie) -> some View {
-        // Navigate to MoviePageView using movie ID (same as other views like watchlist and direct search)
-        // MoviePageView will fetch full details using the ID
-        if let card = semanticMovie.card {
-            // Use TMDB ID from card (same pattern as SearchView and WatchlistView)
-            MoviePageView(movieId: card.tmdbId)
-        } else if let preview = semanticMovie.preview, let tmdbId = preview.tmdbId {
-            // Use TMDB ID from preview
-            MoviePageView(movieId: String(tmdbId))
-        } else {
-            // Fallback - shouldn't happen
-            Text("Movie details unavailable")
+    private func quickAddToMasterlist(movie: SemanticMovie) {
+        let movieId = movie.card?.tmdbId ?? (movie.preview?.tmdbId.map { String($0) } ?? "")
+        guard !movieId.isEmpty else { return }
+        
+        Task {
+            do {
+                try await SupabaseWatchlistAdapter.addMovie(
+                    movieId: movieId,
+                    toListId: "masterlist",
+                    recommenderName: SearchFilterState.shared.detectedRecommender,
+                    recommenderNotes: nil
+                )
+                // Update local cache
+                _ = watchlistManager.addMovieToList(
+                    movieId: movieId,
+                    listId: "masterlist",
+                    recommenderName: SearchFilterState.shared.detectedRecommender
+                )
+                print("✅ [SemanticSearchView] Quick added \(movie.displayTitle) to Masterlist")
+                
+                // Refresh watchlist data to update card states
+                await WatchlistManager.shared.syncFromSupabase()
+                
+                // Force view refresh
+                refreshTrigger = UUID()
+            } catch {
+                print("❌ [SemanticSearchView] Error quick adding to Masterlist: \(error)")
+            }
+        }
+    }
+    
+    private func markAsWatched(movie: SemanticMovie) {
+        let movieId = movie.card?.tmdbId ?? (movie.preview?.tmdbId.map { String($0) } ?? "")
+        guard !movieId.isEmpty else { return }
+        
+        Task {
+            watchlistManager.markAsWatched(movieId: movieId)
+            print("✅ [SemanticSearchView] Marked \(movie.displayTitle) as watched")
+            
+            // Refresh watchlist data to update card states
+            await WatchlistManager.shared.syncFromSupabase()
+            
+            // Force view refresh
+            refreshTrigger = UUID()
+        }
+    }
+    
+    private func getMovieId(for movie: SemanticMovie) -> String {
+        if let card = movie.card {
+            return card.tmdbId
+        } else if let preview = movie.preview, let tmdbId = preview.tmdbId {
+            return String(tmdbId)
+        }
+        return ""
+    }
+    
+    private func navigateToMovie(movie: SemanticMovie) {
+        let movieId = getMovieId(for: movie)
+        if !movieId.isEmpty {
+            navigationPath.append(movieId)
         }
     }
 }

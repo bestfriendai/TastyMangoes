@@ -7,6 +7,7 @@ import SwiftUI
 
 struct SemanticMovieCard: View {
     let movie: SemanticMovie
+    @ObservedObject private var watchlistManager = WatchlistManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -196,9 +197,9 @@ struct SemanticMovieCard: View {
     @ViewBuilder
     private var watchlistStatusRow: some View {
         if let movieId = tmdbIdString {
-            let isOnWatchlist = !WatchlistManager.shared.getListsForMovie(movieId: movieId).isEmpty
-            let isWatched = WatchlistManager.shared.isWatched(movieId: movieId)
-            let recommenderName = WatchlistManager.shared.getRecommendationData(movieId: movieId)?.recommenderName
+            let isOnWatchlist = !watchlistManager.getListsForMovie(movieId: movieId).isEmpty
+            let isWatched = watchlistManager.isWatched(movieId: movieId)
+            let recommenderName = watchlistManager.getRecommendationData(movieId: movieId)?.recommenderName
             
             // Only show if there's something to show
             if isWatched || isOnWatchlist || recommenderName != nil {

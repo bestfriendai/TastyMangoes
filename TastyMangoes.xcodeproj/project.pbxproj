@@ -58,6 +58,7 @@
 		C58974BC2EFE2B6100BA7659 /* MangoVoiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B62EFE2B6100BA7659 /* MangoVoiceManager.swift */; };
 		C58974BD2EFE2B6100BA7659 /* SemanticMovieCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */; };
 		C58974BE2EFE2B6100BA7659 /* SemanticSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */; };
+		C58974C42EFE2B6100BA7659 /* SwipeableMovieCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C52EFE2B6100BA7659 /* SwipeableMovieCard.swift */; };
 		C58974BF2EFE2B6100BA7659 /* RefinementChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */; };
 		C58974C12EFE2B6100BA7659 /* SemanticSearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */; };
 		C58974C22EFE2B6100BA7659 /* SearchRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58974C32EFE2B6100BA7659 /* SearchRouter.swift */; };
@@ -183,6 +184,7 @@
 		C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefinementChipsView.swift; sourceTree = "<group>"; };
 		C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticMovieCard.swift; sourceTree = "<group>"; };
 		C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchService.swift; sourceTree = "<group>"; };
+		C58974C52EFE2B6100BA7659 /* SwipeableMovieCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeableMovieCard.swift; sourceTree = "<group>"; };
 		C58974BA2EFE2B6100BA7659 /* SemanticSearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchViewModel.swift; sourceTree = "<group>"; };
 		C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticSearchModels.swift; sourceTree = "<group>"; };
 		C58974C32EFE2B6100BA7659 /* SearchRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchRouter.swift; sourceTree = "<group>"; };
@@ -286,6 +288,7 @@
 				C58974B62EFE2B6100BA7659 /* MangoVoiceManager.swift */,
 				C58974B72EFE2B6100BA7659 /* RefinementChipsView.swift */,
 				C58974B82EFE2B6100BA7659 /* SemanticMovieCard.swift */,
+				C58974C52EFE2B6100BA7659 /* SwipeableMovieCard.swift */,
 				C58974B92EFE2B6100BA7659 /* SemanticSearchService.swift */,
 				C58974BA2EFE2B6100BA7659 /* SemanticSearchViewModel.swift */,
 				C58974C02EFE2B6100BA7659 /* SemanticSearchModels.swift */,
@@ -557,6 +560,7 @@
 				C58974BB2EFE2B6100BA7659 /* SemanticSearchViewModel.swift in Sources */,
 				C58974BC2EFE2B6100BA7659 /* MangoVoiceManager.swift in Sources */,
 				C58974BD2EFE2B6100BA7659 /* SemanticMovieCard.swift in Sources */,
+				C58974C42EFE2B6100BA7659 /* SwipeableMovieCard.swift in Sources */,
 				C58974BE2EFE2B6100BA7659 /* SemanticSearchService.swift in Sources */,
 				C58974BF2EFE2B6100BA7659 /* RefinementChipsView.swift in Sources */,
 				C58974C22EFE2B6100BA7659 /* SearchRouter.swift in Sources */,
