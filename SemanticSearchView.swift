@@ -4,6 +4,7 @@
 //  Notes: Main view for semantic search feature with Mango's AI personality
 
 import SwiftUI
+import Auth
 
 struct SemanticSearchView: View {
     @StateObject private var viewModel = SemanticSearchViewModel()
@@ -11,7 +12,9 @@ struct SemanticSearchView: View {
     @State private var searchText = ""
     @State private var showListeningView = false
     @State private var showAddToList = false
+    @State private var showRateSheet = false
     @State private var selectedMovieForList: SemanticMovie?
+    @State private var selectedMovieForRating: SemanticMovie?
     @State private var navigationPath = NavigationPath()
     @State private var refreshTrigger = UUID()
     @FocusState private var isSearchFocused: Bool
@@ -128,6 +131,19 @@ struct SemanticSearchView: View {
                 }
             }
         }
+        .sheet(isPresented: $showRateSheet) {
+            if let movie = selectedMovieForRating {
+                let movieId = movie.card?.tmdbId ?? (movie.preview?.tmdbId.map { String($0) } ?? "")
+                RateBottomSheet(
+                    isPresented: $showRateSheet,
+                    movieId: movieId,
+                    movieTitle: movie.displayTitle,
+                    onRatingSubmitted: { rating in
+                        handleRatingSubmitted(movie: movie, rating: rating)
+                    }
+                )
+            }
+        }
     }
     
     private var searchBar: some View {
@@ -239,7 +255,8 @@ struct SemanticSearchView: View {
                                 showAddToList = true
                             },
                             onMarkWatched: {
-                                markAsWatched(movie: movie)
+                                selectedMovieForRating = movie
+                                showRateSheet = true
                             },
                             onTap: {
                                 navigateToMovie(movie: movie)
@@ -347,19 +364,64 @@ struct SemanticSearchView: View {
         }
     }
     
-    private func markAsWatched(movie: SemanticMovie) {
+    private func handleRatingSubmitted(movie: SemanticMovie, rating: Int) {
         let movieId = movie.card?.tmdbId ?? (movie.preview?.tmdbId.map { String($0) } ?? "")
         guard !movieId.isEmpty else { return }
         
         Task {
+            // Mark as watched
             watchlistManager.markAsWatched(movieId: movieId)
-            print("✅ [SemanticSearchView] Marked \(movie.displayTitle) as watched")
+            
+            // Save rating if provided (rating > 0)
+            if rating > 0 {
+                do {
+                    guard let userId = try await SupabaseService.shared.getCurrentUser() else {
+                        print("❌ [SemanticSearchView] No user ID for rating")
+                        return
+                    }
+                    _ = try await SupabaseService.shared.addOrUpdateRating(
+                        userId: userId.id,
+                        movieId: movieId,
+                        rating: rating,
+                        reviewText: nil
+                    )
+                    print("✅ [SemanticSearchView] Saved rating \(rating)/5 for \(movie.displayTitle)")
+                } catch {
+                    print("❌ [SemanticSearchView] Error saving rating: \(error)")
+                }
+            }
+            
+            // Remove movie from all watchlists
+            await removeMovieFromAllLists(movieId: movieId)
             
             // Refresh watchlist data to update card states
             await WatchlistManager.shared.syncFromSupabase()
             
             // Force view refresh
             refreshTrigger = UUID()
+        }
+    }
+    
+    private func removeMovieFromAllLists(movieId: String) async {
+        // Get all lists containing this movie
+        let allLists = watchlistManager.getListsForMovie(movieId: movieId)
+        
+        // Remove from local cache
+        for listId in allLists {
+            watchlistManager.removeMovieFromList(movieId: movieId, listId: listId)
+        }
+        
+        // Sync with Supabase - remove from all lists
+        do {
+            for listId in allLists {
+                try await SupabaseWatchlistAdapter.removeMovie(
+                    movieId: movieId,
+                    fromListId: listId
+                )
+                print("✅ [SemanticSearchView] Removed movie \(movieId) from list \(listId) in Supabase")
+            }
+        } catch {
+            print("❌ [SemanticSearchView] Failed to remove movie \(movieId) from Supabase: \(error)")
         }
     }
     
