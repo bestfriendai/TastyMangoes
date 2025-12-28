@@ -18,6 +18,7 @@ struct Movie: Codable, Identifiable, Equatable, Hashable {
     let posterImageURL: String?
     let tastyScore: Double?
     let aiScore: Double?
+    let voteAverage: Double? // TMDB score (0-10 scale) - used when aiScore is nil
     let genres: [String]
     let rating: String?
     let director: String?
@@ -37,6 +38,7 @@ struct Movie: Codable, Identifiable, Equatable, Hashable {
         case posterImageURL
         case tastyScore
         case aiScore
+        case voteAverage
         case releaseDate
     }
 }
@@ -127,7 +129,8 @@ extension Movie {
             status: "Released",
             voteAverage: aiScore,
             voteCount: nil,
-            popularity: nil
+            popularity: nil,
+            streaming: nil
         )
     }
     
@@ -170,6 +173,7 @@ extension Movie {
             posterImageURL: nil,
             tastyScore: 93.0,
             aiScore: 8.9,
+            voteAverage: nil,
             genres: ["Sci-Fi", "Thriller"],
             rating: "PG-13",
             director: "Christopher Nolan",
@@ -194,6 +198,7 @@ extension Movie {
                 posterImageURL: nil,
                 tastyScore: 93.0,
                 aiScore: 8.9,
+                voteAverage: nil,
                 genres: ["Sci-Fi", "Thriller"],
                 rating: "PG-13",
                 director: "Christopher Nolan",
@@ -214,6 +219,7 @@ extension Movie {
                 posterImageURL: nil,
                 tastyScore: 96.0,
                 aiScore: 9.2,
+                voteAverage: nil,
                 genres: ["Thriller", "Drama"],
                 rating: "R",
                 director: "Bong Joon-ho",
@@ -234,6 +240,7 @@ extension Movie {
                 posterImageURL: nil,
                 tastyScore: 88.0,
                 aiScore: 7.4,
+                voteAverage: nil,
                 genres: ["Comedy", "Fantasy"],
                 rating: "PG-13",
                 director: "Greta Gerwig",

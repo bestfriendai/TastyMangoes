@@ -110,13 +110,14 @@ extension MovieCard {
             trailerDuration: nil,
             cast: castMembers.isEmpty ? nil : castMembers,
             crew: crewMembers.isEmpty ? nil : crewMembers,
-            budget: nil,
-            revenue: nil,
+            budget: budget,
+            revenue: revenue,
             tagline: tagline,
             status: "Released",
             voteAverage: aiScore,
             voteCount: sourceScores?.tmdb?.votes,
-            popularity: nil
+            popularity: nil,
+            streaming: streaming
         )
     }
     

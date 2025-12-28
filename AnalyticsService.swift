@@ -8,6 +8,7 @@
 
 import Foundation
 import Supabase
+import Auth
 
 // Encodable struct for inserting events
 private struct AnalyticsEventInsert: Encodable {
@@ -38,7 +39,12 @@ class AnalyticsService {
         
         self.supabaseClient = SupabaseClient(
             supabaseURL: url,
-            supabaseKey: SupabaseConfig.supabaseAnonKey
+            supabaseKey: SupabaseConfig.supabaseAnonKey,
+            options: SupabaseClientOptions(
+                auth: SupabaseClientOptions.AuthOptions(
+                    emitLocalSessionAsInitialSession: true
+                )
+            )
         )
     }
     

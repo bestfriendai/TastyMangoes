@@ -23,6 +23,7 @@ class MovieDetailViewModel: ObservableObject {
     @Published var similarMovies: [Movie] = []
     @Published var movieImages: [TMDBImage] = []
     @Published var movieVideos: [TMDBVideo] = []
+    @Published var mangoReason: String? // User-specific reason from semantic search
     
     // MARK: - Properties
     
@@ -76,6 +77,9 @@ class MovieDetailViewModel: ObservableObject {
             }
             
             self.movie = movieDetail
+            
+            // Load user-specific mango reason if available
+            await loadMangoReason(tmdbId: movieDetail.id)
         } catch let detailError as MovieDetailError {
             self.error = detailError
             print("❌ Error loading movie: \(detailError.localizedDescription)")
@@ -85,6 +89,17 @@ class MovieDetailViewModel: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    private func loadMangoReason(tmdbId: Int) async {
+        do {
+            // Fetch most recent reason for this movie from user_movie_reasons
+            let reason = try await SupabaseService.shared.fetchUserMovieReason(tmdbId: String(tmdbId))
+            self.mangoReason = reason
+        } catch {
+            // No reason found or error - that's okay, just don't show it
+            self.mangoReason = nil
+        }
     }
     
     // MARK: - Private Methods

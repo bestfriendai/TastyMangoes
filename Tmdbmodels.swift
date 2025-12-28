@@ -224,6 +224,44 @@ struct TMDBVideo: Codable, Identifiable {
     }
 }
 
+// MARK: - Person Search Models
+
+/// Response from TMDB person search
+struct TMDBSearchPersonResponse: Codable {
+    let page: Int
+    let results: [TMDBPerson]
+    let totalPages: Int
+    let totalResults: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case page, results
+        case totalPages = "total_pages"
+        case totalResults = "total_results"
+    }
+}
+
+/// Person from TMDB search
+struct TMDBPerson: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let profilePath: String?
+    let knownForDepartment: String?
+    let knownFor: [TMDBMovie]?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case profilePath = "profile_path"
+        case knownForDepartment = "known_for_department"
+        case knownFor = "known_for"
+    }
+}
+
+/// Person movie credits response from TMDB
+struct TMDBCreditsResponse: Codable {
+    let cast: [TMDBMovie]
+    let crew: [TMDBMovie]
+}
+
 // MARK: - Conversion to App Models
 
 extension TMDBMovie {
@@ -239,7 +277,8 @@ extension TMDBMovie {
             trailerDuration: nil,
             posterImageURL: posterPath, // Pass path as-is, MoviePosterImage will build URL
             tastyScore: nil, // We'll calculate this later
-            aiScore: voteAverage,
+            aiScore: nil, // TMDB movies don't have aiScore (database movies only)
+            voteAverage: voteAverage, // TMDB score (0-10 scale)
             genres: [], // Genre names come from a separate API call
             rating: nil,
             director: nil,
@@ -316,7 +355,8 @@ extension TMDBMovieDetail {
             status: status,
             voteAverage: voteAverage,
             voteCount: voteCount,
-            popularity: popularity
+            popularity: popularity,
+            streaming: nil
         )
     }
 }

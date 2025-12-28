@@ -4,12 +4,28 @@
 //
 //  Originally created by Claude on 11/13/25 at 9:07 PM
 //  Modified by Claude on 2025-12-02 at 12:15 AM (Pacific Time)
+//  Modified by Claude on 2025-12-15 at 11:50 AM (Pacific Time) - Fixed voice selection tracking
+//  Modified by Claude on 2025-12-15 at 4:00 PM (Pacific Time) - Fixed duplicate observer & parallel search bugs
+//  Modified by Claude on 2025-12-15 at 4:30 PM (Pacific Time) - Disabled self-healing to debug single-result freeze
 //
 //  Changes made by Claude (2025-12-02):
 //  - Fixed flashing "no movies found" issue during typing
 //  - Keep previous results visible while new search is in progress
 //  - Only show empty state after debounced search truly completes with no results
 //  - Fixed Task cancellation not resetting isSearching state
+//
+//  Changes made by Claude (2025-12-15 11:50 AM):
+//  - Moved pendingVoiceEventId clearing from performSearch() to clearSearch()
+//  - This allows SearchMovieCard to track which movie the user selects
+//
+//  Changes made by Claude (2025-12-15 4:00 PM):
+//  - Fixed duplicate NotificationCenter observer registration causing 3x search execution
+//  - Added isSearchInFlight guard to prevent parallel searches
+//  - Removed auto-open single result feature (was causing UI freezes)
+//  - Added proper observer cleanup in deinit
+//
+//  Changes made by Claude (2025-12-15 4:30 PM):
+//  - Temporarily disabled checkAndTriggerSelfHealing to debug single-result freeze
 
 import Foundation
 import SwiftUI
@@ -46,11 +62,39 @@ class SearchViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private let historyManager = SearchHistoryManager.shared
     
+    // FIX: Prevent duplicate observer registration
+    private static var observerRegistered = false
+    private var notificationObserver: NSObjectProtocol?
+    
+    // FIX: Prevent parallel searches
+    private var isSearchInFlight = false
+    
+    // Flag to prevent debounced search from overwriting hint-based search results
+    var skipNextSearch = false
+    
     // MARK: - Initialization
     
     init() {
+        setupNotificationObserver()
+    }
+    
+    deinit {
+        // Clean up observer
+        if let observer = notificationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    
+    private func setupNotificationObserver() {
+        // FIX: Only register observer once across all instances
+        guard !SearchViewModel.observerRegistered else {
+            print("⚠️ [SearchViewModel] Observer already registered, skipping duplicate")
+            return
+        }
+        SearchViewModel.observerRegistered = true
+        
         // Listen for Mango-initiated queries
-        NotificationCenter.default.addObserver(
+        notificationObserver = NotificationCenter.default.addObserver(
             forName: Notification.Name.mangoPerformMovieQuery,
             object: nil,
             queue: .main
@@ -61,13 +105,16 @@ class SearchViewModel: ObservableObject {
                 return
             }
             
-            // Execute on MainActor (closure is already on main queue, but ensure MainActor isolation)
-            MainActor.assumeIsolated {
+            // Execute on MainActor
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
                 print("🍋 [SearchViewModel] Received mangoPerformMovieQuery notification with query: '\(query)'")
-                self?.isMangoInitiatedSearch = true
-                self?.search(query: query)
+                self.isMangoInitiatedSearch = true
+                self.search(query: query)
             }
         }
+        
+        print("✅ [SearchViewModel] Notification observer registered")
     }
     
     // MARK: - Search Methods
@@ -97,16 +144,24 @@ class SearchViewModel: ObservableObject {
             return
         }
         
-        // Show loading state - but keep previous results visible
+        // IMPORTANT: Clear previous results immediately when starting a new search
+        // This prevents old results from showing while new search is in progress
+        let currentQuery = searchQuery.trimmingCharacters(in: .whitespaces)
+        if currentQuery != lastSearchedQuery {
+            print("🔄 [SearchViewModel] Query changed from '\(lastSearchedQuery)' to '\(currentQuery)' - clearing previous results")
+            searchResults = []
+        }
+        
+        // Show loading state
         isSearching = true
         showSuggestions = false
         error = nil
         
         print("⏳ Starting debounced search for '\(searchQuery)'")
         
-        // Debounce - wait 0.4 seconds before searching (slightly longer for smoother UX)
+        // Debounce - wait 0.3 seconds before searching (optimized for faster response)
         searchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
             
             guard !Task.isCancelled else {
                 print("❌ Search task cancelled")
@@ -133,10 +188,31 @@ class SearchViewModel: ObservableObject {
     /// Execute the actual search - using Supabase endpoint with filters
     @MainActor
     private func performSearch() async {
-        error = nil
-        showSuggestions = false
+        // Check if we should skip this search (hint-based search is setting results)
+        if skipNextSearch {
+            print("⏭️ [SearchViewModel] Skipping debounced search - hint-based search is handling results")
+            skipNextSearch = false // Reset flag after skipping
+            return
+        }
+        
+        // FIX: Prevent parallel searches
+        guard !isSearchInFlight else {
+            print("⚠️ [SearchViewModel] Search already in flight, skipping duplicate")
+            return
+        }
+        isSearchInFlight = true
+        defer { isSearchInFlight = false }
         
         let query = searchQuery.trimmingCharacters(in: .whitespaces)
+        
+        // Clear previous results if this is a different query than last search
+        if query != lastSearchedQuery {
+            print("🔄 [SearchViewModel] New query detected - clearing previous results")
+            searchResults = []
+        }
+        
+        error = nil
+        showSuggestions = false
         
         if query.isEmpty {
             searchResults = []
@@ -186,22 +262,37 @@ class SearchViewModel: ObservableObject {
             
             // Convert MovieSearchResult to Movie
             var convertedMovies = movieSearchResults.map { result in
-                Movie(
+                // For database movies: result.aiScore exists (0-100 scale) - use it directly
+                // For TMDB movies: result.aiScore is nil - we need voteAverage for display but keep aiScore as nil for detection
+                // Detection logic: if result.aiScore exists and > 10, it's a database movie
+                //                  if result.aiScore is nil, it's a TMDB movie (use voteAverage for display)
+                
+                #if DEBUG
+                print("🔍 [SearchViewModel] Movie: \(result.title) - aiScore: \(result.aiScore?.description ?? "nil"), voteAverage: \(result.voteAverage?.description ?? "nil")")
+                #endif
+                
+                // IMPORTANT: Only set aiScore if it exists (database movies)
+                // For TMDB movies, aiScore should remain nil so isInDatabase returns false
+                // We'll use voteAverage for display in SearchMovieCard when aiScore is nil
+                let finalAiScore: Double? = result.aiScore // Don't fallback to voteAverage here - keep nil for TMDB movies
+                
+                return Movie(
                     id: result.tmdbId,
                     title: result.title,
                     year: result.year ?? 0,
                     trailerURL: nil,
                     trailerDuration: nil,
                     posterImageURL: result.posterUrl,
-                    tastyScore: nil,
-                    aiScore: result.voteAverage,
-                    genres: [],
+                    tastyScore: nil, // Will be calculated from aiScore in SearchMovieCard
+                    aiScore: finalAiScore, // Database: 0-100 scale, TMDB: nil
+                    voteAverage: result.voteAverage, // TMDB score (0-10 scale) - used when aiScore is nil
+                    genres: result.genres ?? [],
                     rating: nil,
                     director: nil,
                     writer: nil,
                     screenplay: nil,
                     composer: nil,
-                    runtime: nil,
+                    runtime: result.runtimeDisplay,
                     releaseDate: nil,
                     language: nil,
                     overview: result.overviewShort
@@ -262,11 +353,14 @@ class SearchViewModel: ObservableObject {
             
             // Update voice event with search results if this was a Mango-initiated search
             if isMangoInitiatedSearch, let eventId = SearchFilterState.shared.pendingVoiceEventId {
+                // Capture result count for the async task
+                let resultCount = searchResults.count
+                
                 Task {
                     let result: String
-                    if searchResults.isEmpty {
+                    if resultCount == 0 {
                         result = "no_results"
-                    } else if searchResults.count >= 10 {
+                    } else if resultCount >= 10 {
                         result = "ambiguous"
                     } else {
                         result = "success"
@@ -275,56 +369,46 @@ class SearchViewModel: ObservableObject {
                     await VoiceAnalyticsLogger.updateVoiceEventResult(
                         eventId: eventId,
                         result: result,
-                        resultCount: searchResults.count
+                        resultCount: resultCount
                     )
                     
+                    // TEMPORARILY DISABLED: Self-healing check may be causing freeze on single-result searches
+                    // TODO: Investigate and re-enable once freeze is resolved
                     // Trigger self-healing if needed (for search commands)
-                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
-                    let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
+                    // let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    // let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
+                    // let handlerResult: VoiceHandlerResult? = {
+                    //     switch result {
+                    //     case "success": return .success
+                    //     case "no_results": return .noResults
+                    //     case "ambiguous": return .ambiguous
+                    //     case "network_error": return .networkError
+                    //     case "parse_error": return .parseError
+                    //     default: return nil
+                    //     }
+                    // }()
+                    // VoiceIntentRouter.checkAndTriggerSelfHealing(
+                    //     utterance: utterance,
+                    //     originalCommand: originalCommand,
+                    //     handlerResult: handlerResult,
+                    //     screen: "SearchView",
+                    //     movieContext: nil,
+                    //     voiceEventId: eventId
+                    // )
+                    print("⏸️ [VoiceAnalytics] Self-healing check temporarily disabled for debugging")
                     
-                    // Convert string result to VoiceHandlerResult enum
-                    let handlerResult: VoiceHandlerResult? = {
-                        switch result {
-                        case "success": return .success
-                        case "no_results": return .noResults
-                        case "ambiguous": return .ambiguous
-                        case "network_error": return .networkError
-                        case "parse_error": return .parseError
-                        default: return nil
-                        }
-                    }()
-                    
-                    // Use the proper extension method with correct types
-                    VoiceIntentRouter.checkAndTriggerSelfHealing(
-                        utterance: utterance,
-                        originalCommand: originalCommand,
-                        handlerResult: handlerResult,
-                        screen: "SearchView",
-                        movieContext: nil,
-                        voiceEventId: eventId
-                    )
-                    
-                    // Clear the eventId, utterance, and command after updating
-                    await MainActor.run {
-                        SearchFilterState.shared.pendingVoiceEventId = nil
-                        SearchFilterState.shared.pendingVoiceUtterance = nil
-                        SearchFilterState.shared.pendingVoiceCommand = nil
-                    }
+                    // NOTE: Do NOT clear pendingVoiceEventId here!
+                    // SearchMovieCard needs it to track which movie the user selects.
+                    // It will be cleared in clearSearch() or after selection is logged.
                 }
             }
             
             // Reset Mango flag after search completes (speech will be handled by SearchView onChange)
             isMangoInitiatedSearch = false
             
-            // Optional: Auto-open movie page if exactly one result (for TalkToMango)
-            if searchResults.count == 1, let singleMovie = searchResults.first {
-                print("🍋 Single result found - posting notification to open movie page")
-                NotificationCenter.default.post(
-                    name: Notification.Name.mangoOpenMoviePage,
-                    object: nil,
-                    userInfo: ["movieId": singleMovie.id]
-                )
-            }
+            // NOTE: Removed auto-open single result feature - it was causing UI freezes
+            // If we want this feature back, it needs proper async handling and state management
+            // See: https://github.com/user/repo/issues/XXX
             
         } catch let searchError {
             // Only show error if this search is still relevant
@@ -348,26 +432,23 @@ class SearchViewModel: ObservableObject {
                         errorMessage: searchError.localizedDescription
                     )
                     
+                    // TEMPORARILY DISABLED: Self-healing check may be causing freeze
                     // Trigger self-healing if needed (for network errors with action words)
-                    let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
-                    let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
+                    // let utterance = SearchFilterState.shared.pendingVoiceUtterance ?? query
+                    // let originalCommand = SearchFilterState.shared.pendingVoiceCommand ?? .movieSearch(query: query, raw: query)
+                    // VoiceIntentRouter.checkAndTriggerSelfHealing(
+                    //     utterance: utterance,
+                    //     originalCommand: originalCommand,
+                    //     handlerResult: .networkError,
+                    //     screen: "SearchView",
+                    //     movieContext: nil,
+                    //     voiceEventId: eventId
+                    // )
+                    print("⏸️ [VoiceAnalytics] Self-healing check temporarily disabled for debugging")
                     
-                    // Use the proper extension method with correct types
-                    VoiceIntentRouter.checkAndTriggerSelfHealing(
-                        utterance: utterance,
-                        originalCommand: originalCommand,
-                        handlerResult: .networkError,
-                        screen: "SearchView",
-                        movieContext: nil,
-                        voiceEventId: eventId
-                    )
-                    
-                    // Clear the eventId, utterance, and command after updating
-                    await MainActor.run {
-                        SearchFilterState.shared.pendingVoiceEventId = nil
-                        SearchFilterState.shared.pendingVoiceUtterance = nil
-                        SearchFilterState.shared.pendingVoiceCommand = nil
-                    }
+                    // NOTE: Do NOT clear pendingVoiceEventId here!
+                    // Keep it for potential retry or selection tracking.
+                    // It will be cleared in clearSearch().
                 }
             }
         }
@@ -435,6 +516,11 @@ class SearchViewModel: ObservableObject {
         searchTask?.cancel()
         // Also clear searchQuery in SearchFilterState for tab bar visibility
         SearchFilterState.shared.searchQuery = ""
+        
+        // Clear voice event tracking when search is cleared
+        SearchFilterState.shared.pendingVoiceEventId = nil
+        SearchFilterState.shared.pendingVoiceUtterance = nil
+        SearchFilterState.shared.pendingVoiceCommand = nil
     }
     
     /// Load popular movies (for when search is empty)

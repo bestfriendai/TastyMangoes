@@ -30,9 +30,6 @@ struct TastyMangoesApp: App {
                 }
             }
             .task {
-                // Log app open analytics (before auth check)
-                AnalyticsService.shared.logAppOpen()
-                
                 // Check auth status on app launch
                 await authManager.checkAuthStatus()
                 
@@ -40,6 +37,10 @@ struct TastyMangoesApp: App {
                 if authManager.isAuthenticated {
                     print("📋 [Watchlist] App launch - user authenticated, syncing watchlists from Supabase...")
                     await WatchlistManager.shared.syncFromSupabase()
+                    
+                    // Load user's streaming subscriptions
+                    print("🎬 [StreamingProvider] Starting subscription load...")
+                    await StreamingProviderService.shared.loadUserSubscriptions()
                 } else {
                     print("📋 [Watchlist] App launch - user not authenticated, skipping watchlist sync")
                 }

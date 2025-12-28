@@ -13,9 +13,12 @@ import SwiftUI
 
 struct TabBarView: View {
     @State private var selectedTab = 0   // Default to Home
+    @State private var previousTabBeforeSemanticSearch = 0  // Track tab before semantic search
     @ObservedObject private var filterState = SearchFilterState.shared
     @StateObject private var mangoSpeechRecognizer = SpeechRecognizer()
     @State private var showMangoListeningView = false
+    @State private var showSemanticSearch = false
+    @State private var semanticSearchQuery: String = ""
     
     // Computed property for selection count
     private var totalSelections: Int {
@@ -74,12 +77,42 @@ struct TabBarView: View {
         .fullScreenCover(isPresented: $showMangoListeningView) {
             MangoListeningView(
                 speechRecognizer: mangoSpeechRecognizer,
-                isPresented: $showMangoListeningView
+                isPresented: $showMangoListeningView,
+                onTranscriptReceived: { transcript in
+                    // Route voice transcript to semantic search
+                    semanticSearchQuery = transcript
+                    // Remember which tab we were on (likely tab 2, but could be any)
+                    previousTabBeforeSemanticSearch = selectedTab
+                    showMangoListeningView = false
+                    showSemanticSearch = true
+                },
+                skipAutoProcessing: true  // Skip VoiceIntentRouter, use callback instead
             )
+        }
+        .fullScreenCover(isPresented: $showSemanticSearch) {
+            SemanticSearchView(initialQuery: semanticSearchQuery)
+        }
+        .onChange(of: showSemanticSearch) { oldValue, newValue in
+            // When semantic search is dismissed, return to Home tab (or previous tab)
+            if oldValue == true && newValue == false {
+                // Semantic search was dismissed
+                // Return to Home tab (most common case) or previous tab
+                // If we came from tab 2 (Talk to Mango), go to Home instead
+                if previousTabBeforeSemanticSearch == 2 {
+                    selectedTab = 0  // Go to Home
+                } else {
+                    selectedTab = previousTabBeforeSemanticSearch  // Return to previous tab
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToSearch)) { _ in
             print("🍋 [TabBarView] Received mangoNavigateToSearch notification - switching to Search tab")
             selectedTab = 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mangoNavigateToHome)) { _ in
+            print("🍋 [TabBarView] Received mangoNavigateToHome notification - switching to Home tab")
+            selectedTab = 0
+            showMangoListeningView = false  // Ensure listening view is dismissed
         }
     }
 }

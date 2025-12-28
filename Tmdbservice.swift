@@ -179,6 +179,42 @@ class TMDBService {
         return try await performRequest(url: url)
     }
     
+    // MARK: - Search Person
+    
+    /// Search for a person by name
+    func searchPerson(name: String, page: Int = 1) async throws -> TMDBSearchPersonResponse {
+        var components = URLComponents(string: "\(TMDBConfig.baseURL)/search/person")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: TMDBConfig.apiKey),
+            URLQueryItem(name: "query", value: name),
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "language", value: "en-US")
+        ]
+        
+        guard let url = components?.url else {
+            throw TMDBError.invalidURL
+        }
+        
+        return try await performRequest(url: url)
+    }
+    
+    // MARK: - Get Person Movie Credits
+    
+    /// Get all movies a person has appeared in
+    func getPersonMovieCredits(personId: Int) async throws -> TMDBCreditsResponse {
+        var components = URLComponents(string: "\(TMDBConfig.baseURL)/person/\(personId)/movie_credits")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: TMDBConfig.apiKey),
+            URLQueryItem(name: "language", value: "en-US")
+        ]
+        
+        guard let url = components?.url else {
+            throw TMDBError.invalidURL
+        }
+        
+        return try await performRequest(url: url)
+    }
+    
     // MARK: - Private Helper
     
     private func performRequest<T: Decodable>(url: URL) async throws -> T {
