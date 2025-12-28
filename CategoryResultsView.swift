@@ -556,7 +556,7 @@ struct MovieCardHorizontal: View {
                                 if isWatched {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 14))
-                                        .foregroundColor(Color(hex: "#648d00"))
+                                        .foregroundColor(Color(hex: "#8E8E93"))
                                         .background(Color.white.clipShape(Circle()))
                                         .offset(x: 8, y: -8)
                                 }

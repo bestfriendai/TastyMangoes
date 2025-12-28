@@ -1524,14 +1524,14 @@ struct MoviePageView: View {
                         Text(isWatched ? "Watched" : "Mark as Watched")
                             .font(.custom("Inter-SemiBold", size: 14))
                     }
-                    .foregroundColor(isWatched ? Color(hex: "#648d00") : Color(hex: "#333333"))
+                    .foregroundColor(isWatched ? Color(hex: "#8E8E93") : Color(hex: "#333333"))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(isWatched ? Color(hex: "#f0f7e0") : Color(hex: "#F5F5F5"))
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(isWatched ? Color(hex: "#648d00").opacity(0.3) : Color.clear, lineWidth: 1)
+                            .stroke(isWatched ? Color(hex: "#8E8E93").opacity(0.3) : Color.clear, lineWidth: 1)
                     )
                 }
                 

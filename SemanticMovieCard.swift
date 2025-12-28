@@ -207,7 +207,7 @@ struct SemanticMovieCard: View {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.caption2)
-                                .foregroundColor(Color(hex: "#648d00"))
+                                .foregroundColor(Color(hex: "#8E8E93"))
                             Text("Watched")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)

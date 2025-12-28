@@ -1393,7 +1393,7 @@ struct MasterlistMovieCard: View {
                 if movie.isWatched {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 20))
-                        .foregroundColor(Color(hex: "#648d00"))
+                        .foregroundColor(Color(hex: "#8E8E93"))
                 }
                 
                 // Menu

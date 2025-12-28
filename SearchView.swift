@@ -950,7 +950,7 @@ struct SearchMovieCard: View {
                     if isWatched {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 20))
-                            .foregroundColor(Color(hex: "#648d00"))
+                            .foregroundColor(Color(hex: "#8E8E93"))
                     }
                     
                     // Green checkmark if in any watchlist
