@@ -1,22 +1,36 @@
+//
 //  SearchView.swift
 //  TastyMangoes
 //
 //  Originally created by Cursor Assistant on 2025-11-14
 //  Modified by Claude on 2025-12-01 at 11:15 PM (Pacific Time) - Added FocusState for keyboard management
 //  Modified by Claude on 2025-12-02 at 12:20 AM (Pacific Time) - Fixed flashing "no movies found" issue
+//  Modified by Claude on 2025-12-15 at 11:10 AM (Pacific Time) - Phase 2: Added voice search selection tracking
+//  Modified by Claude on 2025-12-15 at 5:15 PM (Pacific Time) - Fixed candidates_shown always 0 bug
 //
 //  Changes made by Claude (2025-12-02):
 //  - Reordered content logic to keep previous results visible while searching
 //  - Only show loading view when there are no results to display
 //  - Only show empty state after search truly completes with no results
 //  - This prevents the distracting flash of "Oops! No movies found" while typing
+//
+//  Changes made by Claude (2025-12-15 11:10 AM):
+//  - SearchMovieCard now tracks voice search selections (selected_movie_id, candidates_shown)
+//  - Logs to Supabase when user taps a movie from voice-initiated search results
+//
+//  Changes made by Claude (2025-12-15 5:15 PM):
+//  - Changed viewModel from @StateObject to @ObservedObject using SearchViewModel.shared
+//  - This fixes candidates_shown always showing 0 (SearchMovieCard was reading from .shared
+//    while SearchView had its own instance with the actual results)
 
 import SwiftUI
 
 struct SearchView: View {
-    @StateObject private var viewModel = SearchViewModel()
+    // FIXED: Use shared instance so SearchMovieCard can read correct searchResults.count
+    @ObservedObject private var viewModel = SearchViewModel.shared
     // Use @ObservedObject for singleton to avoid recreating state
     @ObservedObject private var filterState = SearchFilterState.shared
+    @ObservedObject private var hintSearchCoordinator = HintSearchCoordinator.shared
     @StateObject private var speechRecognizer = SpeechRecognizer()
     @State private var showFilters = false
     @State private var showPlatformsSheet = false
@@ -40,10 +54,10 @@ struct SearchView: View {
         } else if !viewModel.searchResults.isEmpty {
             ZStack {
                 resultsListView
-                if viewModel.isSearching {
-                    VStack {
-                        HStack {
-                            Spacer()
+                VStack {
+                    HStack {
+                        Spacer()
+                        if viewModel.isSearching {
                             ProgressView()
                                 .padding(8)
                                 .background(Color.white.opacity(0.9))
@@ -51,9 +65,20 @@ struct SearchView: View {
                                 .shadow(radius: 2)
                                 .padding(.trailing, 20)
                                 .padding(.top, 8)
+                        } else if let progress = hintSearchCoordinator.verificationProgress {
+                            Text("Verifying \(progress.current) of \(progress.total)...")
+                                .font(.custom("Nunito-Regular", size: 14))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.9))
+                                .cornerRadius(8)
+                                .shadow(radius: 2)
+                                .padding(.trailing, 20)
+                                .padding(.top, 8)
                         }
-                        Spacer()
                     }
+                    Spacer()
                 }
             }
         } else if viewModel.isSearching {
@@ -68,7 +93,13 @@ struct SearchView: View {
     // Extract bottom button to help compiler
     @ViewBuilder
     private var bottomButton: some View {
-        if totalSelections > 0 || !viewModel.searchQuery.isEmpty {
+        // Hide button when there are search results or when searching is in progress
+        let shouldShowButton = (totalSelections > 0 || !viewModel.searchQuery.isEmpty) 
+            && viewModel.searchResults.isEmpty 
+            && !hintSearchCoordinator.isSearching
+            && !hintSearchCoordinator.isAISearching
+        
+        if shouldShowButton {
             VStack(spacing: 0) {
                 let buttonText = totalSelections > 0
                     ? "Start Searching (\(totalSelections))"
@@ -223,6 +254,9 @@ struct SearchView: View {
         isSearchFocused = false  // Added by Claude - dismiss keyboard
         // Wire up NAVIGATE connection: Search button → Category Results View
         // Navigate to results view with selected filters
+        // NOTE: CategoryResultsView makes a separate API call and doesn't share SearchViewModel.shared.searchResults
+        // This can cause "No movies found" to appear briefly until the API call completes
+        // Consider refactoring CategoryResultsView to use SearchViewModel.shared.searchResults if query matches
         navigateToResults = true
     }
     
@@ -610,12 +644,36 @@ struct SearchView: View {
                     if !viewModel.searchResults.isEmpty || filterState.hasActiveFilters {
                         HStack {
                             // Show count based on whether we have search results or just filters
-                            let resultsText = !viewModel.searchResults.isEmpty
-                                ? "\(viewModel.searchResults.count) results found"
-                                : (filterState.hasActiveFilters ? "0 results found" : "")
-                            
-                            if !resultsText.isEmpty {
-                                Text(resultsText)
+                            if !viewModel.searchResults.isEmpty {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    // Show animated indicator if hint search is in progress
+                                    if hintSearchCoordinator.isSearching || hintSearchCoordinator.isAISearching {
+                                        HStack(spacing: 0) {
+                                            Text("\(viewModel.searchResults.count) results")
+                                                .font(.custom("Inter-SemiBold", size: 14))
+                                                .foregroundColor(Color(hex: "#666666"))
+                                            
+                                            AnimatedEllipsisView()
+                                        }
+                                        
+                                        // Show verification progress if available
+                                        if let progress = hintSearchCoordinator.verificationProgress {
+                                            Text("Verifying \(progress.current) of \(progress.total)...")
+                                                .font(.custom("Inter-Regular", size: 12))
+                                                .foregroundColor(Color(hex: "#999999"))
+                                        } else if hintSearchCoordinator.isAISearching {
+                                            Text("Loading more results...")
+                                                .font(.custom("Inter-Regular", size: 12))
+                                                .foregroundColor(Color(hex: "#999999"))
+                                        }
+                                    } else {
+                                        Text("\(viewModel.searchResults.count) results found")
+                                            .font(.custom("Inter-SemiBold", size: 14))
+                                            .foregroundColor(Color(hex: "#666666"))
+                                    }
+                                }
+                            } else if filterState.hasActiveFilters {
+                                Text("0 results found")
                                     .font(.custom("Inter-SemiBold", size: 14))
                                     .foregroundColor(Color(hex: "#666666"))
                             }
@@ -720,138 +778,245 @@ struct SearchView: View {
 }
 
 // MARK: - Search Movie Card (Product Card)
+// Last modified by Claude on 2025-12-15 at 11:10 AM (Pacific Time)
+// Phase 2: Added voice search selection tracking (selected_movie_id, candidates_shown)
 
 struct SearchMovieCard: View {
     let movie: Movie
     @State private var showMoviePage = false
     
+    private let watchlistManager = WatchlistManager.shared
+    
+    // Check if movie is in any watchlist
+    private var isInWatchlist: Bool {
+        !watchlistManager.getListsForMovie(movieId: movie.id).isEmpty
+    }
+    
+    // Check if movie is watched
+    private var isWatched: Bool {
+        watchlistManager.isWatched(movieId: movie.id)
+    }
+    
+    // Calculate Tasty Score from aiScore (aiScore × 10, e.g., 71.6 → 716%)
+    // aiScore is on 0-100 scale, we want to show as percentage × 10
+    // So 71.6 becomes 7.16 (on 0-1 scale), which displays as 716% when multiplied by 100
+    private var tastyScore: Double? {
+        if let aiScore = movie.aiScore {
+            return aiScore / 10.0 // Convert 71.6 to 7.16 (0-1 scale), displays as 716%
+        }
+        return movie.tastyScore
+    }
+    
+    // Calculate Tasty Score percentage directly (aiScore × 10)
+    private var tastyScorePercentage: Int? {
+        if let aiScore = movie.aiScore {
+            return Int(aiScore * 10) // 71.6 → 716
+        }
+        if let tastyScore = movie.tastyScore {
+            return Int(tastyScore * 100) // Already on 0-1 scale
+        }
+        return nil
+    }
+    
+    // Check if movie is in our database
+    // Database movies have aiScore on 0-100 scale (from aggregates.ai_score field)
+    // TMDB movies have voteAverage on 0-10 scale (from TMDB API, stored as aiScore via fallback)
+    // Key: Database movies have aiScore from aggregates (0-100 scale, always > 10)
+    //      TMDB movies have aiScore from voteAverage fallback (0-10 scale, always <= 10)
+    // Solution: Check if aiScore > 10 - this distinguishes database (0-100) from TMDB (0-10) movies
+    private var isInDatabase: Bool {
+        guard let aiScore = movie.aiScore else {
+            #if DEBUG
+            print("🔍 [SearchMovieCard] \(movie.title): aiScore=nil, voteAverage=\(movie.voteAverage?.description ?? "nil") -> NOT in database")
+            #endif
+            return false // No score means not in database
+        }
+        // Database movies have aiScore on 0-100 scale (always > 10)
+        // TMDB movies have voteAverage on 0-10 scale (always <= 10) when used as fallback
+        let result = aiScore > 10
+        #if DEBUG
+        print("🔍 [SearchMovieCard] \(movie.title): aiScore=\(aiScore), voteAverage=\(movie.voteAverage?.description ?? "nil") -> isInDatabase=\(result)")
+        #endif
+        return result
+    }
+    
+    // Get TMDB score (0-10 scale)
+    // For database movies: aiScore is on 0-100 scale, so divide by 10
+    // For TMDB movies: use voteAverage directly (0-10 scale)
+    private var tmdbScore: Double? {
+        if isInDatabase {
+            // Database movie - convert aiScore from 0-100 to 0-10 scale
+            guard let aiScore = movie.aiScore else { return nil }
+            return aiScore / 10.0
+        } else {
+            // TMDB movie - use voteAverage directly (0-10 scale)
+            return movie.voteAverage
+        }
+    }
+    
     var body: some View {
         Button(action: {
+            // Phase 2: Track movie selection if this was a voice search
+            trackVoiceSearchSelection()
+            
             // Wire up NAVIGATE connection: Product Card → Movie Page
             showMoviePage = true
         }) {
             HStack(alignment: .top, spacing: 12) {
-            // Poster
-            MoviePosterImage(
-                posterURL: movie.posterImageURL,
-                width: 80,
-                height: 120,
-                cornerRadius: 8
-            )
-            
-            // Content
-            VStack(alignment: .leading, spacing: 8) {
-                // Title
-                Text(movie.title)
-                    .font(.custom("Nunito-Bold", size: 16))
-                    .foregroundColor(Color(hex: "#1a1a1a"))
-                    .lineLimit(2)
+                // Poster
+                MoviePosterImage(
+                    posterURL: movie.posterImageURL,
+                    width: 60,
+                    height: 90,
+                    cornerRadius: 8
+                )
                 
-                // Year, Genres, Runtime
-                HStack(spacing: 4) {
-                    if movie.year > 0 {
-                        Text(String(movie.year))
-                        Text("·")
-                    }
+                // Movie Info
+                VStack(alignment: .leading, spacing: 6) {
+                    // Title
+                    Text(movie.title)
+                        .font(.custom("Nunito-Bold", size: 16))
+                        .foregroundColor(Color(hex: "#1a1a1a"))
+                        .lineLimit(1)
                     
-                    if !movie.genres.isEmpty {
-                        Text(movie.genres.prefix(2).joined(separator: "/"))
-                        if let runtime = movie.runtime, !runtime.isEmpty {
-                            Text("·")
-                            Text(runtime)
-                        }
-                    } else if let runtime = movie.runtime, !runtime.isEmpty {
-                        Text(runtime)
-                    }
-                }
-                .font(.custom("Inter-Regular", size: 12))
-                .foregroundColor(Color(hex: "#666666"))
-                
-                // Scores
-                HStack(spacing: 12) {
-                    // Tasty Score
-                    if let tastyScore = movie.tastyScore {
-                        HStack(spacing: 4) {
-                            Image("TastyScoreIcon")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 12, height: 12)
-                            
-                            Text("\(Int(tastyScore * 100))%")
-                                .font(.custom("Inter-SemiBold", size: 14))
-                                .foregroundColor(Color(hex: "#1a1a1a"))
-                        }
-                    }
+                    // Year, Genre, Runtime
+                    let genresText = movie.genres.isEmpty ? "" : movie.genres.joined(separator: "/")
+                    let runtimeText = movie.runtime ?? ""
+                    let metadataParts = [
+                        movie.year > 0 ? String(movie.year) : nil,
+                        genresText.isEmpty ? nil : genresText,
+                        runtimeText.isEmpty ? nil : runtimeText
+                    ].compactMap { $0 }
                     
-                    // AI Score
-                    if let aiScore = movie.aiScore {
-                        HStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(Color(hex: "#FFD60A"))
-                            
-                            Text(String(format: "%.1f", aiScore))
-                                .font(.custom("Inter-SemiBold", size: 14))
-                                .foregroundColor(Color(hex: "#1a1a1a"))
-                        }
-                    }
-                }
-                
-                // Watch on and Liked by (placeholder avatars)
-                HStack(spacing: 16) {
-                    // Watch on
-                    HStack(spacing: 4) {
-                        Text("Watch on:")
+                    if !metadataParts.isEmpty {
+                        Text(metadataParts.joined(separator: " · "))
                             .font(.custom("Inter-Regular", size: 12))
                             .foregroundColor(Color(hex: "#666666"))
-                        
-                        HStack(spacing: -4) {
-                            ForEach(0..<3, id: \.self) { _ in
-                                Circle()
-                                    .fill(Color(hex: "#E0E0E0"))
-                                    .frame(width: 20, height: 20)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 1)
-                                    )
+                            .lineLimit(1)
+                    }
+                    
+                    // Scores
+                    if isInDatabase {
+                        // Movie is in database - show Tasty Score and AI Score with star
+                        HStack(spacing: 12) {
+                            // Tasty Score (use aiScore × 10 if available)
+                            if let tastyScorePercent = tastyScorePercentage {
+                                HStack(spacing: 4) {
+                                    Image("TastyScoreIcon")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 14, height: 14)
+                                    Text("\(tastyScorePercent)%")
+                                        .font(.custom("Inter-SemiBold", size: 12))
+                                        .foregroundColor(Color(hex: "#1a1a1a"))
+                                }
+                            }
+                            
+                            // AI Score (database movies have aiScore on 0-100 scale)
+                            if let aiScore = movie.aiScore {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(Color(hex: "#FEA500"))
+                                    Text(String(format: "%.1f", aiScore)) // Display as-is (0-100 scale)
+                                        .font(.custom("Inter-SemiBold", size: 12))
+                                        .foregroundColor(Color(hex: "#1a1a1a"))
+                                }
+                            }
+                        }
+                    } else {
+                        // Movie is NOT in database - show TMDB text and TMDB score (no star icon)
+                        if let tmdbScore = tmdbScore {
+                            HStack(spacing: 4) {
+                                Text("TMDB")
+                                    .font(.custom("Inter-Regular", size: 12))
+                                    .foregroundColor(Color(hex: "#666666"))
+                                
+                                Text(String(format: "%.1f", tmdbScore))
+                                    .font(.custom("Inter-SemiBold", size: 12))
+                                    .foregroundColor(Color(hex: "#1a1a1a"))
                             }
                         }
                     }
                     
-                    // Liked by
-                    HStack(spacing: 4) {
-                        Text("Liked by:")
-                            .font(.custom("Inter-Regular", size: 12))
-                            .foregroundColor(Color(hex: "#666666"))
-                        
-                        HStack(spacing: -4) {
-                            ForEach(0..<3, id: \.self) { _ in
-                                Circle()
-                                    .fill(Color(hex: "#E0E0E0"))
-                                    .frame(width: 20, height: 20)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 1)
-                                    )
-                            }
-                        }
-                    }
+                    // Recommendation Indicator removed from search results per user request
                 }
                 
                 Spacer()
+                
+                // Action Buttons
+                HStack(spacing: 8) {
+                    // Watched indicator (checkmark if watched)
+                    if isWatched {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color(hex: "#8E8E93"))
+                    }
+                    
+                    // Green checkmark if in any watchlist
+                    if isInWatchlist {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color(hex: "#648d00"))
+                    }
+                    
+                    // Menu
+                    Button(action: {
+                        // Show menu
+                    }) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color(hex: "#666666"))
+                    }
+                }
             }
-            
-            Spacer()
-        }
-        .padding(12)
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $showMoviePage) {
             NavigationStack {
-                MoviePageView(movieId: movie.id, source: "search")
+                MoviePageView(movieId: movie.id)
+            }
+        }
+    }
+    
+    // MARK: - Voice Search Selection Tracking
+    
+    /// Track movie selection if this search was initiated by voice
+    private func trackVoiceSearchSelection() {
+        // Check if there's a pending voice event (meaning this was a voice search)
+        guard let eventId = SearchFilterState.shared.pendingVoiceEventId else {
+            return // Not a voice search, nothing to track
+        }
+        
+        // Get the number of candidates shown - now correctly reads from shared instance
+        let candidatesShown = SearchViewModel.shared.searchResults.count
+        
+        // Convert movie.id from String to Int
+        guard let movieIdInt = Int(movie.id) else {
+            print("⚠️ [VoiceSelection] Could not convert movie.id '\(movie.id)' to Int")
+            return
+        }
+        
+        print("🎯 [VoiceSelection] User selected movie \(movieIdInt) (\(movie.title)) from \(candidatesShown) candidates")
+        
+        // Log the selection to Supabase
+        Task {
+            await VoiceAnalyticsLogger.updateVoiceEventSelection(
+                eventId: eventId,
+                selectedMovieId: movieIdInt,
+                candidatesShown: candidatesShown
+            )
+            
+            // Clear the voice event tracking after selection is logged
+            await MainActor.run {
+                SearchFilterState.shared.pendingVoiceEventId = nil
+                SearchFilterState.shared.pendingVoiceUtterance = nil
+                SearchFilterState.shared.pendingVoiceCommand = nil
             }
         }
     }
@@ -945,6 +1110,31 @@ struct SearchSuggestionItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Animated Ellipsis View
+
+struct AnimatedEllipsisView: View {
+    @State private var dotCount = 1
+    @State private var timer: Timer?
+    
+    var body: some View {
+        Text(String(repeating: ".", count: dotCount))
+            .font(.custom("Inter-SemiBold", size: 14))
+            .foregroundColor(Color(hex: "#666666"))
+            .onAppear {
+                // Cycle through 1, 2, 3 dots every 0.5 seconds
+                timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        dotCount = (dotCount % 3) + 1
+                    }
+                }
+            }
+            .onDisappear {
+                timer?.invalidate()
+                timer = nil
+            }
     }
 }
 

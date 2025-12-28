@@ -78,7 +78,7 @@ struct IndividualListView: View {
                         
                         // Movie Cards with Swipe Actions
                         ForEach(movies) { movie in
-                            SwipeableMovieCard(
+                            SwipeableMasterlistMovieCardForList(
                                 movie: movie,
                                 onTap: {
                                     // Safely convert movie ID
@@ -216,11 +216,6 @@ struct IndividualListView: View {
                     Text("\(movies.count) films")
                         .font(.custom("Inter-Regular", size: 14))
                         .foregroundColor(Color(hex: "#666666"))
-                    
-                    Text("Your personalized collection of must-watch films.")
-                        .font(.custom("Inter-Regular", size: 14))
-                        .foregroundColor(Color(hex: "#666666"))
-                        .lineLimit(2)
                 }
                 
                 Spacer()
@@ -450,7 +445,7 @@ struct IndividualListView: View {
 
 // MARK: - Swipeable Movie Card
 
-struct SwipeableMovieCard: View {
+struct SwipeableMasterlistMovieCardForList: View {
     let movie: MasterlistMovie
     let onTap: () -> Void
     let onDelete: () -> Void

@@ -161,7 +161,6 @@ struct SignInView: View {
         Task {
             do {
                 try await authManager.signIn(email: email, password: password)
-                AnalyticsService.shared.logSignIn()
                 isLoading = false
             } catch {
                 errorMessage = error.localizedDescription

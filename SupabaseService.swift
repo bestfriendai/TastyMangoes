@@ -2,20 +2,23 @@
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 15:45 (America/Los_Angeles - Pacific Time)
 //  Updated on: 2025-01-15 at 16:20 (America/Los_Angeles - Pacific Time)
-//  Last modified by Claude on 2025-12-09 at 16:50 (America/Los_Angeles - Pacific Time)
+//  Last modified by Claude on 2025-12-15 at 11:25 (America/Los_Angeles - Pacific Time) / 19:25 UTC
 //  Changes: Added fetchMovieCardsBatch() method for efficient batch fetching of multiple
 //           movie cards in a single Supabase query. This eliminates the N+1 query problem
 //           when loading watchlists.
+//           Phase 2: Added new VoiceEvent fields for intent tracking (search_intent,
+//           confidence_score, extracted_hints, handoff tracking, clarification, selected_movie_id)
 
 import Foundation
 import Supabase
+import Auth
 import Combine
 
 @MainActor
 class SupabaseService: ObservableObject {
     static let shared = SupabaseService()
     
-    private var client: SupabaseClient?
+    internal var client: SupabaseClient?
     
     private init() {
         setupClient()
@@ -30,7 +33,12 @@ class SupabaseService: ObservableObject {
         
         self.client = SupabaseClient(
             supabaseURL: url,
-            supabaseKey: SupabaseConfig.supabaseAnonKey
+            supabaseKey: SupabaseConfig.supabaseAnonKey,
+            options: SupabaseClientOptions(
+                auth: SupabaseClientOptions.AuthOptions(
+                    emitLocalSessionAsInitialSession: true
+                )
+            )
         )
     }
     
@@ -223,6 +231,22 @@ class SupabaseService: ObservableObject {
             .value
         
         return response.map { $0.platform }
+    }
+    
+    /// Get user subscriptions as full UserSubscription objects
+    func getUserSubscriptionObjects(userId: UUID) async throws -> [UserSubscription] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        let response: [UserSubscription] = try await client
+            .from("user_subscriptions")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+        
+        return response
     }
     
     func setUserSubscriptions(userId: UUID, platforms: [String]) async throws {
@@ -483,6 +507,8 @@ class SupabaseService: ObservableObject {
     
     // MARK: - Voice Events Operations
     
+    /// Voice event from voice_utterance_events table
+    /// Phase 2: Added intent tracking fields
     struct VoiceEvent: Identifiable, Codable {
         let id: UUID
         let created_at: String
@@ -494,6 +520,18 @@ class SupabaseService: ObservableObject {
         let llm_used: Bool?
         let mango_command_movie_title: String?
         let mango_command_recommender: String?
+        let error_message: String?
+        
+        // Phase 2: Intent tracking fields
+        let search_intent: String?
+        let confidence_score: Double?
+        let extracted_hints: String?
+        let handoff_initiated: Bool?
+        let handoff_returned: Bool?
+        let clarifying_question_asked: String?
+        let clarifying_answer: String?
+        let selected_movie_id: Int?
+        let candidates_shown: Int?
     }
     
     func getVoiceEvents(limit: Int = 100) async throws -> [VoiceEvent] {
@@ -735,6 +773,31 @@ class SupabaseService: ObservableObject {
     }
     
     /// Fetches a movie card directly from work_cards_cache table (no edge function call)
+    /// Fetch user-specific movie reason from semantic search
+    func fetchUserMovieReason(tmdbId: String) async throws -> String? {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        struct UserAIRecommendation: Codable {
+            let mango_reason: String
+            let query_context: String
+            let created_at: String
+        }
+        
+        // Fetch most recent AI recommendation for this movie
+        let recommendations: [UserAIRecommendation] = try await client
+            .from("user_ai_recommendations")
+            .select("mango_reason, query_context, created_at")
+            .eq("tmdb_id", value: tmdbId)
+            .order("created_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value
+        
+        return recommendations.first?.mango_reason
+    }
+    
     /// Returns nil if the movie is not in the cache
     func fetchMovieCardFromCache(tmdbId: String) async throws -> MovieCard? {
         guard let client = client else {
@@ -854,6 +917,9 @@ class SupabaseService: ObservableObject {
             similarMovieIds: card.similarMovieIds,
             stillImages: card.stillImages,
             trailers: card.trailers,
+            streaming: card.streaming,
+            budget: card.budget,
+            revenue: card.revenue,
             lastUpdated: card.lastUpdated
         )
     }
@@ -1120,6 +1186,138 @@ class SupabaseService: ObservableObject {
             // Don't use .convertFromSnakeCase since MovieCard has explicit CodingKeys
             return try decoder.decode(MovieCard.self, from: data)
         }
+    }
+    
+    // MARK: - Director/Actor Search
+    
+    /// Search work_cards_cache by director name using JSONB query
+    /// - Parameter director: Director name to search for
+    /// - Returns: Array of MovieSearchResult for movies by that director
+    func searchMoviesByDirector(_ director: String) async throws -> [MovieSearchResult] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Searching by director: \(director)")
+        #endif
+        
+        struct CacheEntry: Codable {
+            let work_id: Int
+            let payload: MovieCard
+        }
+        
+        // The Supabase Swift SDK doesn't support JSONB operators in filters directly
+        // So we fetch entries and filter in Swift using partial matching
+        // This allows searching "Scorsese" to match "Martin Scorsese"
+        let allEntries: [CacheEntry] = try await client
+            .from("work_cards_cache")
+            .select("work_id, payload")
+            .limit(500) // Reasonable limit - adjust based on your database size
+            .execute()
+            .value
+        
+        // Filter entries where director name contains the search term (case-insensitive, partial match)
+        // This handles cases like searching "Scorsese" matching "Martin Scorsese"
+        let entries = allEntries.filter { entry in
+            guard let directorName = entry.payload.director else { return false }
+            // Use localizedCaseInsensitiveContains for partial matching
+            // This is equivalent to SQL: WHERE payload->>'director' ILIKE '%Scorsese%'
+            return directorName.localizedCaseInsensitiveContains(director)
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Found \(entries.count) movies by director \(director)")
+        #endif
+        
+        // Convert to MovieSearchResult format
+        var results = entries.map { entry in
+            let card = entry.payload
+            return MovieSearchResult(
+                tmdbId: card.tmdbId,
+                title: card.title,
+                year: card.year,
+                posterUrl: card.poster?.medium,
+                overviewShort: card.overviewShort,
+                voteAverage: card.sourceScores?.tmdb?.score,
+                voteCount: card.sourceScores?.tmdb?.votes,
+                genres: card.genres,
+                runtimeDisplay: card.runtimeDisplay,
+                aiScore: card.aiScore,
+                streaming: card.streaming
+            )
+        }
+        
+        // Sort by aiScore descending (highest rated first)
+        results.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+        
+        return results
+    }
+    
+    /// Search work_cards_cache by actor name
+    /// - Parameter actor: Actor name to search for
+    /// - Returns: Array of MovieSearchResult for movies with that actor
+    func searchMoviesByActor(_ actor: String) async throws -> [MovieSearchResult] {
+        guard let client = client else {
+            throw SupabaseError.notConfigured
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Searching by actor: \(actor)")
+        #endif
+        
+        struct CacheEntry: Codable {
+            let work_id: Int
+            let payload: MovieCard
+        }
+        
+        // For actor search, we need to check the cast array
+        // PostgREST doesn't easily support searching within JSONB arrays
+        // So we'll fetch a reasonable set and filter in Swift
+        // In production, consider creating a Supabase function for this
+        
+        // Fetch entries (limit to reasonable number for performance)
+        let allEntries: [CacheEntry] = try await client
+            .from("work_cards_cache")
+            .select("work_id, payload")
+            .limit(500) // Reasonable limit - adjust based on your database size
+            .execute()
+            .value
+        
+        // Filter entries where cast contains the actor name (case-insensitive)
+        let matchingEntries = allEntries.filter { entry in
+            guard let cast = entry.payload.cast else { return false }
+            return cast.contains { castMember in
+                castMember.name.localizedCaseInsensitiveContains(actor)
+            }
+        }
+        
+        #if DEBUG
+        print("🎬 [SupabaseService] Found \(matchingEntries.count) movies with actor \(actor) (searched \(allEntries.count) entries)")
+        #endif
+        
+        // Convert to MovieSearchResult format
+        var results = matchingEntries.map { entry in
+            let card = entry.payload
+            return MovieSearchResult(
+                tmdbId: card.tmdbId,
+                title: card.title,
+                year: card.year,
+                posterUrl: card.poster?.medium,
+                overviewShort: card.overviewShort,
+                voteAverage: card.sourceScores?.tmdb?.score,
+                voteCount: card.sourceScores?.tmdb?.votes,
+                genres: card.genres,
+                runtimeDisplay: card.runtimeDisplay,
+                aiScore: card.aiScore,
+                streaming: card.streaming
+            )
+        }
+        
+        // Sort by aiScore descending (highest rated first)
+        results.sort { ($0.aiScore ?? 0) > ($1.aiScore ?? 0) }
+        
+        return results
     }
 }
 

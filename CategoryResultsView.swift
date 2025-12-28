@@ -184,7 +184,7 @@ struct CategoryResultsView: View {
                             // Movie Cards with Navigation
                             VStack(spacing: 8) {
                                 ForEach(movies) { movie in
-                                    NavigationLink(destination: MoviePageView(movieId: movie.id, source: "search")) {
+                                    NavigationLink(destination: MoviePageView(movieId: movie.id)) {
                                         MovieCardHorizontal(movie: movie)
                                     }
                                     .buttonStyle(PlainButtonStyle())
@@ -310,7 +310,8 @@ struct CategoryResultsView: View {
                         trailerDuration: nil,
                         posterImageURL: result.posterUrl,
                         tastyScore: nil,
-                        aiScore: result.voteAverage,
+                        aiScore: nil, // Category results are from TMDB, not database
+                        voteAverage: result.voteAverage, // TMDB score (0-10 scale)
                         genres: [],
                         rating: nil,
                         director: nil,
@@ -555,7 +556,7 @@ struct MovieCardHorizontal: View {
                                 if isWatched {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 14))
-                                        .foregroundColor(Color(hex: "#648d00"))
+                                        .foregroundColor(Color(hex: "#8E8E93"))
                                         .background(Color.white.clipShape(Circle()))
                                         .offset(x: 8, y: -8)
                                 }

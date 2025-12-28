@@ -8,11 +8,18 @@
 import SwiftUI
 
 /// Displays a movie poster image from TMDB with loading and error states
+/// Includes retry logic for failed image loads
 struct MoviePosterImage: View {
     let posterURL: String?
     let width: CGFloat
     let height: CGFloat
     let cornerRadius: CGFloat
+    
+    @State private var retryCount = 0
+    @State private var lastPosterURL: String?
+    @State private var retryKey = UUID()
+    
+    private let maxRetries = 2
     
     init(
         posterURL: String?,
@@ -30,7 +37,7 @@ struct MoviePosterImage: View {
         Group {
             if let posterPath = posterURL, !posterPath.isEmpty {
                 // Check if it's already a full URL or just a path
-                let imageURL: URL? = {
+                let baseImageURL: URL? = {
                     if posterPath.hasPrefix("http://") || posterPath.hasPrefix("https://") {
                         // Already a full URL
                         return URL(string: posterPath)
@@ -40,9 +47,25 @@ struct MoviePosterImage: View {
                     }
                 }()
                 
-                if let url = imageURL {
-                    // Load image from TMDB
-                    AsyncImage(url: url) { phase in
+                if let baseURL = baseImageURL {
+                    // Add cache-busting parameter on retry to avoid cached failures
+                    let urlWithRetry: URL = {
+                        if retryCount > 0 {
+                            // Add cache-busting query parameter to force fresh load
+                            var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+                            if components?.queryItems == nil {
+                                components?.queryItems = []
+                            }
+                            components?.queryItems?.append(URLQueryItem(name: "_retry", value: "\(retryCount)"))
+                            let retryURL = components?.url ?? baseURL
+                            return retryURL
+                        }
+                        return baseURL
+                    }()
+                    
+                    // Load image with retry support
+                    // Use id modifier to force view recreation on retry
+                    AsyncImage(url: urlWithRetry) { phase in
                         switch phase {
                         case .empty:
                             // Loading state
@@ -52,11 +75,38 @@ struct MoviePosterImage: View {
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
-                        case .failure:
-                            // Failed to load
-                            errorView
+                        case .failure(let error):
+                            // Failed to load - attempt retry
+                            retryView(baseURL: baseURL, error: error)
                         @unknown default:
-                            errorView
+                            retryView(baseURL: baseURL, error: nil)
+                        }
+                    }
+                    .id(retryKey) // Force recreation on retry
+                    .onChange(of: posterPath) { oldPath, newPath in
+                        // Reset retry count when URL changes (handles race conditions)
+                        if lastPosterURL != newPath {
+                            lastPosterURL = newPath
+                            retryCount = 0
+                            retryKey = UUID()
+                            #if DEBUG
+                            if let url = baseImageURL {
+                                print("🖼️ [MoviePosterImage] Loading: \(url.absoluteString)")
+                            }
+                            #endif
+                        }
+                    }
+                    .onAppear {
+                        // Track URL on appear to detect changes
+                        if lastPosterURL != posterPath {
+                            lastPosterURL = posterPath
+                            retryCount = 0
+                            retryKey = UUID()
+                            #if DEBUG
+                            if let url = baseImageURL {
+                                print("🖼️ [MoviePosterImage] Loading: \(url.absoluteString)")
+                            }
+                            #endif
                         }
                     }
                 } else {
@@ -74,6 +124,35 @@ struct MoviePosterImage: View {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .fill(Color(red: 240/255, green: 240/255, blue: 240/255))
         )
+    }
+    
+    // MARK: - Retry Logic
+    
+    @ViewBuilder
+    private func retryView(baseURL: URL, error: Error?) -> some View {
+        Group {
+            if retryCount < maxRetries {
+                // Still retrying - show loading and trigger retry
+                loadingView
+                    .task {
+                        // Trigger retry after a short delay
+                        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                        if retryCount < maxRetries {
+                            retryCount += 1
+                            retryKey = UUID() // Force view recreation with new URL
+                            #if DEBUG
+                            print("🖼️ [MoviePosterImage] Retry \(retryCount)/\(maxRetries) for: \(baseURL.lastPathComponent)")
+                            if let error = error {
+                                print("   Error: \(error.localizedDescription)")
+                            }
+                            #endif
+                        }
+                    }
+            } else {
+                // Max retries reached - show error
+                errorView
+            }
+        }
     }
     
     // MARK: - State Views

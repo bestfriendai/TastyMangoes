@@ -9,6 +9,7 @@ struct RateBottomSheet: View {
     @Binding var isPresented: Bool
     let movieId: String
     let movieTitle: String
+    var onRatingSubmitted: ((Int) -> Void)? = nil // Callback when rating is submitted
     @State private var selectedRating: Int = 0
     @State private var showToast: Bool = false
     
@@ -76,6 +77,16 @@ struct RateBottomSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 
+                // Skip Button
+                Button(action: {
+                    submitRating(skip: true)
+                }) {
+                    Text("Skip")
+                        .font(.custom("Inter-Regular", size: 14))
+                        .foregroundColor(Color(hex: "#666666"))
+                }
+                .padding(.top, 8)
+                
                 Spacer()
             }
             .padding(.horizontal, 16)
@@ -87,17 +98,17 @@ struct RateBottomSheet: View {
         .presentationDragIndicator(.hidden)
     }
     
-    private func submitRating() {
-        // TODO: Save rating to backend/database
-        print("Rating submitted: \(selectedRating)/5 for movie \(movieId)")
+    private func submitRating(skip: Bool = false) {
+        let rating = skip ? 0 : selectedRating
+        print("🎬 [RateBottomSheet] Rating submitted: \(rating)/5 for movie \(movieId)")
         
-        // Show toast notification
-        showToast = true
-        
-        // Dismiss after short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            isPresented = false
+        // Call callback if provided
+        if let callback = onRatingSubmitted {
+            callback(rating)
         }
+        
+        // Dismiss sheet
+        isPresented = false
     }
 }
 

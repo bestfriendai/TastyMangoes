@@ -1,14 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, VoiceEvent } from '@/lib/supabase'
 import StatsBar from '@/components/StatsBar'
 import DataTable from '@/components/DataTable'
 import { voiceEventsColumns } from '@/components/columns/voiceEventsColumns'
 import EventDetail from '@/components/EventDetail'
 import PatternSuggestions from '@/components/PatternSuggestions'
+import TMDBAnalytics, { TMDBAnalyticsRef } from '@/components/TMDBAnalytics'
+import MoviesList, { MoviesListRef } from '@/components/MoviesList'
+import ScheduledIngestRuns, { ScheduledIngestRunsRef } from '@/components/ScheduledIngestRuns'
 
-type Tab = 'events' | 'patterns'
+type Tab = 'events' | 'patterns' | 'tmdb' | 'movies' | 'ingestion-runs'
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('events')
@@ -18,6 +21,11 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<'all' | 'success' | 'failed' | 'llm'>('all')
   const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set())
   const [pendingPatternsCount, setPendingPatternsCount] = useState(0)
+  
+  // Refs for child component refresh functions
+  const tmdbAnalyticsRef = useRef<TMDBAnalyticsRef | null>(null)
+  const moviesListRef = useRef<MoviesListRef | null>(null)
+  const scheduledIngestRunsRef = useRef<ScheduledIngestRunsRef | null>(null)
 
   // Fetch initial events
   const fetchEvents = useCallback(async () => {
@@ -116,6 +124,39 @@ export default function Dashboard() {
     return true
   })
 
+  // Master refresh function that refreshes all tabs
+  const refreshAll = useCallback(() => {
+    console.log('🔄 Refresh button clicked - refreshing all tabs')
+    
+    // Refresh events tab
+    fetchEvents()
+    fetchPendingCount()
+    
+    // Refresh TMDB Analytics tab (only if component is mounted)
+    if (tmdbAnalyticsRef.current) {
+      console.log('🔄 Refreshing TMDB Analytics')
+      tmdbAnalyticsRef.current.refresh()
+    } else {
+      console.log('⚠️ TMDB Analytics ref not available')
+    }
+    
+    // Refresh Movies tab (only if component is mounted)
+    if (moviesListRef.current) {
+      console.log('🔄 Refreshing Movies List')
+      moviesListRef.current.refresh()
+    } else {
+      console.log('⚠️ Movies List ref not available')
+    }
+    
+    // Refresh Scheduled Ingestion Runs tab (only if component is mounted)
+    if (scheduledIngestRunsRef.current) {
+      console.log('🔄 Refreshing Scheduled Ingestion Runs')
+      scheduledIngestRunsRef.current.refresh()
+    } else {
+      console.log('⚠️ Scheduled Ingestion Runs ref not available')
+    }
+  }, [fetchEvents, fetchPendingCount])
+
   // Calculate stats
   const stats = {
     total: events.length,
@@ -150,23 +191,21 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             {activeTab === 'events' && (
-              <>
-                <button
-                  onClick={() => setIsLive(!isLive)}
-                  className={`px-4 py-2 rounded font-medium transition-colors ${
-                    isLive ? 'bg-slate-700 text-slate-200' : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {isLive ? 'Pause' : 'Resume'}
-                </button>
-                <button
-                  onClick={fetchEvents}
-                  className="px-4 py-2 bg-slate-800 text-slate-200 rounded font-medium hover:bg-slate-700 transition-colors"
-                >
-                  Refresh
-                </button>
-              </>
+              <button
+                onClick={() => setIsLive(!isLive)}
+                className={`px-4 py-2 rounded font-medium transition-colors ${
+                  isLive ? 'bg-slate-700 text-slate-200' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {isLive ? 'Pause' : 'Resume'}
+              </button>
             )}
+            <button
+              onClick={refreshAll}
+              className="px-4 py-2 bg-slate-800 text-slate-200 rounded font-medium hover:bg-slate-700 transition-colors"
+            >
+              Refresh
+            </button>
           </div>
         </div>
 
@@ -197,63 +236,110 @@ export default function Dashboard() {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setActiveTab('tmdb')}
+            className={`px-4 py-2 rounded-t font-medium transition-colors ${
+              activeTab === 'tmdb'
+                ? 'bg-slate-800 text-slate-100'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            TMDB Analytics v2
+          </button>
+          <button
+            onClick={() => setActiveTab('movies')}
+            className={`px-4 py-2 rounded-t font-medium transition-colors ${
+              activeTab === 'movies'
+                ? 'bg-slate-800 text-slate-100'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Movies
+          </button>
+          <button
+            onClick={() => setActiveTab('ingestion-runs')}
+            className={`px-4 py-2 rounded-t font-medium transition-colors ${
+              activeTab === 'ingestion-runs'
+                ? 'bg-slate-800 text-slate-100'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Ingestion Runs
+          </button>
         </div>
       </header>
 
       {/* Content */}
       <main className="p-6">
-        {activeTab === 'events' ? (
-          <>
-            {/* Stats */}
-            <StatsBar {...stats} />
+        {/* Events Tab */}
+        <div className={activeTab === 'events' ? '' : 'hidden'}>
+          {/* Stats */}
+          <StatsBar {...stats} />
 
-            {/* Filters */}
-            <div className="flex items-center gap-4 my-4">
-              <div className="flex gap-2">
-                {(['all', 'success', 'failed', 'llm'] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                      filter === f
-                        ? f === 'all'
-                          ? 'bg-orange-600 text-white'
-                          : f === 'success'
-                          ? 'bg-green-600 text-white'
-                          : f === 'failed'
-                          ? 'bg-red-600 text-white'
-                          : 'bg-purple-600 text-white'
-                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
-                  >
-                    {f === 'all' && 'All'}
-                    {f === 'success' && '✓ Success'}
-                    {f === 'failed' && '✗ Failed'}
-                    {f === 'llm' && '🤖 LLM'}
-                  </button>
-                ))}
-              </div>
-              <span className="text-slate-500 text-sm">{filteredEvents.length} events</span>
+          {/* Filters */}
+          <div className="flex items-center gap-4 my-4">
+            <div className="flex gap-2">
+              {(['all', 'success', 'failed', 'llm'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    filter === f
+                      ? f === 'all'
+                        ? 'bg-orange-600 text-white'
+                        : f === 'success'
+                        ? 'bg-green-600 text-white'
+                        : f === 'failed'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-purple-600 text-white'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  {f === 'all' && 'All'}
+                  {f === 'success' && '✓ Success'}
+                  {f === 'failed' && '✗ Failed'}
+                  {f === 'llm' && '🤖 LLM'}
+                </button>
+              ))}
             </div>
+            <span className="text-slate-500 text-sm">{filteredEvents.length} events</span>
+          </div>
 
-            {/* Events Table */}
-            <DataTable
-              columns={voiceEventsColumns}
-              data={filteredEvents}
-              onRowClick={(event) => setSelectedEvent(event)}
-              selectedRowId={selectedEvent?.id ?? null}
-              getRowId={(event) => event.id}
-              newRowIds={newEventIds}
-            />
+          {/* Events Table */}
+          <DataTable
+            columns={voiceEventsColumns}
+            data={filteredEvents}
+            onRowClick={(event) => setSelectedEvent(event)}
+            selectedRowId={selectedEvent?.id ?? null}
+            getRowId={(event) => event.id}
+            newRowIds={newEventIds}
+          />
 
-            {/* Event Detail Panel */}
-            {selectedEvent && (
-              <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
-            )}
-          </>
-        ) : (
+          {/* Event Detail Panel */}
+          {selectedEvent && (
+            <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+          )}
+        </div>
+
+        {/* Patterns Tab */}
+        <div className={activeTab === 'patterns' ? '' : 'hidden'}>
           <PatternSuggestions />
-        )}
+        </div>
+
+        {/* TMDB Analytics Tab */}
+        <div className={activeTab === 'tmdb' ? '' : 'hidden'}>
+          <TMDBAnalytics ref={tmdbAnalyticsRef} />
+        </div>
+
+        {/* Movies Tab */}
+        <div className={activeTab === 'movies' ? '' : 'hidden'}>
+          <MoviesList ref={moviesListRef} />
+        </div>
+
+        {/* Scheduled Ingestion Runs Tab */}
+        <div className={activeTab === 'ingestion-runs' ? '' : 'hidden'}>
+          <ScheduledIngestRuns ref={scheduledIngestRunsRef} />
+        </div>
       </main>
 
       {/* Footer */}

@@ -37,6 +37,9 @@ struct MovieCard: Codable, Identifiable {
     let similarMovieIds: [Int]?
     let stillImages: [String]?
     let trailers: [MovieClip]?
+    let streaming: StreamingInfo?
+    let budget: Int?
+    let revenue: Int?
     let lastUpdated: String?
     
     var id: Int { workId }
@@ -71,6 +74,9 @@ struct MovieCard: Codable, Identifiable {
         case similarMovieIds = "similar_movie_ids"
         case stillImages = "still_images"
         case trailers
+        case streaming
+        case budget
+        case revenue
         case lastUpdated = "last_updated"
     }
 }
@@ -148,6 +154,10 @@ struct MovieSearchResult: Codable, Identifiable {
     let overviewShort: String?
     let voteAverage: Double?
     let voteCount: Int?
+    let genres: [String]?
+    let runtimeDisplay: String?
+    let aiScore: Double?
+    let streaming: StreamingInfo? // Streaming data for v1Prime feature
     
     var id: String { tmdbId }
     
@@ -159,6 +169,10 @@ struct MovieSearchResult: Codable, Identifiable {
         case overviewShort = "overview_short"
         case voteAverage = "vote_average"
         case voteCount = "vote_count"
+        case genres
+        case runtimeDisplay = "runtime_display"
+        case aiScore = "ai_score"
+        case streaming
     }
 }
 

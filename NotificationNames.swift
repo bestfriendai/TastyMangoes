@@ -11,6 +11,9 @@ extension Notification.Name {
     /// Posted when Mango wants to navigate to the search tab
     static let mangoNavigateToSearch = Notification.Name("mangoNavigateToSearch")
     
+    /// Posted when Mango wants to navigate to the home tab (e.g., when user cancels listening)
+    static let mangoNavigateToHome = Notification.Name("mangoNavigateToHome")
+    
     /// Posted when Mango wants to perform a movie search query
     static let mangoPerformMovieQuery = Notification.Name("mangoPerformMovieQuery")
     

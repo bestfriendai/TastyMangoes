@@ -1,0 +1,9 @@
+Fix compilation errors after UnifiedMovieCard revert
+
+- Fixed SemanticSearchViewModel: Changed searchService.search() to searchService.newSearch() to use public API
+- Fixed SemanticSearchView: Removed all references to searchType property that was removed during revert
+- Restored selectedChip property in SemanticSearchViewModel for refinement chip loading feedback
+- Fixed indentation and structure in SemanticSearchView after removing conditional searchType logic
+- Simplified SemanticSearchView to semantic-only UI (removed direct search conditional branches)
+
+All compilation errors resolved. App should build and run successfully.

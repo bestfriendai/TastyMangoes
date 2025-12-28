@@ -1,10 +1,11 @@
 //  index.ts
 //  Created automatically by Cursor Assistant
 //  Created on: 2025-01-15 at 19:30 (America/Los_Angeles - Pacific Time)
-//  Last modified: 2025-11-26 at 14:30 (America/Los_Angeles - Pacific Time)
-//  Notes: Search TMDB and return matching movies with year range and genre filtering support
+//  Last modified: 2025-01-15 at 19:30 (America/Los_Angeles - Pacific Time)
+//  Notes: Hybrid search - queries local database first, then supplements with TMDB results. Deduplicates by tmdb_id (prefers local results).
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { searchMovies, discoverMovies, buildImageUrl } from '../_shared/tmdb.ts';
 
 // TMDB genre ID mapping (genre name -> genre ID)
@@ -103,8 +104,128 @@ serve(async (req) => {
       );
     }
     
+    // Initialize Supabase client for local database queries
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    
     let allResults: Array<{ id: number; title: string; release_date: string; poster_path: string; overview: string; vote_average: number; vote_count: number; genre_ids?: number[] }> = [];
+    let localResults: Array<{ tmdb_id: string; title: string; year: number | null; poster_url: string | null; overview_short: string | null; vote_average: number; vote_count: number; ai_score: number | null }> = [];
+    let localTmdbIds = new Set<string>();
     let apiCallsMade = 0;
+    
+    // Step 1: Query local database first (only if we have a text query)
+    // Optimized: Query works for title matching, then fetch work_cards_cache (eliminates joins)
+    if (hasQuery) {
+      try {
+        console.log(`[SEARCH] Querying local database for: "${queryTrimmed}"`);
+        
+        // Step 1a: Query works table for matching titles (uses trigram index if available)
+        let worksQuery = supabase
+          .from('works')
+          .select('work_id, tmdb_id, title, year')
+          .ilike('title', `%${queryTrimmed}%`)
+          .limit(50); // Get more than needed for filtering
+        
+        // Apply year filter if provided
+        if (yearFromInt) {
+          worksQuery = worksQuery.gte('year', yearFromInt);
+        }
+        if (yearToInt) {
+          worksQuery = worksQuery.lte('year', yearToInt);
+        }
+        
+        const { data: matchingWorks, error: worksError } = await worksQuery;
+        
+        if (worksError) {
+          console.warn(`[SEARCH] Works query error:`, worksError);
+        } else if (matchingWorks && matchingWorks.length > 0) {
+          console.log(`[SEARCH] Found ${matchingWorks.length} matching works`);
+          
+          // Step 1b: Fetch work_cards_cache for matching work_ids (fast indexed lookup)
+          const workIds = matchingWorks.map(w => w.work_id);
+          const { data: cachedCards, error: cacheError } = await supabase
+            .from('work_cards_cache')
+            .select('work_id, payload')
+            .in('work_id', workIds);
+          
+          if (cacheError) {
+            console.warn(`[SEARCH] Cache query error:`, cacheError);
+          } else if (cachedCards && cachedCards.length > 0) {
+            console.log(`[SEARCH] Found ${cachedCards.length} cached cards`);
+            
+            // Create a map of work_id -> cached card for fast lookup
+            const cardMap = new Map(cachedCards.map(c => [c.work_id, c.payload]));
+            
+            // Get genre names from genre IDs for filtering
+            const genreNames: string[] = [];
+            if (genreIds.length > 0 && genresParam) {
+              genreNames.push(...genresParam.split(',').map(g => g.trim()));
+            }
+            
+            // Transform to expected format using cached card data
+            localResults = matchingWorks
+              .map((work: any) => {
+                const card = cardMap.get(work.work_id);
+                if (!card) {
+                  return null; // Skip if no cached card
+                }
+                
+                // Filter by genres if provided
+                if (genreNames.length > 0 && card.genres) {
+                  const movieGenres = Array.isArray(card.genres) ? card.genres : [];
+                  const hasMatchingGenre = genreNames.some(genreName => 
+                    movieGenres.some((g: string) => g.toLowerCase() === genreName.toLowerCase())
+                  );
+                  if (!hasMatchingGenre) {
+                    return null; // Filter out this movie
+                  }
+                }
+                
+                localTmdbIds.add(work.tmdb_id);
+                
+                // Extract data from cached card payload
+                // Cached card has poster as object: { small, medium, large }
+                const posterUrl = card.poster?.medium || card.poster?.large || card.poster?.small || null;
+                const overviewShort = card.overview_short || null;
+                
+                // Get vote_average from card (ai_score or tmdb score)
+                // Cached card has source_scores.tmdb.score, not vote_average directly
+                const aiScore = card.ai_score;
+                const voteAverage = aiScore ? aiScore / 10 : (card.source_scores?.tmdb?.score || 0); // Convert 0-100 to 0-10 scale
+                const voteCount = card.source_scores?.tmdb?.votes || 0;
+                
+                // Extract streaming data from cached card payload
+                // This is needed for v1Prime feature (green border on cards)
+                const streaming = card.streaming || null;
+                
+                return {
+                  tmdb_id: work.tmdb_id,
+                  title: work.title || card.title,
+                  year: work.year || card.year,
+                  poster_url: posterUrl,
+                  overview_short: overviewShort,
+                  vote_average: voteAverage,
+                  vote_count: voteCount,
+                  ai_score: aiScore ?? null,
+                  streaming: streaming, // Include streaming data for v1Prime feature
+                };
+              })
+              .filter((result: any) => result !== null)
+              .slice(0, 20); // Limit to 20 results
+          
+            console.log(`[SEARCH] Local results: ${localResults.length} movies (tmdb_ids: ${Array.from(localTmdbIds).slice(0, 5).join(', ')}${localTmdbIds.size > 5 ? '...' : ''})`);
+          } else {
+            console.log(`[SEARCH] No cached cards found for matching works`);
+          }
+        } else {
+          console.log(`[SEARCH] No local movies found for: "${queryTrimmed}"`);
+        }
+      } catch (localError) {
+        console.warn(`[SEARCH] Error querying local database:`, localError);
+        // Continue with TMDB search even if local query fails
+      }
+    }
     
     // Logic flow:
     // 1. If query is empty AND filters are active → use discover endpoint (1 call)
@@ -134,7 +255,9 @@ serve(async (req) => {
           discoverParams.withGenres = genreIds;
         }
         
-        const discoverResponse = await discoverMovies(discoverParams);
+        const discoverResponse = await discoverMovies(discoverParams, {
+          edgeFunction: 'search-movies',
+        });
         allResults = discoverResponse?.results || [];
         apiCallsMade = 1;
         
@@ -157,7 +280,10 @@ serve(async (req) => {
         
         do {
           const singleYear = (yearFromInt && yearToInt && yearFromInt === yearToInt) ? yearFromInt : undefined;
-          const pageResults = await searchMovies(queryTrimmed, singleYear, currentPage);
+          const pageResults = await searchMovies(queryTrimmed, singleYear, currentPage, {
+            edgeFunction: 'search-movies',
+            userQuery: queryTrimmed,
+          });
           
           if (currentPage === 1) {
             totalPages = pageResults?.total_pages || 1;
@@ -174,8 +300,8 @@ serve(async (req) => {
             break;
           }
           
-          // Small delay to respect rate limits
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Small delay to respect rate limits (reduced from 100ms - will add retry logic if 429s occur)
+          await new Promise(resolve => setTimeout(resolve, 50));
         } while (currentPage <= maxPages && currentPage <= totalPages);
       } catch (searchError) {
         console.error(`[SEARCH] Search endpoint error:`, searchError);
@@ -254,7 +380,10 @@ serve(async (req) => {
       console.log(`[SEARCH] Using search endpoint (text-only, no filters)`);
       
       try {
-        const searchResponse = await searchMovies(queryTrimmed, undefined, 1);
+        const searchResponse = await searchMovies(queryTrimmed, undefined, 1, {
+          edgeFunction: 'search-movies',
+          userQuery: queryTrimmed,
+        });
         allResults = searchResponse?.results || [];
         apiCallsMade = 1;
         
@@ -266,25 +395,87 @@ serve(async (req) => {
       }
     }
     
-    // Transform to our format - ensure we always have an array
-    const movies = (allResults || []).slice(0, 50).map((m) => {
+    // Step 2: For TMDB results, check if they exist in cache and use cached poster if available
+    // This ensures movies in cache show posters even if TMDB search doesn't return poster_path
+    let cachedPosterMap = new Map<string, string>();
+    if (allResults.length > 0 && localTmdbIds.size > 0) {
+      // Fetch cached cards for TMDB results that might be in cache
+      const tmdbIdsToCheck = Array.from(allResults.map(m => m.id?.toString()).filter(Boolean));
+      const tmdbIdsInCache = tmdbIdsToCheck.filter(id => localTmdbIds.has(id));
+      
+      if (tmdbIdsInCache.length > 0) {
+        // Get work_ids for these tmdb_ids
+        const { data: worksForTmdbIds } = await supabase
+          .from('works')
+          .select('work_id, tmdb_id')
+          .in('tmdb_id', tmdbIdsInCache);
+        
+        if (worksForTmdbIds && worksForTmdbIds.length > 0) {
+          const workIds = worksForTmdbIds.map(w => w.work_id);
+          const { data: cachedCards } = await supabase
+            .from('work_cards_cache')
+            .select('work_id, payload')
+            .in('work_id', workIds);
+          
+          if (cachedCards) {
+            // Create map: tmdb_id -> poster_url
+            for (const card of cachedCards) {
+              const work = worksForTmdbIds.find(w => w.work_id === card.work_id);
+              if (work && card.payload.poster) {
+                const posterUrl = card.payload.poster.medium || card.payload.poster.large || card.payload.poster.small;
+                if (posterUrl) {
+                  cachedPosterMap.set(work.tmdb_id, posterUrl);
+                }
+              }
+            }
+            console.log(`[SEARCH] Found ${cachedPosterMap.size} cached posters for TMDB results`);
+          }
+        }
+      }
+    }
+    
+    // Step 3: Filter out TMDB results that are already in local database (deduplication)
+    if (localTmdbIds.size > 0) {
+      const beforeCount = allResults.length;
+      allResults = allResults.filter((movie) => {
+        const tmdbId = movie.id?.toString();
+        const isDuplicate = tmdbId && localTmdbIds.has(tmdbId);
+        if (isDuplicate) {
+          console.log(`[SEARCH] Filtering out duplicate TMDB result: ${movie.title} (tmdb_id: ${tmdbId}) - already in local database`);
+        }
+        return !isDuplicate;
+      });
+      console.log(`[SEARCH] Deduplication: ${beforeCount} -> ${allResults.length} TMDB results (removed ${beforeCount - allResults.length} duplicates)`);
+    }
+    
+    // Transform TMDB results to our format
+    const tmdbMovies = (allResults || []).slice(0, 50).map((m) => {
       // Safely handle potentially missing fields
       const year = m.release_date ? parseInt(m.release_date.substring(0, 4)) : null;
       const overview = m.overview || '';
       const overviewShort = overview.length > 100 ? overview.substring(0, 100) + '...' : overview;
+      const tmdbId = m.id?.toString() || '';
+      
+      // Use cached poster if available, otherwise use TMDB poster_path
+      const posterUrl = cachedPosterMap.get(tmdbId) || (m.poster_path ? buildImageUrl(m.poster_path, 'w154') : null);
       
       return {
-        tmdb_id: m.id?.toString() || '',
+        tmdb_id: tmdbId,
         title: m.title || 'Unknown',
         year: (year && !isNaN(year)) ? year : null,
-        poster_url: m.poster_path ? buildImageUrl(m.poster_path, 'w154') : null,
+        poster_url: posterUrl,
         overview_short: overviewShort || null,
         vote_average: m.vote_average || 0,
         vote_count: m.vote_count || 0,
+        ai_score: null, // Explicitly set to null for TMDB movies (not in database)
       };
     });
     
-    console.log(`[SEARCH] Query: "${queryTrimmed || '(none)'}", Year: ${yearFromInt || 'any'}-${yearToInt || 'any'}, Genres: ${genreIds.length > 0 ? genreIds.join(',') : 'any'}, Results: ${movies.length}, API Calls: ${apiCallsMade}`);
+    // Combine local results (preferred) with TMDB results
+    // Local results come first, then TMDB results
+    const movies = [...localResults, ...tmdbMovies].slice(0, 50);
+    
+    console.log(`[SEARCH] Query: "${queryTrimmed || '(none)'}", Year: ${yearFromInt || 'any'}-${yearToInt || 'any'}, Genres: ${genreIds.length > 0 ? genreIds.join(',') : 'any'}, Results: ${movies.length} (${localResults.length} local + ${tmdbMovies.length} TMDB), API Calls: ${apiCallsMade}`);
     
     // Always return a valid response with movies array
     const responseBody = { movies: movies || [] };
@@ -296,6 +487,7 @@ serve(async (req) => {
         status: 200,
         headers: { 
           'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=60, s-maxage=60', // Cache for 60 seconds (browser + CDN)
           'Access-Control-Allow-Origin': '*'
         } 
       }

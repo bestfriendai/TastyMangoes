@@ -60,34 +60,29 @@ serve(async (req) => {
     }
     
     if (!work) {
-      // Movie not in database - automatically trigger ingestion
-      console.log(`[GET-CARD] Movie not in database, triggering auto-ingest for TMDB ID: ${tmdbId}`);
+      // Movie not in database - trigger async ingestion, return error immediately
+      // Don't block user - ingestion will complete in background
+      console.log(`[GET-CARD] Movie not in database, triggering async ingest for TMDB ID: ${tmdbId}`);
       
-      const ingestResponse = await fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
+      // Trigger ingestion asynchronously (don't wait)
+      fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${supabaseServiceKey}`,
         },
         body: JSON.stringify({ tmdb_id: tmdbId, force_refresh: false }),
+      }).catch(err => {
+        console.error(`[GET-CARD] Async ingest trigger failed:`, err);
       });
       
-      const result = await ingestResponse.json();
-      
-      if (!ingestResponse.ok) {
-        console.error(`[GET-CARD] Auto-ingest failed:`, result);
-        return new Response(
-          JSON.stringify({ error: result.error || 'Failed to ingest movie' }), 
-          { status: ingestResponse.status, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      console.log(`[GET-CARD] Auto-ingest successful, returning new card for work_id: ${result.work_id}`);
-      
-      // Return the newly created card
+      // Return error immediately - user can retry after ingestion completes
       return new Response(
-        JSON.stringify(result.card || result), 
-        { headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          error: 'Movie not found. Ingestion started in background. Please try again in a few seconds.',
+          tmdb_id: tmdbId
+        }), 
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
     
@@ -101,34 +96,24 @@ serve(async (req) => {
     const CURRENT_SCHEMA_VERSION = 2;
     const schemaVersion = workMeta?.schema_version || 1;
     
-    // Check if upgrade is needed
+    // Check if upgrade is needed - but don't block, return cached card and trigger async upgrade
     if (schemaVersion < CURRENT_SCHEMA_VERSION) {
       console.log(`[GET-CARD] Movie ${work.work_id} needs upgrade: v${schemaVersion} → v${CURRENT_SCHEMA_VERSION}`);
       
-      // Trigger upgrade via ingest-movie (it will handle the upgrade logic)
-      try {
-        const upgradeResponse = await fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseServiceKey}`,
-          },
-          body: JSON.stringify({ tmdb_id: tmdbId, force_refresh: false }),
-        });
-        
-        const upgradeResult = await upgradeResponse.json();
-        if (upgradeResponse.ok && upgradeResult.card) {
-          console.log(`[GET-CARD] Upgrade successful, returning upgraded card`);
-          return new Response(
-            JSON.stringify(upgradeResult.card),
-            { headers: { 'Content-Type': 'application/json' } }
-          );
-        } else {
-          console.warn(`[GET-CARD] Upgrade failed, continuing with existing data:`, upgradeResult);
-        }
-      } catch (upgradeError) {
-        console.warn(`[GET-CARD] Upgrade error, continuing with existing data:`, upgradeError);
-      }
+      // Trigger upgrade asynchronously (don't wait)
+      fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({ tmdb_id: tmdbId, force_refresh: false }),
+      }).catch(err => {
+        console.error(`[GET-CARD] Async upgrade trigger failed:`, err);
+      });
+      
+      // Continue to return cached card below (may be slightly stale, but user sees content immediately)
+      console.log(`[GET-CARD] Upgrade triggered in background, returning cached card`);
     }
     
     // Get cached card
@@ -139,31 +124,26 @@ serve(async (req) => {
       .single();
     
     // Check if cached card exists and has certification
+    // If missing certification, trigger async refresh but return cached card immediately
     if (card && card.payload) {
       const cert = card.payload.certification;
       const hasCertification = cert !== null && cert !== undefined && cert !== '' && String(cert).trim() !== '';
       if (!hasCertification) {
-        console.log(`[GET-CARD] Cached card missing certification, triggering refresh for work_id: ${work.work_id}`);
-        // Trigger refresh to get certification
-        const ingestResponse = await fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
+        console.log(`[GET-CARD] Cached card missing certification, triggering async refresh for work_id: ${work.work_id}`);
+        // Trigger refresh asynchronously (don't wait)
+        fetch(`${supabaseUrl}/functions/v1/ingest-movie`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseServiceKey}`,
           },
           body: JSON.stringify({ tmdb_id: tmdbId, force_refresh: true }),
+        }).catch(err => {
+          console.error(`[GET-CARD] Async refresh trigger failed:`, err);
         });
         
-        const result = await ingestResponse.json();
-        if (ingestResponse.ok && result.card) {
-          console.log(`[GET-CARD] Refresh successful, returning updated card with certification`);
-          return new Response(
-            JSON.stringify(result.card), 
-            { headers: { 'Content-Type': 'application/json' } }
-          );
-        }
-        // If refresh fails, continue with existing cached card
-        console.warn(`[GET-CARD] Refresh failed, returning cached card without certification`);
+        // Continue to return cached card below (may be missing certification, but user sees content immediately)
+        console.log(`[GET-CARD] Refresh triggered in background, returning cached card`);
       }
     }
     
